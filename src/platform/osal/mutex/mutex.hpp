@@ -1,14 +1,19 @@
 #pragma once
-
 #include <mutex>
+
+namespace osal{
 
 class Mutex{
 public:
-    void lock(){ m_.lock(); }
-    void unlock(){ m_.unlock(); }
-    bool try_lock() { return m_.try_lock(); }
+    Mutex() = default;
+    ~Mutex() = default;
     Mutex(const Mutex&) = delete;
     Mutex& operator=(const Mutex&) = delete;
+    void lock();
+    void unlock();
+    
 private:
     std::mutex m_;
 };
+
+} // namespace osal

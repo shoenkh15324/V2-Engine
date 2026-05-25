@@ -5,6 +5,8 @@ message(STATUS "Configuring Platform Layer")
 add_library(v2_platform STATIC)
 
 target_sources(v2_platform PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/osal/mutex/mutex.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/osal/semaphore/semaphore.cpp
     ${CMAKE_CURRENT_LIST_DIR}/osal/thread/thread.cpp
     ${CMAKE_CURRENT_LIST_DIR}/osal/timer/timer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/osal/sleep/sleep.cpp
