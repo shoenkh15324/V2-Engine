@@ -13,7 +13,7 @@ public:
     Timer() = default;
     ~Timer();
     Timer(const Timer&) = delete;
-    Timer& operator=(const Timer*) = delete;
+    Timer& operator=(const Timer&) = delete;
     int open(int periodMs);
     int close();
 #if defined(__linux__)

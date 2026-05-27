@@ -21,13 +21,13 @@ int Timer::open(int periodMs){
         return -1;
     }
 #elif defined(_WIN32)
-    handle_ = CreateWaitableTimer(nullptr, FALSE, nullptr);
-    if(!handle_) return -1;
+    h_ = CreateWaitableTimer(nullptr, FALSE, nullptr);
+    if(!h_) return -1;
     LARGE_INTEGER dueTime;
     dueTime.QuadPart = -(static_cast<LONGLONG>(periodMs) * 10000);
-    if(!SetWaitableTimer(handle_, &dueTime, periodMs, nullptr, nullptr, FALSE)){
-        CloseHandle(handle_);
-        handle_ = nullptr;
+    if(!SetWaitableTimer(h_, &dueTime, periodMs, nullptr, nullptr, FALSE)){
+        CloseHandle(h_);
+        h_ = nullptr;
         return -1;
     }
 #endif
@@ -43,10 +43,10 @@ int Timer::close(){
         fd_ = -1;
     }
 #elif defined(_WIN32)
-    if(handle_){
-        CancelWaitableTimer(handle_);
-        CloseHandle(handle_);
-        handle_ = nullptr;
+    if(h_){
+        CancelWaitableTimer(h_);
+        CloseHandle(h_);
+        h_ = nullptr;
     }
 #endif
     return 0;
