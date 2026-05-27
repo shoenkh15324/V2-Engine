@@ -10,9 +10,12 @@ public:
     ~Semaphore() = default;
     Semaphore(const Semaphore&) = delete;
     Semaphore& operator=(const Semaphore&) = delete;
+    Semaphore(Semaphore&&) = delete;
+    Semaphore& operator=(Semaphore&&) = delete;
     void wait();
     void post();
-    
+    bool try_wait();
+
 private:
     std::mutex m_;
     std::condition_variable cv_;
