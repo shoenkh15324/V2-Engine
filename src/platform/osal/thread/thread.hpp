@@ -11,13 +11,13 @@ public:
     ~Thread();
     Thread(const Thread&) = delete;
     Thread& operator=(const Thread&) = delete;
-    void join();
-    void detach();
+    Thread(Thread&& other) noexcept;
+    Thread& operator=(Thread&& other) noexcept;
+    void join();    
     bool joinable() const;
     
 private:
     std::thread t_;
-    bool joined_ = false;
 };
 
 } // namespace osal

@@ -3,29 +3,36 @@
 namespace osal{
 
 Thread::Thread(Callback cb, void* arg){
-    t_ = std::thread([cb, arg](){
-        if(cb){
+    if(cb){
+        t_ = std::thread([cb = std::move(cb), arg]{
             cb(arg);
-        }
-    });
+        });
+    }
 }
 
 Thread::~Thread(){
     if(t_.joinable()){
-        t_.detach();
+        t_.join();
     }
+}
+
+Thread::Thread(Thread&& other) noexcept : t_(std::move(other.t_)){
+
+}
+
+Thread& Thread::operator=(Thread&& other) noexcept {
+    if(this != &other){
+        if(t_.joinable()){
+            t_.join();
+        }
+        t_ = std::move(other.t_);
+    }
+    return *this;
 }
 
 void Thread::join(){
     if(t_.joinable()){
         t_.join();
-        joined_ = true;
-    }
-}
-
-void Thread::detach(){
-    if(t_.joinable()){
-        t_.detach();
     }
 }
 
