@@ -8,6 +8,8 @@ message(STATUS "Configuring Root")
 
 include(${CMAKE_CURRENT_LIST_DIR}/src/core/core.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/platform/platform.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/src/infra/infra.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/src/runtime/runtime.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/service/service.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
 
