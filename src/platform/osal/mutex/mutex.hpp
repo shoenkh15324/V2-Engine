@@ -9,9 +9,12 @@ public:
     ~Mutex() = default;
     Mutex(const Mutex&) = delete;
     Mutex& operator=(const Mutex&) = delete;
-    void lock();
-    void unlock();
-    
+    Mutex(Mutex&&) = delete;
+    Mutex& operator=(Mutex&&) = delete;
+    void lock() noexcept;
+    void unlock() noexcept;
+    bool tryLock() noexcept;
+    std::mutex& native() noexcept;
 private:
     std::mutex m_;
 };
