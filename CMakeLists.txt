@@ -13,6 +13,10 @@ include(${CMAKE_CURRENT_LIST_DIR}/src/runtime/runtime.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/service/service.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
+
 include(CTest)
 enable_testing()
 
