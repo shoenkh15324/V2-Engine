@@ -52,4 +52,14 @@ int Timer::close(){
     return 0;
 }
 
+intptr_t Timer::getHandle() const {
+#if defined(__linux__)
+    return static_cast<intptr_t>(fd_);
+#elif defined(_WIN32)
+    return reinterpret_cast<intptr_t>(h_);
+#else
+    return nullptr;
+#endif
+}
+
 } // namespace core::osal

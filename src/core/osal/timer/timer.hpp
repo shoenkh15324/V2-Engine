@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #if defined(_WIN32)
     #include <Windows.h>
 #elif defined(__linux__)
@@ -16,11 +17,7 @@ public:
     Timer& operator=(const Timer&) = delete;
     int open(int periodMs);
     int close();
-#if defined(__linux__)
-    int getFd() const { return fd_; }
-#elif defined(_WIN32)
-    void* getHandle() const { return h_; }
-#endif
+    intptr_t getHandle() const;
 
 private:
 #if defined(__linux__)
