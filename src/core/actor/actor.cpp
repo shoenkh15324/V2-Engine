@@ -11,7 +11,7 @@ void Actor::attachDispatcher(Dispatcher* dispatcher){
     dispatcher_ = dispatcher;
 }
 
-void Actor::send(Message msg){
+void Actor::send(MessagePtr msg){
     if(mailbox_.push(std::move(msg))){
         if(dispatcher_){
             dispatcher_->notify(this);

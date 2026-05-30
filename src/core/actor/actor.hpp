@@ -1,5 +1,6 @@
 #pragma once
 #include "mailbox.hpp"
+#include "message.hpp"
 
 namespace runtime{
 class Dispatcher;
@@ -7,22 +8,20 @@ class Dispatcher;
 
 namespace core::actor{
 
-class Message;
-
 class Actor{
 private:
     using Dispatcher = runtime::Dispatcher;
 
 public:
     explicit Actor(size_t mailboxSize);
-    void send(Message msg);
+    void send(MessagePtr msg);
     void attachDispatcher(Dispatcher* dispatcher);
 
 protected:
     virtual void handle(const Message& msg) = 0;
 
 private:
-    Mailbox<Message> mailbox_;
+    Mailbox<MessagePtr> mailbox_;
     Dispatcher* dispatcher_;
 };
 
