@@ -1,16 +1,19 @@
 #pragma once
 #include <deque>
 #include <unordered_set>
-#include "../core/actor/actor.hpp"
 #include "../platform/osal/mutex/mutex.hpp"
+
+namespace core::actor{
+class Actor;
+} // namespace core::actor
 
 namespace runtime{
 namespace osal = platform::osal;
 
-class Actor;
-
 class Scheduler{
 public:
+    using Actor = core::actor::Actor;
+
     void notify(Actor* actor);
     Actor* pop();
 

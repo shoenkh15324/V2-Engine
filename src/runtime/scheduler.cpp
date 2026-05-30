@@ -14,7 +14,7 @@ void Scheduler::notify(Actor* actor){
     inQueue_.insert(actor);
 }
 
-Actor* Scheduler::pop(){
+Scheduler::Actor* Scheduler::pop(){
     osal::LockGuard<osal::Mutex> lock(mutex_);
     if(readyQueue_.empty()){
         return nullptr;

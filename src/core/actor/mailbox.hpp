@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
 #include <utility>
-#include "../common/return.hpp"
 #include "../../platform/osal/mutex/mutex.hpp"
 #include "../../platform/osal/lock_guard/lock_guard.hpp"
 
@@ -10,37 +9,31 @@ namespace osal = platform::osal;
 
 template <typename T>
 class Mailbox {
-private:
-    using Result = core::common::Result;
-
 public:
     explicit Mailbox(size_t size) : buffer_(size), capacity_(size), count_(0), head_(0), tail_(0){}
 
-    Result push(const T& msg){
+    template <typename U>
+    bool push(U&& msg){
         osal::LockGuard<osal::Mutex> lock(mutex_);
-        if (count_ == capacity_) return Result::Fail;
-        buffer_[tail_] = msg;
+        if(count_ == capacity_){
+            return false;
+        }
+        bool wasEmpty = (count_ == 0);
+        buffer_[tail_] = std::forward<U>(msg);
         tail_ = (tail_ + 1) % capacity_;
         ++count_;
-        return Result::Ok;
+        return wasEmpty;
     }
 
-    Result push(T&& msg){
+    bool pop(T& out) {
         osal::LockGuard<osal::Mutex> lock(mutex_);
-        if (count_ == capacity_) return Result::Fail;
-        buffer_[tail_] = std::move(msg);
-        tail_ = (tail_ + 1) % capacity_;
-        ++count_;
-        return Result::Ok;
-    }
-
-    Result pop(T& out){
-        osal::LockGuard<osal::Mutex> lock(mutex_);
-        if (count_ == 0) return Result::Fail;
+        if(count_ == 0){
+            return false;
+        }
         out = std::move(buffer_[head_]);
         head_ = (head_ + 1) % capacity_;
         --count_;
-        return Result::Ok;
+        return true;
     }
 
     bool empty(){

@@ -8,6 +8,7 @@ target_sources(v2_runtime PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/executor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/worker.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dispatcher.cpp
     
 )
 
