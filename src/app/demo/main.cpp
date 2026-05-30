@@ -1,7 +1,8 @@
 #include <iostream>
-#include "../../core/common/time.hpp"
+#include "core/common/time.hpp"
+#include "core/common/log.hpp"
 
 int main(int, char**){
-    std::cout << "Demo App\n";
-    std::cout << "Build Date: " << core::common::Time::nowDateString() << "\n";
+    V2_LOG_INFO("V2_Engine Open");
+    V2_LOG_INFO("Build Data: %s", core::common::Time::nowDateString().c_str());
 }
