@@ -11,10 +11,10 @@ public:
     Mutex& operator=(const Mutex&) = delete;
     Mutex(Mutex&&) = delete;
     Mutex& operator=(Mutex&&) = delete;
-    void lock() noexcept;
-    void unlock() noexcept;
-    bool tryLock() noexcept;
-    std::mutex& native() noexcept;
+    void lock();
+    void unlock();
+    bool tryLock();
+    std::mutex& native();
 private:
     std::mutex m_;
 };

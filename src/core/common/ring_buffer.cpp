@@ -1,10 +1,13 @@
 #include "ring_buffer.hpp"
+#include "debug.hpp"
 #include <cstring>
 #include <algorithm>
 
 namespace core::common{
 
-RingBuffer::RingBuffer(size_t size) : buffer_(std::max<size_t>(1, size)){}
+RingBuffer::RingBuffer(size_t size) : buffer_(size){
+    CORE_ASSERT(size > 0);
+}
 
 Result RingBuffer::push(const uint8_t* data, size_t size){
     if((data == nullptr) || (size == 0)){

@@ -1,8 +1,11 @@
 #include "semaphore.hpp"
+#include "../../../core/common/debug.hpp"
 
 namespace osal{
 
-Semaphore::Semaphore(int count) : count_(count < 0 ? 0 : count) {}
+Semaphore::Semaphore(int count) : count_(count < 0 ? 0 : count){
+    CORE_ASSERT(count >= 0);
+}
 
 void Semaphore::wait(){
     std::unique_lock<std::mutex> lock(m_);
