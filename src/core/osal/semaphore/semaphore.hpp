@@ -14,7 +14,7 @@ public:
     Semaphore& operator=(Semaphore&&) = delete;
     void wait();
     void post();
-    bool try_wait();
+    bool tryWait();
 
 private:
     std::mutex m_;

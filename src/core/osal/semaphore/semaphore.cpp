@@ -23,7 +23,7 @@ void Semaphore::post(){
     cv_.notify_one();
 }
 
-bool Semaphore::try_wait(){
+bool Semaphore::tryWait(){
     std::lock_guard<std::mutex> lock(m_);
     if(count_ > 0){
         --count_;
