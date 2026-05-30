@@ -29,10 +29,3 @@ if(BUILD_CLI_APP)
     )
     target_link_libraries(v2_cli PRIVATE v2_app v2_service v2_core v2_infra)
 endif()
-
-# Compile options
-if(WIN32)
-    target_compile_options(v2_app PRIVATE /W4)
-elseif(UNIX)
-    target_compile_options(v2_app PRIVATE -Wall -Wextra -Wpedantic)
-endif()

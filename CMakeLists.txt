@@ -15,6 +15,13 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+# Compile options
+if(WIN32)
+    target_compile_options(v2_core PRIVATE /W4)
+elseif(UNIX)
+    target_compile_options(v2_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 include(CTest)
 enable_testing()
 

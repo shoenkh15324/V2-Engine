@@ -11,10 +11,3 @@ target_sources(v2_infra PRIVATE
 target_include_directories(v2_infra PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src
 )
-
-# Compile options
-if(WIN32)
-    target_compile_options(v2_infra PRIVATE /W4)
-elseif(UNIX)
-    target_compile_options(v2_infra PRIVATE -Wall -Wextra -Wpedantic)
-endif()

@@ -22,10 +22,3 @@ target_sources(v2_core PRIVATE
 target_include_directories(v2_core PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src
 )
-
-# Compile options
-if(WIN32)
-    target_compile_options(v2_core PRIVATE /W4)
-elseif(UNIX)
-    target_compile_options(v2_core PRIVATE -Wall -Wextra -Wpedantic)
-endif()
