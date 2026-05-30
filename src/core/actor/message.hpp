@@ -6,7 +6,6 @@ namespace core::actor{
 class Message{
 public:
     virtual ~Message() = default;
-
 };
 
 using MessagePtr = std::unique_ptr<Message>;

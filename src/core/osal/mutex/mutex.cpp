@@ -1,6 +1,6 @@
 #include "mutex.hpp"
 
-namespace platform::osal{
+namespace core::osal{
 
 void Mutex::lock(){
     m_.lock();
@@ -18,4 +18,4 @@ std::mutex& Mutex::native(){
     return m_;
 }
 
-} // namespace platform::osal
+} // namespace core::osal

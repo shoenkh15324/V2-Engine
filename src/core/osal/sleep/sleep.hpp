@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace platform::osal{
+namespace core::osal{
 
 class Sleep{
 public:
@@ -10,4 +10,4 @@ public:
     void sleepSec(std::uint32_t sec);
 };
 
-} // namespace platform::osal
+} // namespace core::osal

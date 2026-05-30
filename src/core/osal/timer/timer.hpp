@@ -6,7 +6,7 @@
     #include <unistd.h>
 #endif
 
-namespace platform::osal{
+namespace core::osal{
 
 class Timer{
 public:
@@ -30,4 +30,4 @@ private:
 #endif
 };
 
-} // namespace platform::osal
+} // namespace core::osal

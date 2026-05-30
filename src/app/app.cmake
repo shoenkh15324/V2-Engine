@@ -20,14 +20,14 @@ if(BUILD_DEMO_APP)
     add_executable(v2_demo
         ${CMAKE_CURRENT_LIST_DIR}/demo/main.cpp
     )
-    target_link_libraries(v2_demo PRIVATE v2_app v2_service v2_core v2_platform)
+    target_link_libraries(v2_demo PRIVATE v2_app v2_service v2_core v2_infra)
 endif()
 
 if(BUILD_CLI_APP)
     add_executable(v2_cli
         ${CMAKE_CURRENT_LIST_DIR}/cli/main.cpp
     )
-    target_link_libraries(v2_cli PRIVATE v2_app v2_service v2_core v2_platform)
+    target_link_libraries(v2_cli PRIVATE v2_app v2_service v2_core v2_infra)
 endif()
 
 # Compile options

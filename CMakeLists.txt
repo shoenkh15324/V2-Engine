@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.0)
-project(V2Engine VERSION 0.1.0 LANGUAGES C CXX)
+project(V2_Engine VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,9 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "Configuring Root")
 
 include(${CMAKE_CURRENT_LIST_DIR}/src/core/core.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/src/platform/platform.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/infra/infra.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/src/runtime/runtime.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/service/service.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
 

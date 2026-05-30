@@ -1,9 +1,8 @@
 #include "scheduler.hpp"
-#include "../core/actor/actor.hpp"
-#include "../platform/osal/lock_guard/lock_guard.hpp"
+#include "../actor/actor.hpp"
+#include "../osal/lock_guard/lock_guard.hpp"
 
-namespace runtime{
-namespace osal = platform::osal;
+namespace core::runtime{
 
 void Scheduler::notify(Actor* actor){
     osal::LockGuard<osal::Mutex> lock(mutex_);
@@ -25,4 +24,4 @@ Scheduler::Actor* Scheduler::pop(){
     return actor;
 }
 
-} // namespace runtime
+} // namespace core::runtime

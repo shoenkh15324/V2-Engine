@@ -1,11 +1,11 @@
 #pragma once
 #include <vector>
 #include <utility>
-#include "../../platform/osal/mutex/mutex.hpp"
-#include "../../platform/osal/lock_guard/lock_guard.hpp"
+#include "../osal/lock_guard/lock_guard.hpp"
+#include "../osal/mutex/mutex.hpp"
 
-namespace core::actor {
-namespace osal = platform::osal;
+namespace core::actor{
+namespace osal = core::osal;
 
 template <typename T>
 class Mailbox {

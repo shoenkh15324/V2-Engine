@@ -2,9 +2,9 @@
 #include "mailbox.hpp"
 #include "message.hpp"
 
-namespace runtime{
+namespace core::runtime{
 class Dispatcher;
-} // namespace runtime
+} // namespace core::runtime
 
 namespace core::actor{
 

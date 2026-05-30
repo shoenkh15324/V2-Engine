@@ -2,7 +2,7 @@
 #include <mutex>
 #include <condition_variable>
 
-namespace platform::osal{
+namespace core::osal{
 
 class Semaphore{
 public:
@@ -22,4 +22,4 @@ private:
     int count_;
 };
 
-} // namespace platform::osal
+} // namespace core::osal

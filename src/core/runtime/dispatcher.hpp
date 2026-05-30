@@ -1,13 +1,12 @@
 #pragma once
 #include <unordered_set>
-#include "../platform/osal/mutex/mutex.hpp"
+#include "../osal/mutex/mutex.hpp"
 
 namespace core::actor{
 class Actor;
 } // namespace core::actor
 
-namespace runtime{
-namespace osal = platform::osal;
+namespace core::runtime{
 
 class Scheduler;
 
@@ -26,4 +25,4 @@ private:
     Scheduler* scheduler_;
 };
 
-} // namespace runtime
+} // namespace core::runtime

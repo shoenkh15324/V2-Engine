@@ -2,7 +2,7 @@
 #include <thread>
 #include <functional>
 
-namespace platform::osal{
+namespace core::osal{
 
 class Thread{
 public:
@@ -20,4 +20,4 @@ private:
     std::thread t_;
 };
 
-} // namespace platform::osal
+} // namespace core::osal

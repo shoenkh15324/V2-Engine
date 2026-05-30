@@ -1,6 +1,6 @@
 #include "actor.hpp"
 #include "message.hpp"
-#include "../../runtime/dispatcher.hpp"
+#include "../runtime/dispatcher.hpp"
 
 namespace core::actor{
 

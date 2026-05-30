@@ -1,6 +1,6 @@
 #include "thread.hpp"
 
-namespace platform::osal{
+namespace core::osal{
 
 Thread::Thread(Callback cb, void* arg){
     if(cb){
@@ -39,4 +39,4 @@ bool Thread::joinable() const {
     return t_.joinable();
 }
 
-} // namespace platform::osal
+} // namespace core::osal

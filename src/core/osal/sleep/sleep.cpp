@@ -2,7 +2,7 @@
 #include <thread>
 #include <chrono>
 
-namespace platform::osal{
+namespace core::osal{
 
 void Sleep::sleepMs(std::uint32_t ms){
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
@@ -16,4 +16,4 @@ void Sleep::sleepSec(std::uint32_t sec){
     std::this_thread::sleep_for(std::chrono::seconds(sec));
 }
 
-} // namespace platform::osal
+} // namespace core::osal
