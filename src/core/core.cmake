@@ -7,6 +7,7 @@ add_library(v2_core STATIC)
 target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/common/ring_buffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/time.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor/actor.cpp
 )
 
 target_include_directories(v2_core PUBLIC
