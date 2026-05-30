@@ -5,7 +5,7 @@ message(STATUS "Configuring Runtime Layer")
 add_library(v2_runtime STATIC)
 
 target_sources(v2_runtime PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/executor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/worker.cpp
     
