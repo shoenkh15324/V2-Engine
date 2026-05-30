@@ -3,15 +3,15 @@
 #include <iostream>
 
 #if defined(_MSC_VER)
-    #define CORE_BREAKPOINT() __debugbreak()
+    #define V2_BREAKPOINT() __debugbreak()
 #elif defined(__GNUC__) || defined(__clang__)
-    #define CORE_BREAKPOINT() __builtin_trap()
+    #define V2_BREAKPOINT() __builtin_trap()
 #else
-    #define CORE_BREAKPOINT() ((void)0)
+    #define V2_BREAKPOINT() ((void)0)
 #endif
 
 #ifndef NDEBUG
-    #define CORE_ASSERT(x) \
+    #define V2_ASSERT(x) \
         do{ \
             if(!(x)){ \
                 std::cerr \
@@ -21,15 +21,15 @@
                     << "Line       : " << __LINE__ << "\n" \
                     << "Function   : " << __func__ << "\n" \
                     << std::endl; \
-                CORE_BREAKPOINT(); \
+                V2_BREAKPOINT(); \
                 std::abort(); \
             } \
         }while(0)
 #else
-    #define CORE_ASSERT(x) ((void)0)
+    #define V2_ASSERT(x) ((void)0)
 #endif
 
-#define CORE_PANIC(msg) \
+#define V2_PANIC(msg) \
     do{ \
         std::cerr \
             << "\n[PANIC]\n" \
@@ -38,8 +38,8 @@
             << "Line       : " << __LINE__ << "\n" \
             << "Function   : " << __func__ << "\n" \
             << std::endl; \
-        CORE_BREAKPOINT(); \
+        V2_BREAKPOINT(); \
         std::abort(); \
     }while(0)
 
-#define CORE_UNREACHABLE() CORE_PANIC()
+#define V2_UNREACHABLE() V2_PANIC()

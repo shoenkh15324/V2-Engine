@@ -6,7 +6,7 @@
 namespace core::common{
 
 RingBuffer::RingBuffer(size_t size) : buffer_(size){
-    CORE_ASSERT(size > 0);
+    V2_ASSERT(size > 0);
 }
 
 Result RingBuffer::push(const uint8_t* data, size_t size){

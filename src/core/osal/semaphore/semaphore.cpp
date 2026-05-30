@@ -4,7 +4,7 @@
 namespace core::osal{
 
 Semaphore::Semaphore(int count) : count_(count < 0 ? 0 : count){
-    CORE_ASSERT(count >= 0);
+    V2_ASSERT(count >= 0);
 }
 
 void Semaphore::wait(){
