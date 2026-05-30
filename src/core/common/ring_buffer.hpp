@@ -17,14 +17,14 @@ public:
     Result push(const uint8_t* data, size_t size);
     Result pop(uint8_t* out, size_t size);
     void reset();
-    size_t size() const;
+    size_t count() const;
     size_t capacity() const;
     size_t freeSpace() const;
     bool empty() const;
     bool full() const;
 private:
     std::vector<uint8_t> buffer_;
-    size_t head_ = 0, tail_ = 0, size_ = 0;
+    size_t head_ = 0, tail_ = 0, count_ = 0;
 };
 
 } // namespace core::common

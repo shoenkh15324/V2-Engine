@@ -23,7 +23,7 @@ Result RingBuffer::push(const uint8_t* data, size_t size){
         std::memcpy(&buffer_[0], data + firstChunkSize, remainChunkSize);
     }
     head_ = (head_ + size) % capacity();
-    size_ += size;
+    count_ += size;
     return Result::Ok;
 }
 
@@ -31,7 +31,7 @@ Result RingBuffer::pop(uint8_t* out, size_t size){
     if((out == nullptr) || (size == 0)){
         return Result::InvalidArg;
     }
-    if(size > size_){
+    if(size > count_){
         return Result::Fail;
     }
     const size_t firstChunkSize = std::min(size, capacity() - tail_);
@@ -41,16 +41,16 @@ Result RingBuffer::pop(uint8_t* out, size_t size){
         std::memcpy(out + firstChunkSize, &buffer_[0], remainChunkSize);
     }
     tail_ = (tail_ + size) % capacity();
-    size_ -= size;
+    count_ -= size;
     return Result::Ok;
 }
 
 void RingBuffer::reset(){
-    head_ = tail_ = size_ = 0;
+    head_ = tail_ = count_ = 0;
 }
 
-size_t RingBuffer::size() const {
-    return size_;
+size_t RingBuffer::count() const {
+    return count_;
 }
 
 size_t RingBuffer::capacity() const {
@@ -58,15 +58,15 @@ size_t RingBuffer::capacity() const {
 }
 
 size_t RingBuffer::freeSpace() const {
-    return capacity() - size_;
+    return capacity() - count_;
 }
 
 bool RingBuffer::empty() const {
-    return size_ == 0;
+    return count_ == 0;
 }
 
 bool RingBuffer::full() const {
-    return size_ == capacity();
+    return count_ == capacity();
 }
 
 } // namespace core::common
