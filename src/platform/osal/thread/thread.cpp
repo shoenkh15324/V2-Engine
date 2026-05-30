@@ -1,6 +1,6 @@
 #include "thread.hpp"
 
-namespace osal{
+namespace platform::osal{
 
 Thread::Thread(Callback cb, void* arg){
     if(cb){
@@ -17,7 +17,6 @@ Thread::~Thread(){
 }
 
 Thread::Thread(Thread&& other) noexcept : t_(std::move(other.t_)){
-
 }
 
 Thread& Thread::operator=(Thread&& other) noexcept {
@@ -40,4 +39,4 @@ bool Thread::joinable() const {
     return t_.joinable();
 }
 
-} // namespace osal
+} // namespace platform::osal

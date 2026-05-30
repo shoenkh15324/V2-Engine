@@ -1,6 +1,6 @@
 #pragma once
 
-namespace osal{
+namespace platform::osal{
 
 template<typename T>
 class LockGuard{
@@ -20,4 +20,4 @@ private:
     T& lock_;
 };
 
-} // namespace osal
+} // namespace platform::osal

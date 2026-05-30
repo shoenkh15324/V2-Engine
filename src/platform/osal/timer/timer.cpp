@@ -1,6 +1,6 @@
 #include "timer.hpp"
 
-namespace osal{
+namespace platform::osal{
 
 Timer::~Timer(){
     close();
@@ -52,4 +52,4 @@ int Timer::close(){
     return 0;
 }
 
-} // namespace osal
+} // namespace platform::osal

@@ -6,7 +6,7 @@
     #include <unistd.h>
 #endif
 
-namespace osal{
+namespace platform::osal{
 
 class Timer{
 public:
@@ -21,6 +21,7 @@ public:
 #elif defined(_WIN32)
     void* getHandle() const { return h_; }
 #endif
+
 private:
 #if defined(__linux__)
     int fd_ = -1;
@@ -29,4 +30,4 @@ private:
 #endif
 };
 
-} // namespace osal
+} // namespace platform::osal

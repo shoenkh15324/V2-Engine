@@ -1,7 +1,7 @@
 #include "semaphore.hpp"
 #include "../../../core/common/debug.hpp"
 
-namespace osal{
+namespace platform::osal{
 
 Semaphore::Semaphore(int count) : count_(count < 0 ? 0 : count){
     CORE_ASSERT(count >= 0);
@@ -32,4 +32,4 @@ bool Semaphore::try_wait(){
     return false;
 }
 
-} // namespace osal
+} // namespace platform::osal

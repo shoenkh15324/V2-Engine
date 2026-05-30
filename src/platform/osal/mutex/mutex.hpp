@@ -1,7 +1,7 @@
 #pragma once
 #include <mutex>
 
-namespace osal{
+namespace platform::osal{
 
 class Mutex{
 public:
@@ -19,4 +19,4 @@ private:
     std::mutex m_;
 };
 
-} // namespace osal
+} // namespace platform::osal

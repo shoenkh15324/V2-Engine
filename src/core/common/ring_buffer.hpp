@@ -22,6 +22,7 @@ public:
     size_t freeSpace() const;
     bool empty() const;
     bool full() const;
+    
 private:
     std::vector<uint8_t> buffer_;
     size_t head_ = 0, tail_ = 0, count_ = 0;
