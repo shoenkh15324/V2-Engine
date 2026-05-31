@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
-#include "message.hpp"
+#include "core/actor_system/messages/message.hpp"
 
 class ActorContext;
 
@@ -11,7 +11,7 @@ public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor() = default;
     virtual void handle(const Message& msg) = 0;
-    void sendMsg(Actor* target, MessagePtr msg);
+    void sendMsg(Actor* target, Message msg);
     const std::string& name() const { return name_; }
     uint64_t id() const { return id_; }
 

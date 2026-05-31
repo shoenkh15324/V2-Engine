@@ -7,7 +7,7 @@ ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize)
     actor_->context_ = this;
 }
 
-void ActorContext::enqueue(MessagePtr msg){
+void ActorContext::enqueue(Message msg){
     bool wasEmpty = mailbox_.push(std::move(msg));
     if(!wasEmpty) return;
     if(dispatcher_ && !scheduled_.exchange(true)){
@@ -16,12 +16,11 @@ void ActorContext::enqueue(MessagePtr msg){
 }
 
 void ActorContext::run(int maxBatch){
-    MessagePtr msg;
+    Message msg;
     int processed = 0;
     while((maxBatch < 0) || (processed < maxBatch)){
         if(!mailbox_.pop(msg)) break;
-        actor_->handle(*msg);
-        msg.reset();
+        actor_->handle(msg);
         processed++;
     }
     scheduled_ = false;

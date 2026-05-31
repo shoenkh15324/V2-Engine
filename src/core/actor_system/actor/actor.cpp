@@ -6,6 +6,6 @@ Actor::Actor(std::string name, uint64_t id)
 {
 }
 
-void Actor::sendMsg(Actor* target, MessagePtr msg){
+void Actor::sendMsg(Actor* target, Message msg){
     target->context_->enqueue(std::move(msg));
 }
