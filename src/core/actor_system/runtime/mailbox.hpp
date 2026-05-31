@@ -4,9 +4,6 @@
 #include "core/osal/lock_guard/lock_guard.hpp"
 #include "core/osal/mutex/mutex.hpp"
 
-namespace core::runtime{
-namespace osal = core::osal;
-
 template <typename T>
 class Mailbox {
 public:
@@ -14,7 +11,7 @@ public:
 
     template <typename U>
     bool push(U&& msg){
-        osal::LockGuard<osal::Mutex> lock(mutex_);
+        LockGuard<Mutex> lock(mutex_);
         if(count_ == capacity_){
             return false;
         }
@@ -26,7 +23,7 @@ public:
     }
 
     bool pop(T& out) {
-        osal::LockGuard<osal::Mutex> lock(mutex_);
+        LockGuard<Mutex> lock(mutex_);
         if(count_ == 0){
             return false;
         }
@@ -37,27 +34,25 @@ public:
     }
 
     bool empty() const {
-        osal::LockGuard<osal::Mutex> lock(mutex_);
+        LockGuard<Mutex> lock(mutex_);
         return count_ == 0;
     }
 
     size_t capacity() const {
-        osal::LockGuard<osal::Mutex> lock(mutex_);
+        LockGuard<Mutex> lock(mutex_);
         return capacity_;
     }
 
     size_t count() const {
-        osal::LockGuard<osal::Mutex> lock(mutex_);
+        LockGuard<Mutex> lock(mutex_);
         return count_;
     }
 
 private:
     std::vector<T> buffer_;
-    mutable osal::Mutex mutex_;
+    mutable Mutex mutex_;
     size_t capacity_;
     size_t count_;
     size_t head_;
     size_t tail_;
 };
-
-} // namespace core::runtime

@@ -3,8 +3,6 @@
 #include <cstring>
 #include <algorithm>
 
-namespace core::common{
-
 RingBuffer::RingBuffer(size_t size) : buffer_(size){
     V2_ASSERT(size > 0);
 }
@@ -68,5 +66,3 @@ bool RingBuffer::empty() const {
 bool RingBuffer::full() const {
     return count_ == capacity();
 }
-
-} // namespace core::common

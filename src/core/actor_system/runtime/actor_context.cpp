@@ -1,15 +1,13 @@
 #include "actor_context.hpp"
 #include "dispatcher.hpp"
 
-namespace core::runtime{
-
-ActorContext::ActorContext(std::unique_ptr<core::actor::Actor> actor, size_t mailboxSize)
+ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize)
 : actor_(std::move(actor)), mailbox_(mailboxSize)
 {
-        actor_->context_ = this;
+    actor_->context_ = this;
 }
 
-void ActorContext::enqueue(core::actor::MessagePtr msg){
+void ActorContext::enqueue(MessagePtr msg){
     bool wasEmpty = mailbox_.push(std::move(msg));
     if(!wasEmpty) return;
     if(dispatcher_ && !scheduled_.exchange(true)){
@@ -18,7 +16,7 @@ void ActorContext::enqueue(core::actor::MessagePtr msg){
 }
 
 void ActorContext::run(int throughput){
-    core::actor::MessagePtr msg;
+    MessagePtr msg;
     int processed = 0;
     while((throughput < 0) || (processed < throughput)){
         if(!mailbox_.pop(msg)) break;
@@ -35,5 +33,3 @@ void ActorContext::run(int throughput){
 bool ActorContext::hasMessage() const {
     return !(mailbox_.empty());
 }
-
-} // namespace core::runtime

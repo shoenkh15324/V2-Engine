@@ -1,7 +1,5 @@
 #pragma once
 
-namespace core::osal{
-
 template<typename T>
 class LockGuard{
 public:
@@ -19,5 +17,3 @@ public:
 private:
     T& lock_;
 };
-
-} // namespace core::osal

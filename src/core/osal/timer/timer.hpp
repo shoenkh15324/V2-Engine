@@ -7,8 +7,6 @@
     #include <unistd.h>
 #endif
 
-namespace core::osal{
-
 class Timer{
 public:
     Timer() = default;
@@ -26,5 +24,3 @@ private:
     HANDLE h_ = nullptr;
 #endif
 };
-
-} // namespace core::osal

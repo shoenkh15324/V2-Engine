@@ -4,8 +4,6 @@
 #include <vector>
 #include "return.hpp"
 
-namespace core::common{
-
 class RingBuffer{
 public:
     explicit RingBuffer(size_t size);
@@ -27,5 +25,3 @@ private:
     std::vector<uint8_t> buffer_;
     size_t head_ = 0, tail_ = 0, count_ = 0;
 };
-
-} // namespace core::common

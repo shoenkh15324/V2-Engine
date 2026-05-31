@@ -1,8 +1,6 @@
 #pragma once
 #include <mutex>
 
-namespace core::osal{
-
 class Mutex{
 public:
     Mutex() = default;
@@ -15,8 +13,7 @@ public:
     void unlock();
     bool tryLock();
     std::mutex& native();
+
 private:
     std::mutex m_;
 };
-
-} // namespace core::osal

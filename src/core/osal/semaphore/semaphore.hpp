@@ -2,8 +2,6 @@
 #include <mutex>
 #include <condition_variable>
 
-namespace core::osal{
-
 class Semaphore{
 public:
     explicit Semaphore(int count = 0);
@@ -21,5 +19,3 @@ private:
     std::condition_variable cv_;
     int count_;
 };
-
-} // namespace core::osal

@@ -2,8 +2,6 @@
 #include <thread>
 #include <functional>
 
-namespace core::osal{
-
 class Thread{
 public:
     using Callback = std::function<void(void*)>;
@@ -19,5 +17,3 @@ public:
 private:
     std::thread t_;
 };
-
-} // namespace core::osal

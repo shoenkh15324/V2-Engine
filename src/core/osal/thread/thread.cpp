@@ -1,7 +1,5 @@
 #include "thread.hpp"
 
-namespace core::osal{
-
 Thread::Thread(Callback cb, void* arg){
     if(cb){
         t_ = std::thread([cb = std::move(cb), arg]{
@@ -38,5 +36,3 @@ void Thread::join(){
 bool Thread::joinable() const {
     return t_.joinable();
 }
-
-} // namespace core::osal

@@ -2,9 +2,6 @@
 #include <ctime>
 #include <cstdio>
 
-namespace core::common{
-
-// Monotonic Clock
 Time::TimeStamp Time::now(){
     return MonoClock::now();
 }
@@ -21,7 +18,6 @@ int64_t Time::nowNs(){
     return toNs(MonoClock::now().time_since_epoch());
 }
 
-// System Clock
 std::time_t Time::nowEpoch(){
     return SysClock::to_time_t(SysClock::now());
 }
@@ -55,7 +51,6 @@ std::string Time::nowDateString(){
     return std::string(buf);
 }
 
-// duration conversion
 int64_t Time::toMs(Duration d){
     return std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
 }
@@ -68,7 +63,6 @@ int64_t Time::toNs(Duration d){
     return std::chrono::duration_cast<std::chrono::nanoseconds>(d).count();
 }
 
-// duration builders
 Time::Duration Time::ms(int64_t v){
     return std::chrono::milliseconds(v);
 }
@@ -81,7 +75,6 @@ Time::Duration Time::ns(int64_t v){
     return std::chrono::nanoseconds(v);
 }
 
-// deadline helpers
 Time::TimeStamp Time::afterMs(int64_t ms){
     return now() + std::chrono::milliseconds(ms);
 }
@@ -93,5 +86,3 @@ Time::TimeStamp Time::afterUs(int64_t us){
 Time::TimeStamp Time::afterNs(int64_t ns){
     return now() + std::chrono::nanoseconds(ns);
 }
-
-} // namespace core::common

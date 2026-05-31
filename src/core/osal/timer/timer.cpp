@@ -1,7 +1,5 @@
 #include "timer.hpp"
 
-namespace core::osal{
-
 Timer::~Timer(){
     close();
 }
@@ -61,5 +59,3 @@ intptr_t Timer::getHandle() const {
     return nullptr;
 #endif
 }
-
-} // namespace core::osal

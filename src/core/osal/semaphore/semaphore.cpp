@@ -1,8 +1,6 @@
 #include "semaphore.hpp"
 #include "../../../core/common/debug.hpp"
 
-namespace core::osal{
-
 Semaphore::Semaphore(int count) : count_(count < 0 ? 0 : count){
     V2_ASSERT(count >= 0);
 }
@@ -31,5 +29,3 @@ bool Semaphore::tryWait(){
     }
     return false;
 }
-
-} // namespace core::osal

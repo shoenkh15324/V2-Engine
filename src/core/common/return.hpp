@@ -1,7 +1,5 @@
 #pragma once
 
-namespace core::common{
-
 enum class Result{
     Ok = 0,
     Fail = -1,
@@ -9,5 +7,3 @@ enum class Result{
     InvalidState = -3,
     Timeout = -4,
 };
-
-} // namespace core::common

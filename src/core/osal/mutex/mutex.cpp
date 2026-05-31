@@ -1,7 +1,5 @@
 #include "mutex.hpp"
 
-namespace core::osal{
-
 void Mutex::lock(){
     m_.lock();
 }
@@ -17,5 +15,3 @@ bool Mutex::tryLock(){
 std::mutex& Mutex::native(){
     return m_;
 }
-
-} // namespace core::osal

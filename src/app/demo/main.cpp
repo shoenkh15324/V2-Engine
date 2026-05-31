@@ -4,5 +4,5 @@
 
 int main(int, char**){
     V2_LOG_INFO("V2_Engine Open");
-    V2_LOG_INFO("Build Data: %s", core::common::Time::nowDateString().c_str());
+    V2_LOG_INFO("Build Data: %s", Time::nowDateString().c_str());
 }
