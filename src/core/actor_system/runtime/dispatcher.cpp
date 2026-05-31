@@ -2,15 +2,19 @@
 #include "core/osal/lock_guard/lock_guard.hpp"
 
 void Dispatcher::schedule(ActorContext* actorCtx){
-    LockGuard<Mutex> lock(mutex_);
-    if(inQueue_.find(actorCtx) != inQueue_.end()){
-        return;
+    {
+        LockGuard<Mutex> lock(mutex_);
+        if(inQueue_.find(actorCtx) != inQueue_.end()){
+            return;
+        }
+        readyQueue_.push_back(actorCtx);
+        inQueue_.insert(actorCtx);
     }
-    readyQueue_.push_back(actorCtx);
-    inQueue_.insert(actorCtx);
+    sema_.post();
 }
 
 ActorContext* Dispatcher::pop(){
+    sema_.wait();
     LockGuard<Mutex> lock(mutex_);
     if(readyQueue_.empty()){
         return nullptr;
@@ -19,4 +23,8 @@ ActorContext* Dispatcher::pop(){
     readyQueue_.pop_front();
     inQueue_.erase(actorCtx);
     return actorCtx;
+}
+
+void Dispatcher::wakeup(){
+    sema_.post();
 }

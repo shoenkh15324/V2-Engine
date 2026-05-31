@@ -15,10 +15,10 @@ void ActorContext::enqueue(MessagePtr msg){
     }
 }
 
-void ActorContext::run(int throughput){
+void ActorContext::run(int maxBatch){
     MessagePtr msg;
     int processed = 0;
-    while((throughput < 0) || (processed < throughput)){
+    while((maxBatch < 0) || (processed < maxBatch)){
         if(!mailbox_.pop(msg)) break;
         actor_->handle(*msg);
         msg.reset();
