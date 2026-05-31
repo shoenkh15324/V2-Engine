@@ -2,26 +2,23 @@
 #include <unordered_set>
 #include "core/osal/mutex/mutex.hpp"
 
-namespace core::actor{
-class Actor;
-} // namespace core::actor
-
 namespace core::runtime{
 
 class Scheduler;
+class ActorContext;
 
 class Dispatcher{
 private:
-    using Actor = core::actor::Actor;
+    using ActorContext = core::runtime::ActorContext;
 
 public:
     explicit Dispatcher(Scheduler* scheduler);
-    void registerActor(Actor* actor);
-    void notify(Actor* actor);
+    void registerActor(ActorContext* actor);
+    void schedule(ActorContext* actor);
 
 private:
     osal::Mutex mutex_;
-    std::unordered_set<Actor*> registeredActors_;
+    std::unordered_set<ActorContext*> registeredActors_;
     Scheduler* scheduler_;
 };
 

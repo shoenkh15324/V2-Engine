@@ -4,7 +4,7 @@
 #include "core/osal/lock_guard/lock_guard.hpp"
 #include "core/osal/mutex/mutex.hpp"
 
-namespace core::actor{
+namespace core::runtime{
 namespace osal = core::osal;
 
 template <typename T>
@@ -36,17 +36,17 @@ public:
         return true;
     }
 
-    bool empty(){
+    bool empty() const {
         osal::LockGuard<osal::Mutex> lock(mutex_);
         return count_ == 0;
     }
 
-    size_t capacity(){
+    size_t capacity() const {
         osal::LockGuard<osal::Mutex> lock(mutex_);
         return capacity_;
     }
 
-    size_t count(){
+    size_t count() const {
         osal::LockGuard<osal::Mutex> lock(mutex_);
         return count_;
     }
@@ -60,4 +60,4 @@ private:
     size_t tail_;
 };
 
-} // namespace core::actor
+} // namespace core::runtime
