@@ -1,6 +1,6 @@
 #pragma once
-#include "mailbox.hpp"
 #include "message.hpp"
+#include "core/actor_system/runtime/mailbox.hpp"
 
 namespace core::runtime{
 class Dispatcher;

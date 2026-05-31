@@ -1,8 +1,8 @@
 #pragma once
 #include <vector>
 #include <utility>
-#include "../osal/lock_guard/lock_guard.hpp"
-#include "../osal/mutex/mutex.hpp"
+#include "core/osal/lock_guard/lock_guard.hpp"
+#include "core/osal/mutex/mutex.hpp"
 
 namespace core::actor{
 namespace osal = core::osal;

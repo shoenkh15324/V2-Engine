@@ -1,6 +1,6 @@
 #pragma once
 #include <unordered_set>
-#include "../osal/mutex/mutex.hpp"
+#include "core/osal/mutex/mutex.hpp"
 
 namespace core::actor{
 class Actor;

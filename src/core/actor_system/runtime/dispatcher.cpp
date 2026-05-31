@@ -1,6 +1,6 @@
 #include "dispatcher.hpp"
 #include "scheduler.hpp"
-#include "../osal/lock_guard/lock_guard.hpp"
+#include "core/osal/lock_guard/lock_guard.hpp"
 
 namespace core::runtime{
 

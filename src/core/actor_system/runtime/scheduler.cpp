@@ -1,6 +1,6 @@
 #include "scheduler.hpp"
-#include "../actor/actor.hpp"
-#include "../osal/lock_guard/lock_guard.hpp"
+#include "core/actor_system/actor/actor.hpp"
+#include "core/osal/lock_guard/lock_guard.hpp"
 
 namespace core::runtime{
 
