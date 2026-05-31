@@ -1,28 +1,24 @@
 #pragma once
+#include <cstdint>
 #include "message.hpp"
-#include "core/actor_system/runtime/mailbox.hpp"
 
 namespace core::runtime{
-class Dispatcher;
-} // namespace core::runtime
+class ActorContext;
+}
 
 namespace core::actor{
 
 class Actor{
-private:
-    using Dispatcher = runtime::Dispatcher;
-
+    friend class runtime::ActorContext;
 public:
-    explicit Actor(size_t mailboxSize);
-    void send(MessagePtr msg);
-    void attachDispatcher(Dispatcher* dispatcher);
-
-protected:
     virtual void handle(const Message& msg) = 0;
+    virtual ~Actor() = default;
+    void sendMsg(Actor* target, MessagePtr msg);
+    uint64_t id() const { return id_; }
 
 private:
-    Mailbox<MessagePtr> mailbox_;
-    Dispatcher* dispatcher_;
+    runtime::ActorContext* context_ = nullptr;
+    uint64_t id_ = 0;
 };
 
 } // namespace core::actor
