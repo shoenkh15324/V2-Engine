@@ -29,7 +29,3 @@ void ActorContext::run(int maxBatch){
         dispatcher_->schedule(this);
     }
 }
-
-bool ActorContext::hasMessage() const {
-    return !(mailbox_.empty());
-}

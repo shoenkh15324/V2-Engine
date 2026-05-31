@@ -11,7 +11,6 @@ public:
     ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize);
     void enqueue(MessagePtr msg);
     void run(int maxBatch);
-    bool hasMessage() const;
     Actor* actor() const { return actor_.get(); }
     void attachDispatcher(Dispatcher* dispatcher) { dispatcher_ = dispatcher; }
 
