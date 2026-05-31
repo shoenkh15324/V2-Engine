@@ -7,6 +7,7 @@ class ActorContext;
 
 class Actor{
     friend class ActorContext;
+    friend class Scheduler;
 public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor() = default;

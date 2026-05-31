@@ -1,8 +1,7 @@
 #pragma once
 #include <variant>
-
-struct DummyMsg {};
+#include "timer_messages.hpp"
 
 using Message = std::variant<
-    DummyMsg
+    TimerExpired
 >;
