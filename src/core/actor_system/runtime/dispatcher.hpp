@@ -1,18 +1,17 @@
 #pragma once
+#include <deque>
 #include <unordered_set>
 #include "core/osal/mutex/mutex.hpp"
 
-class Scheduler;
 class ActorContext;
 
 class Dispatcher{
 public:
-    explicit Dispatcher(Scheduler* scheduler);
-    void registerActor(ActorContext* actor);
-    void schedule(ActorContext* actor);
+    void schedule(ActorContext* actorCtx);
+    ActorContext* pop();
 
 private:
     Mutex mutex_;
-    std::unordered_set<ActorContext*> registeredActors_;
-    Scheduler* scheduler_;
+    std::deque<ActorContext*> readyQueue_;
+    std::unordered_set<ActorContext*> inQueue_;
 };

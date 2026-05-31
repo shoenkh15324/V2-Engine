@@ -1,15 +1,22 @@
 #include "dispatcher.hpp"
-#include "scheduler.hpp"
 #include "core/osal/lock_guard/lock_guard.hpp"
 
-Dispatcher::Dispatcher(Scheduler* scheduler) : scheduler_(scheduler){
-}
-
-void Dispatcher::registerActor(ActorContext* actor){
+void Dispatcher::schedule(ActorContext* actorCtx){
     LockGuard<Mutex> lock(mutex_);
-    registeredActors_.insert(actor);
+    if(inQueue_.find(actorCtx) != inQueue_.end()){
+        return;
+    }
+    readyQueue_.push_back(actorCtx);
+    inQueue_.insert(actorCtx);
 }
 
-void Dispatcher::schedule(ActorContext* actor){
-    scheduler_->notify(actor);
+ActorContext* Dispatcher::pop(){
+    LockGuard<Mutex> lock(mutex_);
+    if(readyQueue_.empty()){
+        return nullptr;
+    }
+    ActorContext* actorCtx = readyQueue_.front();
+    readyQueue_.pop_front();
+    inQueue_.erase(actorCtx);
+    return actorCtx;
 }
