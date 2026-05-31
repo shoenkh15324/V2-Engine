@@ -1,8 +1,7 @@
-#include <iostream>
-#include "core/common/time.hpp"
-#include "core/common/log.hpp"
+#include "app/demo/demo_app.hpp"
 
 int main(int, char**){
-    V2_LOG_INFO("V2_Engine Open");
-    V2_LOG_INFO("Build Data: %s", Time::nowDateString().c_str());
+    DemoApp app;
+    app.open();
+    app.run();
 }
