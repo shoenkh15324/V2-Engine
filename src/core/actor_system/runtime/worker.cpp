@@ -13,25 +13,23 @@ Worker::~Worker(){
 
 void Worker::start(){
     running_ = true;
-    thread_ = std::make_unique<Thread>(&Worker::runLoop, this);
+    thread_ = std::thread([this]{ runLoop(); });
 }
 
 void Worker::stop(){
     running_ = false;
     dispatcher_->wakeup();
-    if(thread_){
-        thread_->join();
-        thread_.reset();
+    if(thread_.joinable()){
+        thread_.join();
     }
 }
 
-void Worker::runLoop(void* arg){
-    Worker* self = static_cast<Worker*>(arg);
-    while(self->running_){
-        ActorContext* actorCtx = self->dispatcher_->pop();
+void Worker::runLoop(){
+    while(running_){
+        ActorContext* actorCtx = dispatcher_->pop();
         if(!actorCtx){
             continue;
         }
-        actorCtx->run(self->maxBatch_);
+        actorCtx->run(maxBatch_);
     }
 }

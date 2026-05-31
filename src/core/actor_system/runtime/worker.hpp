@@ -1,7 +1,6 @@
 #pragma once
 #include <atomic>
-#include <memory>
-#include "core/osal/thread/thread.hpp"
+#include <thread>
 
 class Dispatcher;
 
@@ -13,9 +12,9 @@ public:
     void stop();
 
 private:
-    static void runLoop(void* arg);
+    void runLoop();
     Dispatcher* dispatcher_;
-    std::unique_ptr<Thread> thread_;
+    std::thread thread_;
     std::atomic<bool> running_{false};
     int maxBatch_;
 };

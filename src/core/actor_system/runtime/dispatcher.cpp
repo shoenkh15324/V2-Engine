@@ -1,9 +1,8 @@
 #include "dispatcher.hpp"
-#include "core/osal/lock_guard/lock_guard.hpp"
 
 void Dispatcher::schedule(ActorContext* actorCtx){
     {
-        LockGuard<Mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         if(inQueue_.find(actorCtx) != inQueue_.end()){
             return;
         }
@@ -15,7 +14,7 @@ void Dispatcher::schedule(ActorContext* actorCtx){
 
 ActorContext* Dispatcher::pop(){
     sema_.wait();
-    LockGuard<Mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     if(readyQueue_.empty()){
         return nullptr;
     }

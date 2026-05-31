@@ -13,11 +13,6 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/common/log.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/ring_buffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/time.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/osal/mutex/mutex.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/osal/semaphore/semaphore.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/osal/sleep/sleep.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/osal/thread/thread.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/osal/timer/timer.cpp
 )
 
 target_include_directories(v2_core PUBLIC

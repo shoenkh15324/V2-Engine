@@ -1,8 +1,7 @@
 #pragma once
 #include <vector>
 #include <utility>
-#include "core/osal/lock_guard/lock_guard.hpp"
-#include "core/osal/mutex/mutex.hpp"
+#include <mutex>
 
 template <typename T>
 class Mailbox {
@@ -11,7 +10,7 @@ public:
 
     template <typename U>
     bool push(U&& msg){
-        LockGuard<Mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         if(count_ == capacity_){
             return false;
         }
@@ -23,7 +22,7 @@ public:
     }
 
     bool pop(T& out) {
-        LockGuard<Mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         if(count_ == 0){
             return false;
         }
@@ -34,23 +33,23 @@ public:
     }
 
     bool empty() const {
-        LockGuard<Mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         return count_ == 0;
     }
 
     size_t capacity() const {
-        LockGuard<Mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         return capacity_;
     }
 
     size_t count() const {
-        LockGuard<Mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         return count_;
     }
 
 private:
     std::vector<T> buffer_;
-    mutable Mutex mutex_;
+    mutable std::mutex mutex_;
     size_t capacity_;
     size_t count_;
     size_t head_;

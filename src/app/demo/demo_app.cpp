@@ -1,7 +1,7 @@
 #include "demo_app.hpp"
 #include "core/common/log.hpp"
-#include "core/osal/sleep/sleep.hpp"
 #include "core/common/time.hpp"
+#include "core/common/sleep.hpp"
 #include <csignal>
 
 DemoApp* DemoApp::sInstance = nullptr;
@@ -33,7 +33,7 @@ void DemoApp::run(){
     isRunning_ = true;
     V2_LOG_INFO("Demo App Run");
     while(isRunning_){
-        Sleep().sleepMs(100);
+        Sleep::sleepMs(100);
     }
 }
 

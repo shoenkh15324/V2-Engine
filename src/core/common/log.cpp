@@ -1,11 +1,10 @@
 #include "log.hpp"
 #include <cstdio>
 #include <cstdarg>
-#include "core/osal/mutex/mutex.hpp"
-#include "core/osal/lock_guard/lock_guard.hpp"
+#include <mutex>
 
 LogLevel gLevel = LogLevel::Verbose;
-Mutex gMutex;
+std::mutex gMutex;
 
 const char* colorCode(LogLevel level){
     switch(level){
@@ -35,7 +34,7 @@ LogLevel getLogLevel(){
 
 void logPrint(LogLevel level, const char* file, int line, const char* func, const char* fmt, ...){
     if(level < gLevel) return;
-    LockGuard<Mutex> lock(gMutex);
+    std::lock_guard<std::mutex> lock(gMutex);
     fprintf(stderr, "%s%s %s:%d (%s) ", colorCode(level), levelLabel(level), file, line, func);
     va_list args;
     va_start(args, fmt);

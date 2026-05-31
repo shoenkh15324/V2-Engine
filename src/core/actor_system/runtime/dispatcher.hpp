@@ -1,8 +1,8 @@
 #pragma once
 #include <deque>
 #include <unordered_set>
-#include "core/osal/mutex/mutex.hpp"
-#include "core/osal/semaphore/semaphore.hpp"
+#include <mutex>
+#include "core/common/semaphore.hpp"
 
 class ActorContext;
 
@@ -13,7 +13,7 @@ public:
     void wakeup();
 
 private:
-    Mutex mutex_;
+    std::mutex mutex_;
     Semaphore sema_{0};
     std::deque<ActorContext*> readyQueue_;
     std::unordered_set<ActorContext*> inQueue_;
