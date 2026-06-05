@@ -15,12 +15,14 @@ ActorSystem::~ActorSystem(){
 }
 
 void ActorSystem::start(){
+    scheduler_.start();
     for(auto& w : workers_){
         w->start();
-    }    
+    }
 }
 
 void ActorSystem::stop(){
+    scheduler_.stop();
     for(auto& w : workers_){
         w->stop();
     }

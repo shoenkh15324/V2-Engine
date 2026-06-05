@@ -4,9 +4,10 @@
 #include <vector>
 #include <string>
 #include "core/actor_system/runtime/dispatcher.hpp"
+#include "core/actor_system/scheduler.hpp"
+#include "core/actor_system/runtime/actor_context.hpp"
 
 class Actor;
-class ActorContext;
 class Worker;
 
 class ActorSystem{
@@ -27,9 +28,11 @@ public:
 
     void start();
     void stop();
+    Scheduler& scheduler(){ return scheduler_; }
 
 private:
     Dispatcher dispatcher_;
+    Scheduler scheduler_;
     std::vector<std::unique_ptr<Worker>> workers_;
     std::vector<std::unique_ptr<ActorContext>> actorContexts_;
     std::atomic<uint64_t> nextActorId_{0};

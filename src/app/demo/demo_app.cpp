@@ -14,12 +14,23 @@ DemoApp::~DemoApp(){
     close();
 }
 
+void DemoAppActor::handle(const Message& msg){
+    std::visit(overloaded{
+        [](const TimerExpired& timer){
+            V2_LOG_INFO("Timer expired! / Id: %d, Time: %ld", timer.timerId, Time::nowMs());
+        }
+    }, msg);
+}
+
 void DemoApp::open(){
     V2_LOG_INFO("Demo App Open");
     V2_LOG_INFO("Bulid Data: %s", Time::nowDateString().c_str());
     signal(SIGINT, onSignal);
     signal(SIGTERM, onSignal);
-    // 여기에 actor 생성
+    //
+    demoAppActor_ = actorSystem_.createActor<DemoAppActor>("demoApp", 128);
+    actorSystem_.scheduler().addTimer(demoAppActor_, TimerExpired{0}, 100, true);
+    //
     actorSystem_.start();
 }
 
