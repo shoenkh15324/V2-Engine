@@ -1,5 +1,5 @@
 #include "scheduler.hpp"
-#include "core/actor_system/runtime/actor_context.hpp"
+#include "core/actor_system/actor/actor_context.hpp"
 
 Scheduler::Scheduler() = default;
 

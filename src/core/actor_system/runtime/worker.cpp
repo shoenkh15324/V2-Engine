@@ -1,6 +1,6 @@
 #include "worker.hpp"
 #include "dispatcher.hpp"
-#include "actor_context.hpp"
+#include "core/actor_system/actor/actor_context.hpp"
 
 Worker::Worker(Dispatcher* dispatcher, int maxBatch)
     : dispatcher_(dispatcher), maxBatch_(maxBatch)

@@ -11,8 +11,10 @@ public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor() = default;
     virtual void handle(const Message& msg) = 0;
-    void sendMsg(Actor* target, Message msg);
-    int sendAfter(Actor* target, Message msg, uint64_t delayMs);
+    void sendMsg(const std::string& name, Message msg);
+    void sendMsg(uint64_t id, Message msg);
+    int sendAfter(const std::string& targetName, Message msg, uint64_t delayMs);
+    int sendAfter(uint64_t targetId, Message msg, uint64_t delayMs);
     void receiveMsg(Message msg);
 
     int startTimer(Message msg, uint64_t delayMs, bool repeating);
