@@ -16,6 +16,11 @@ target_include_directories(v2_app PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src
 )
 
+target_compile_definitions(v2_app PRIVATE
+    V2_ENGINE_NAME="${PROJECT_NAME}"
+    V2_ENGINE_VERSION="${PROJECT_VERSION}"
+)  
+
 if(BUILD_DEMO_APP)
     add_executable(v2_demo
         ${CMAKE_CURRENT_LIST_DIR}/demo/main.cpp
