@@ -9,8 +9,9 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-#include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/messages/message.hpp"
+
+class Actor;
 
 class Scheduler {
 public:

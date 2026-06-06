@@ -6,18 +6,20 @@
 #include "core/actor_system/actor/actor.hpp"
 
 class Dispatcher;
+class Scheduler;
 
 class ActorContext{
 public:
-    ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize);
+    ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, Scheduler* scheduler);
     void enqueue(Message msg);
     void run(int maxBatch);
     Actor* actor() const { return actor_.get(); }
-    void attachDispatcher(Dispatcher* dispatcher) { dispatcher_ = dispatcher; }
+    Scheduler* scheduler() const { return scheduler_; }
 
 private:
     std::unique_ptr<Actor> actor_;
     Mailbox<Message> mailbox_;
     std::atomic<bool> scheduled_{false};
     Dispatcher* dispatcher_ = nullptr;
+    Scheduler* scheduler_ = nullptr;
 };

@@ -29,7 +29,7 @@ void DemoApp::open(){
     signal(SIGTERM, onSignal);
     //
     demoAppActor_ = actorSystem_.createActor<DemoAppActor>("demoApp", 128);
-    actorSystem_.scheduler().addTimer(demoAppActor_, TimerExpired{0}, 100, true);
+    demoAppActor_->startTimer(TimerExpired{0}, 100, true);
     //
     actorSystem_.start();
 }

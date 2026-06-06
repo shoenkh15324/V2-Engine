@@ -1,10 +1,12 @@
 #include "actor_context.hpp"
 #include "dispatcher.hpp"
 
-ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize)
+ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, Scheduler* scheduler)
 : actor_(std::move(actor)), mailbox_(mailboxSize)
 {
     actor_->context_ = this;
+    dispatcher_ = dispatcher;
+    scheduler_ = scheduler;
 }
 
 void ActorContext::enqueue(Message msg){
@@ -28,3 +30,4 @@ void ActorContext::run(int maxBatch){
         dispatcher_->schedule(this);
     }
 }
+

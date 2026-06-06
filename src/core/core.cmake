@@ -6,10 +6,10 @@ add_library(v2_core STATIC)
 
 target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor_system.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/actor_context.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/worker.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/log.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/ring_buffer.cpp

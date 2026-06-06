@@ -83,7 +83,7 @@ void Scheduler::threadFunc(){
             timers_.erase(timer->id);
         }
         lock.unlock();
-        timer->target->context_->enqueue(Message(timer->message));
+        timer->target->receiveMsg(Message(timer->message));
         lock.lock();
         if(timer->repeating && !timer->canceled.load(std::memory_order_relaxed)){
             timer->expiry += timer->interval;
