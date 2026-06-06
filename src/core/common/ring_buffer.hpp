@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <cstddef>
 #include <vector>
-#include "return.hpp"
 
 class RingBuffer{
 public:
@@ -12,8 +11,8 @@ public:
     RingBuffer& operator=(const RingBuffer&) = delete;
     RingBuffer(RingBuffer&&) = default;
     RingBuffer& operator=(RingBuffer&&) = default;
-    Result push(const uint8_t* data, size_t size);
-    Result pop(uint8_t* out, size_t size);
+    int push(const uint8_t* data, size_t size);
+    int pop(uint8_t* out, size_t size);
     void reset();
     size_t count() const;
     size_t capacity() const;

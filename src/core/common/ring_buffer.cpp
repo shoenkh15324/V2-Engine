@@ -1,5 +1,6 @@
 #include "ring_buffer.hpp"
 #include "debug.hpp"
+#include "return.hpp"
 #include <cstring>
 #include <algorithm>
 
@@ -7,12 +8,12 @@ RingBuffer::RingBuffer(size_t size) : buffer_(size){
     V2_ASSERT(size > 0);
 }
 
-Result RingBuffer::push(const uint8_t* data, size_t size){
+int RingBuffer::push(const uint8_t* data, size_t size){
     if((data == nullptr) || (size == 0)){
-        return Result::InvalidArg;
+        return InvalidArg;
     }
     if(size > freeSpace()){
-        return Result::Fail;
+        return Fail;
     }
     const size_t firstChunkSize = std::min(size, capacity() - head_);
     std::memcpy(&buffer_[head_], data, firstChunkSize);
@@ -22,15 +23,15 @@ Result RingBuffer::push(const uint8_t* data, size_t size){
     }
     head_ = (head_ + size) % capacity();
     count_ += size;
-    return Result::Ok;
+    return Ok;
 }
 
-Result RingBuffer::pop(uint8_t* out, size_t size){
+int RingBuffer::pop(uint8_t* out, size_t size){
     if((out == nullptr) || (size == 0)){
-        return Result::InvalidArg;
+        return InvalidArg;
     }
     if(size > count_){
-        return Result::Fail;
+        return Fail;
     }
     const size_t firstChunkSize = std::min(size, capacity() - tail_);
     std::memcpy(out, &buffer_[tail_], firstChunkSize);
@@ -40,7 +41,7 @@ Result RingBuffer::pop(uint8_t* out, size_t size){
     }
     tail_ = (tail_ + size) % capacity();
     count_ -= size;
-    return Result::Ok;
+    return Ok;
 }
 
 void RingBuffer::reset(){

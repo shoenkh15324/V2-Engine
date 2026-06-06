@@ -1,4 +1,5 @@
 #include "actor.hpp"
+#include "core/common/return.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
@@ -24,17 +25,17 @@ void Actor::sendMsg(uint64_t targetId, Message msg){
 int Actor::sendAfter(const std::string& targetName, Message msg, uint64_t delayMs){
     auto* target = context_->actorRegistry()->findByName(targetName);
     if(!target){
-        return -1;
+        return Fail;
     }
-    return context_->scheduler() ? context_->scheduler()->addTimer(target, std::move(msg), delayMs, false) : -1;
+    return context_->scheduler() ? context_->scheduler()->addTimer(target, std::move(msg), delayMs, false) : Fail;
 }
 
 int Actor::sendAfter(uint64_t targetId, Message msg, uint64_t delayMs){
     auto* target = context_->actorRegistry()->findById(targetId);
     if(!target){
-        return -1;
+        return Fail;
     }
-    return context_->scheduler() ? context_->scheduler()->addTimer(target, std::move(msg), delayMs, false) : -1;
+    return context_->scheduler() ? context_->scheduler()->addTimer(target, std::move(msg), delayMs, false) : Fail;
 }
 
 void Actor::receiveMsg(Message msg){
@@ -42,7 +43,7 @@ void Actor::receiveMsg(Message msg){
 }
 
 int Actor::startTimer(Message msg, uint64_t delayMs, bool repeating){
-    return context_->scheduler() ? context_->scheduler()->addTimer(this, std::move(msg), delayMs, repeating) : -1;
+    return context_->scheduler() ? context_->scheduler()->addTimer(this, std::move(msg), delayMs, repeating) : Fail;
 }
 
 void Actor::cancelTimer(int id){
