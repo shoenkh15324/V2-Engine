@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <cstdint>
 
 class UdsServer {
 public:
@@ -7,15 +8,15 @@ public:
     ~UdsServer();
     UdsServer(const UdsServer&) = delete;
     UdsServer& operator=(const UdsServer&) = delete;
+    UdsServer(UdsServer&&) noexcept;
+    UdsServer& operator=(UdsServer&&) noexcept;
 
-    int listen(const std::string& path, int backlog = 5);
+    int start(const std::string& path, int backlog = 5);
     int accept();                   
-    int write(int connFd, const std::string& data);
-    std::string readLine(int connFd);
+    int send(int fd, const void* data, size_t size);
+    int recv(int fd, void* data, size_t size);
     void closeClient(int connFd);
     void shutdown();
-
-    const std::string& path() const { return path_; }
 
 private:
     int serverFd_ = -1;
