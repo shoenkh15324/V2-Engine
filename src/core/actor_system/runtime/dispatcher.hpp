@@ -3,8 +3,10 @@
 #include <unordered_set>
 #include <mutex>
 
-#ifndef __linux__
-#include "core/common/semaphore.hpp"
+#ifdef __linux__
+    #include "core/common/epoll.hpp"
+#else
+    #include "core/common/semaphore.hpp"
 #endif
 
 class ActorContext;
@@ -24,13 +26,14 @@ public:
     void wakeup();
 
 #ifdef __linux__
-    int eventFd() const { return eventFd_; }
+    int epollFd() const { return epoll_.fd(); }
 #endif
 
 private:
     std::mutex mutex_;
 
 #ifdef __linux__
+    Epoll epoll_;
     int eventFd_;
 #else
     Semaphore sema_{0};

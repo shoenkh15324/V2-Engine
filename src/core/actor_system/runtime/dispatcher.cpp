@@ -18,6 +18,9 @@ Dispatcher::Dispatcher()
     if(eventFd_ < 0){ V2_LOG_ERROR("eventfd() failed");
         std::abort();
     }
+    if(epoll_.add(eventFd_, EPOLLIN) < 0){ V2_LOG_ERROR("epoll add eventfd failed");
+        std::abort();
+    }
 #endif
 }
 
@@ -48,11 +51,18 @@ void Dispatcher::schedule(ActorContext* actorCtx){
 
 ActorContext* Dispatcher::pop(){
 #ifdef __linux__
-    uint64_t val;
-    ssize_t n;
-    do{
-        n = ::read(eventFd_, &val, sizeof(val));
-    } while(n < 0 && errno == EINTR);
+    epoll_event ev;
+    int n = epoll_.wait(&ev, 1);
+    if(n <= 0){
+        return nullptr;
+    }
+    if(ev.data.fd == eventFd_){
+        uint64_t val;
+        ssize_t r;
+        do{
+            r = ::read(eventFd_, &val, sizeof(val));
+        }while(r < 0 && errno == EINTR);
+    }
 #else
     sema_.wait();
 #endif
