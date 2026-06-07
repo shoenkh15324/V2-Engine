@@ -61,6 +61,7 @@ void Timer::start(){
 #else
     running_ = true;
     thread_ = std::thread([this]{
+        pthread_setname_np(pthread_self(), "v2-timer");
         while(running_){
             std::unique_lock<std::mutex> lock(mutex_);
             while(!heap_.empty() && !heap_.top()->alive){

@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
+#include <sys/prctl.h>
 #endif
 
 Dispatcher::Dispatcher(int workerCount) : workerCount_(workerCount){
@@ -72,6 +73,7 @@ void Dispatcher::stop(){
 
 void Dispatcher::run(){
 #ifdef __linux__
+    pthread_setname_np(pthread_self(), "v2-main");
     running_ = true;
     const int maxEvents = 64;
     epoll_event epollEvents[maxEvents];

@@ -1,12 +1,13 @@
 #pragma once
 #include <atomic>
 #include <thread>
+#include <string>
 
 class Dispatcher;
 
 class Worker{
 public:
-    explicit Worker(Dispatcher* dispatcher, int maxBatch = -1);
+    explicit Worker(Dispatcher* dispatcher, int id, int maxBatch = -1);
     ~Worker();
     void start();
     void stop();
@@ -16,5 +17,6 @@ private:
     Dispatcher* dispatcher_;
     std::thread thread_;
     std::atomic<bool> running_{false};
-    int maxBatch_;
+    int id_, maxBatch_;
+    std::string threadName_;
 };

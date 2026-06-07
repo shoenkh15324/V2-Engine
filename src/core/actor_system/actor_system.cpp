@@ -4,7 +4,7 @@
 ActorSystem::ActorSystem(int numWorkers) : dispatcher_(numWorkers){
     workers_.reserve(numWorkers);
     for(int i = 0; i < numWorkers; i++){
-        workers_.push_back(std::make_unique<Worker>(&dispatcher_));
+        workers_.push_back(std::make_unique<Worker>(&dispatcher_, i));
     }
 }
 

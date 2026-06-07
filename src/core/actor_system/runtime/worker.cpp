@@ -2,8 +2,9 @@
 #include "dispatcher.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 
-Worker::Worker(Dispatcher* dispatcher, int maxBatch)
-    : dispatcher_(dispatcher), maxBatch_(maxBatch){
+Worker::Worker(Dispatcher* dispatcher, int id, int maxBatch)
+    : dispatcher_(dispatcher), id_(id), maxBatch_(maxBatch){
+    threadName_ = "v2-worker" + std::to_string(id_);
 }
 
 Worker::~Worker(){
@@ -23,6 +24,7 @@ void Worker::stop(){
 }
 
 void Worker::runLoop(){
+    pthread_setname_np(pthread_self(), threadName_.c_str());
     while(running_){
         ActorContext* actorCtx = dispatcher_->acquire();
         if(!actorCtx){
