@@ -23,21 +23,29 @@ void Scheduler::cancel(int timerId){
     timer_.cancel(timerId);
 }
 
-void Scheduler::start(Dispatcher* dispatcher){
-    timer_.start();
+void Scheduler::subscribeTimerFd(){
 #ifdef __linux__
-    dispatcher_ = dispatcher;
     if(dispatcher_ && timer_.fd() >= 0){
         dispatcher_->subscribe(timer_.fd(), [this](){ timer_.onTick(); });
     }
 #endif
 }
 
-void Scheduler::stop(){
+void Scheduler::unsubscribeTimerFd(){
 #ifdef __linux__
     if(dispatcher_ && timer_.fd() >= 0){
         dispatcher_->unsubscribe(timer_.fd());
     }
 #endif
+}
+
+void Scheduler::start(Dispatcher* dispatcher){
+    timer_.start();
+    dispatcher_ = dispatcher;
+    subscribeTimerFd();
+}
+
+void Scheduler::stop(){
+    unsubscribeTimerFd();
     timer_.stop();
 }

@@ -3,10 +3,11 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include "core/actor_system/actor/i_actor_registry.hpp"
 
 class Actor;
 
-class ActorRegistry{
+class ActorRegistry : public IActorRegistry{
 public:
     ActorRegistry() = default;
     ~ActorRegistry() = default;
@@ -18,8 +19,8 @@ public:
     void add(Actor* actor);
     void remove(Actor* actor);
     void clear();
-    Actor* findByName(const std::string& name) const;
-    Actor* findById(uint64_t id) const;
+    Actor* findByName(const std::string& name) const override;
+    Actor* findById(uint64_t id) const override;
 
 private:
     mutable std::mutex mutex_;

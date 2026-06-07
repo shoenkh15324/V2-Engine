@@ -1,8 +1,7 @@
 #include "actor.hpp"
 #include "core/common/return.hpp"
-#include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
-#include "core/actor_system/runtime/scheduler.hpp"
+
 Actor::Actor(std::string name, uint64_t id)
     : name_(name), id_(id)
 {
@@ -11,14 +10,14 @@ Actor::Actor(std::string name, uint64_t id)
 void Actor::sendMsg(const std::string& targetName, Message msg){
     auto* target = context_->actorRegistry()->findByName(targetName);
     if(target){
-        target->context_->enqueue(std::move(msg));
+        target->receiveMsg(std::move(msg));
     }
 }
 
 void Actor::sendMsg(uint64_t targetId, Message msg){
     auto* target = context_->actorRegistry()->findById(targetId);
     if(target){
-        target->context_->enqueue(std::move(msg));
+        target->receiveMsg(std::move(msg));
     }
 }
 

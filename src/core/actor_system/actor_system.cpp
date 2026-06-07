@@ -38,4 +38,7 @@ void ActorSystem::run(){
 void ActorSystem::requestStop(){
     scheduler_.stop();
     dispatcher_.stop();
+    for(auto& w : workers_){
+        w->stop();
+    }
 }

@@ -1,8 +1,8 @@
 #include "actor_context.hpp"
+#include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
-#include "actor_registry.hpp"
 
-ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, Scheduler* scheduler, ActorRegistry* actorRegistry)
+ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
 : actor_(std::move(actor)), mailbox_(mailboxSize)
 {
     actor_->context_ = this;
