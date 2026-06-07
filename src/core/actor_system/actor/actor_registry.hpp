@@ -8,6 +8,13 @@ class Actor;
 
 class ActorRegistry{
 public:
+    ActorRegistry() = default;
+    ~ActorRegistry() = default;
+    ActorRegistry(const ActorRegistry&) = delete;
+    ActorRegistry& operator=(const ActorRegistry&) = delete;
+    ActorRegistry(ActorRegistry&&) = delete;
+    ActorRegistry& operator=(ActorRegistry&&) = delete;
+
     void add(Actor* actor);
     void remove(Actor* actor);
     void clear();

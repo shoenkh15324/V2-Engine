@@ -17,6 +17,11 @@ class Scheduler {
 public:
     Scheduler();
     ~Scheduler();
+    Scheduler(const Scheduler&) = delete;
+    Scheduler& operator=(const Scheduler&) = delete;
+    Scheduler(Scheduler&&) = delete;
+    Scheduler& operator=(Scheduler&&) = delete;
+
     void start();
     void stop();
     int addTimer(Actor* target, Message message, uint64_t delayMs, bool repeating = false);

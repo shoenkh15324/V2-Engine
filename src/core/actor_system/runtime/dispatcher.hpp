@@ -13,6 +13,11 @@ class Dispatcher{
 public:
     Dispatcher();
     ~Dispatcher();
+    Dispatcher(const Dispatcher&) = delete;
+    Dispatcher& operator=(const Dispatcher&) = delete;
+    Dispatcher(Dispatcher&&) = delete;
+    Dispatcher& operator=(Dispatcher&&) = delete;
+
     void schedule(ActorContext* actorCtx);
     ActorContext* pop();
     ActorContext* tryPop();

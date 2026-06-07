@@ -14,6 +14,10 @@ class ActorSystem{
 public:
     explicit ActorSystem(int numWorkers = 1);
     ~ActorSystem();
+    ActorSystem(const ActorSystem&) = delete;
+    ActorSystem& operator=(const ActorSystem&) = delete;
+    ActorSystem(ActorSystem&&) = delete;
+    ActorSystem& operator=(ActorSystem&&) = delete;
     
     template<typename T, typename ... Args>
     Actor* createActor(const std::string& name, size_t mailboxSize = 128, Args&& ... args){

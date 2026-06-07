@@ -11,6 +11,11 @@ public:
 
 class DemoApp{
 public:
+    DemoApp(const DemoApp&) = delete;
+    DemoApp& operator=(const DemoApp&) = delete;
+    DemoApp(DemoApp&&) = delete;
+    DemoApp& operator=(DemoApp&&) = delete;
+
     DemoApp();
     ~DemoApp();
     void open();
