@@ -18,7 +18,7 @@ public:
     ActorSystem& operator=(const ActorSystem&) = delete;
     ActorSystem(ActorSystem&&) = delete;
     ActorSystem& operator=(ActorSystem&&) = delete;
-    
+
     template<typename T, typename ... Args>
     Actor* createActor(const std::string& name, size_t mailboxSize = 128, Args&& ... args){
         static_assert(std::is_base_of_v<Actor, T>, "T must derive from Actor");
@@ -32,6 +32,8 @@ public:
 
     void start();
     void stop();
+    void run();
+    void requestStop();
 
 private:
     Dispatcher dispatcher_;

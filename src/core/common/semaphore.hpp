@@ -20,12 +20,12 @@ public:
         --count_;
     }
 
-    void post(){
+    void post(int n = 1){
         {
             std::lock_guard<std::mutex> lock(m_);
-            ++count_;
+            count_ += n;
         }
-        cv_.notify_one();
+        cv_.notify_all();
     }
 
     bool tryWait(){

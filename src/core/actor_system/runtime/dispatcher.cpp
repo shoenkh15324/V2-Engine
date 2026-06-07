@@ -1,5 +1,6 @@
 #include "dispatcher.hpp"
 #include "core/common/log.hpp"
+#include "core/common/return.hpp"
 
 #ifdef __linux__
 #include <sys/eventfd.h>
@@ -9,16 +10,22 @@
 #include <cstdlib>
 #endif
 
-Dispatcher::Dispatcher()
+Dispatcher::Dispatcher(int workerCount) : workerCount_(workerCount){
+}
+
+void Dispatcher::start(){
 #ifdef __linux__
-    : eventFd_(eventfd(0, EFD_SEMAPHORE | EFD_CLOEXEC))
-#endif
-{
-#ifdef __linux__
-    if(eventFd_ < 0){ V2_LOG_ERROR("eventfd() failed");
+    if(epoll_.fd() < 0){ V2_LOG_ERROR("dispatcher needs a valid epoll fd");
         std::abort();
     }
-    if(epoll_.add(eventFd_, EPOLLIN) < 0){ V2_LOG_ERROR("epoll add eventfd failed");
+    stopFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if(stopFd_ < 0){ V2_LOG_ERROR("eventfd() failed");
+        std::abort();
+    }
+    epoll_event ev{};
+    ev.events = EPOLLIN;
+    ev.data.fd = stopFd_;
+    if(epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, stopFd_, &ev) < 0){ V2_LOG_ERROR("epoll_ctl ADD stopFd failed");
         std::abort();
     }
 #endif
@@ -26,13 +33,11 @@ Dispatcher::Dispatcher()
 
 Dispatcher::~Dispatcher(){
 #ifdef __linux__
-    if(eventFd_ >= 0){
-        ::close(eventFd_);
-    }
+    if(stopFd_ >= 0) ::close(stopFd_);
 #endif
 }
 
-void Dispatcher::schedule(ActorContext* actorCtx){
+void Dispatcher::dispatch(ActorContext* actorCtx){
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if(inQueue_.find(actorCtx) != inQueue_.end()){
@@ -41,31 +46,11 @@ void Dispatcher::schedule(ActorContext* actorCtx){
         readyQueue_.push_back(actorCtx);
         inQueue_.insert(actorCtx);
     }
-#ifdef __linux__
-    uint64_t one = 1;
-    ::write(eventFd_, &one, sizeof(one));
-#else
     sema_.post();
-#endif
 }
 
-ActorContext* Dispatcher::pop(){
-#ifdef __linux__
-    epoll_event ev;
-    int n = epoll_.wait(&ev, 1);
-    if(n <= 0){
-        return nullptr;
-    }
-    if(ev.data.fd == eventFd_){
-        uint64_t val;
-        ssize_t r;
-        do{
-            r = ::read(eventFd_, &val, sizeof(val));
-        }while(r < 0 && errno == EINTR);
-    }
-#else
+ActorContext* Dispatcher::acquire(){
     sema_.wait();
-#endif
     std::lock_guard<std::mutex> lock(mutex_);
     if(readyQueue_.empty()){
         return nullptr;
@@ -76,22 +61,70 @@ ActorContext* Dispatcher::pop(){
     return ctx;
 }
 
-ActorContext* Dispatcher::tryPop(){
-    std::lock_guard<std::mutex> lock(mutex_);
-    if(readyQueue_.empty()){
-        return nullptr;
-    }
-    ActorContext* ctx = readyQueue_.front();
-    readyQueue_.pop_front();
-    inQueue_.erase(ctx);
-    return ctx;
-}
-
-void Dispatcher::wakeup(){
+void Dispatcher::stop(){
+    running_ = false;
 #ifdef __linux__
     uint64_t one = 1;
-    ::write(eventFd_, &one, sizeof(one));
+    ::write(stopFd_, &one, sizeof(one));
+#endif
+    sema_.post(workerCount_ > 0 ? workerCount_ : 1);
+}
+
+void Dispatcher::run(){
+#ifdef __linux__
+    running_ = true;
+    const int maxEvents = 64;
+    epoll_event epollEvents[maxEvents];
+
+    while(running_){
+        int n = epoll_.wait(epollEvents, maxEvents, 1000);
+        if(n < 0){
+            if(errno == EINTR) continue;
+            break;
+        }
+        for(int i = 0; i < n; i++){
+            if(epollEvents[i].data.fd == stopFd_){
+                uint64_t val;
+                ssize_t r;
+                do{
+                    r = ::read(stopFd_, &val, sizeof(val));
+                }while(r < 0 && errno == EINTR);
+                continue;
+            }
+            WatchedFd fd = epollEvents[i].data.fd;
+            auto it = handlers_.find(fd);
+            if(it != handlers_.end()){
+                it->second();
+            }
+        }
+    }
+#endif
+}
+
+int Dispatcher::subscribe(WatchedFd fd, Handler handler){
+#ifdef __linux__
+    handlers_[fd] = std::move(handler);
+    epoll_event ev{};
+    ev.events = EPOLLIN;
+    ev.data.fd = fd;
+    if(epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, fd, &ev) < 0){
+        handlers_.erase(fd);
+        return Fail;
+    }
+    return Ok;
 #else
-    sema_.post();
+    (void)fd; (void)handler;
+    return Fail;
+#endif
+}
+
+int Dispatcher::unsubscribe(WatchedFd fd){
+#ifdef __linux__
+    handlers_.erase(fd);
+    epoll_ctl(epoll_.fd(), EPOLL_CTL_DEL, fd, nullptr);
+    return Ok;
+#else
+    (void)fd;
+    return Fail;
 #endif
 }

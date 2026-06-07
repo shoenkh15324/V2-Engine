@@ -23,6 +23,9 @@ public:
     void close();
 
 private:
+    void requestStop();
+
+private:
     static void onSignal(int);
     static DemoApp* sInstance;
     ActorSystem actorSystem_;

@@ -36,15 +36,22 @@ void DemoApp::open(){
     actorSystem_.start();
 }
 
-void DemoApp::onSignal(int){ V2_LOG_INFO("");
+void DemoApp::onSignal(int){
     if(sInstance){
-        sInstance->isRunning_ = false;
+        sInstance->requestStop();
     }
+}
+
+void DemoApp::requestStop(){
+    isRunning_ = false;
+    V2_LOG_INFO("");
+    actorSystem_.requestStop();
 }
 
 void DemoApp::run(){
     isRunning_ = true;
     V2_LOG_INFO("Demo App Run");
+    actorSystem_.run();
     while(isRunning_){
         Sleep::sleepMs(100);
     }
@@ -52,6 +59,5 @@ void DemoApp::run(){
 
 void DemoApp::close(){
     isRunning_ = false;
-    V2_LOG_INFO("Demo App Close");
     actorSystem_.stop();
 }

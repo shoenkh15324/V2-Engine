@@ -2,12 +2,8 @@
 #include "dispatcher.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 
-#ifdef __linux__
-    #include <sys/epoll.h>
-#endif
-
-Worker::Worker(Dispatcher* dispatcher, int maxBatch) : dispatcher_(dispatcher), maxBatch_(maxBatch){
-    //
+Worker::Worker(Dispatcher* dispatcher, int maxBatch)
+    : dispatcher_(dispatcher), maxBatch_(maxBatch){
 }
 
 Worker::~Worker(){
@@ -21,7 +17,6 @@ void Worker::start(){
 
 void Worker::stop(){
     running_ = false;
-    dispatcher_->wakeup();
     if(thread_.joinable()){
         thread_.join();
     }
@@ -29,8 +24,9 @@ void Worker::stop(){
 
 void Worker::runLoop(){
     while(running_){
-        ActorContext* actorCtx = dispatcher_->pop();
+        ActorContext* actorCtx = dispatcher_->acquire();
         if(!actorCtx){
+            if(!dispatcher_->isRunning()) break;
             continue;
         }
         actorCtx->run(maxBatch_);

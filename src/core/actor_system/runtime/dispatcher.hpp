@@ -1,44 +1,54 @@
 #pragma once
 #include <deque>
+#include <unordered_map>
 #include <unordered_set>
+#include <atomic>
 #include <mutex>
+#include <functional>
+#include "core/common/semaphore.hpp"
 
 #ifdef __linux__
-    #include "core/common/epoll.hpp"
-#else
-    #include "core/common/semaphore.hpp"
+#include "core/common/epoll.hpp"
 #endif
 
 class ActorContext;
 
 class Dispatcher{
+private:
+    using Handler = std::function<void()>;
+#ifdef __linux__
+    using WatchedFd = int;
+#endif
+
 public:
-    Dispatcher();
+    explicit Dispatcher(int workerCount = 1);
     ~Dispatcher();
     Dispatcher(const Dispatcher&) = delete;
     Dispatcher& operator=(const Dispatcher&) = delete;
     Dispatcher(Dispatcher&&) = delete;
     Dispatcher& operator=(Dispatcher&&) = delete;
 
-    void schedule(ActorContext* actorCtx);
-    ActorContext* pop();
-    ActorContext* tryPop();
-    void wakeup();
+    void start();
+    void run();
+    void stop();
+    void dispatch(ActorContext* actorCtx);
+    ActorContext* acquire();
+    int subscribe(WatchedFd fd, Handler handler);
+    int unsubscribe(WatchedFd fd);
 
-#ifdef __linux__
-    int epollFd() const { return epoll_.fd(); }
-#endif
+    bool isRunning() const { return running_; }
 
 private:
+    int workerCount_ = 0;
+    Semaphore sema_{0};
     std::mutex mutex_;
+    std::atomic<bool> running_{false};
+    std::deque<ActorContext*> readyQueue_;
+    std::unordered_set<ActorContext*> inQueue_;
+    std::unordered_map<WatchedFd, Handler> handlers_;
 
 #ifdef __linux__
     Epoll epoll_;
-    int eventFd_;
-#else
-    Semaphore sema_{0};
+    int stopFd_ = -1;
 #endif
-
-    std::deque<ActorContext*> readyQueue_;
-    std::unordered_set<ActorContext*> inQueue_;
 };

@@ -21,7 +21,7 @@ void ActorContext::enqueue(Message msg){
     bool wasEmpty = mailbox_.push(std::move(msg));
     if(!wasEmpty) return;
     if(dispatcher_ && !scheduled_.exchange(true)){
-        dispatcher_->schedule(this);
+        dispatcher_->dispatch(this);
     }
 }
 
@@ -35,7 +35,7 @@ void ActorContext::run(int maxBatch){
     }
     scheduled_ = false;
     if(!mailbox_.empty()){
-        dispatcher_->schedule(this);
+        dispatcher_->dispatch(this);
     }
 }
 
