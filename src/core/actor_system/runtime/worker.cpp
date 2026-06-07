@@ -28,25 +28,6 @@ void Worker::stop(){
 }
 
 void Worker::runLoop(){
-#ifdef __linux__
-    const int maxEvents = 16;
-    epoll_event events[maxEvents];
-    while(running_){
-        int n = epoll_wait(dispatcher_->epollFd(), events, maxEvents, -1);
-        if(n < 0){
-            if(errno == EINTR){
-                continue;
-            }
-            break;
-        }
-        for(int i = 0; i < n; i++){
-            ActorContext* actorCtx = dispatcher_->tryPop();
-            if(actorCtx){
-                actorCtx->run(maxBatch_);
-            }
-        }
-    }
-#else
     while(running_){
         ActorContext* actorCtx = dispatcher_->pop();
         if(!actorCtx){
@@ -54,5 +35,4 @@ void Worker::runLoop(){
         }
         actorCtx->run(maxBatch_);
     }
-#endif
 }
