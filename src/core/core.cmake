@@ -17,6 +17,14 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/common/time.cpp
 )
 
+if(WIN32)
+    #
+elseif(UNIX)
+    target_sources(v2_core PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/common/epoll.cpp
+    )
+endif()
+
 target_include_directories(v2_core PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src
 )
