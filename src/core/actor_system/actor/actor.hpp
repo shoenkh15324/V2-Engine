@@ -10,6 +10,7 @@ class Actor{
 public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor() = default;
+    virtual void onStart() {}
     virtual void handle(const Message& msg) = 0;
     void sendMsg(const std::string& name, Message msg);
     void sendMsg(uint64_t id, Message msg);

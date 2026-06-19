@@ -1,5 +1,6 @@
 #include "actor_system.hpp"
 #include "core/actor_system/runtime/worker.hpp"
+#include "core/actor_system/actor/actor.hpp"
 
 ActorSystem::ActorSystem(int numWorkers) : dispatcher_(numWorkers){
     workers_.reserve(numWorkers);
@@ -16,6 +17,9 @@ ActorSystem::~ActorSystem(){
 void ActorSystem::start(){
     dispatcher_.start();
     scheduler_.start(&dispatcher_);
+    for(auto& ctx : actorContexts_){
+        ctx->actor()->onStart();
+    }
     for(auto& w : workers_){
         w->start();
     }
