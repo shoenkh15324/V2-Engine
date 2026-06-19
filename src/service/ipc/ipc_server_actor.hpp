@@ -7,6 +7,12 @@ class IpcServerActor : public Actor{
 public:
     IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath);
     ~IpcServerActor() override;
+    
+    IpcServerActor(const IpcServerActor&) = delete;
+    IpcServerActor& operator=(const IpcServerActor&) = delete;
+    IpcServerActor(IpcServerActor&&) = delete;
+    IpcServerActor& operator=(IpcServerActor&&) = delete;
+
     void onStart() override;
     void handle(const Message& msg) override;
     void open();

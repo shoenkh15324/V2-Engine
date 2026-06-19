@@ -10,8 +10,15 @@ class Actor{
 public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor() = default;
+
+    Actor(const Actor&) = delete;
+    Actor& operator=(const Actor&) = delete;
+    Actor(Actor&&) = delete;
+    Actor& operator=(Actor&&) = delete;
+
     virtual void onStart() {}
     virtual void handle(const Message& msg) = 0;
+    
     void sendMsg(const std::string& name, Message msg);
     void sendMsg(uint64_t id, Message msg);
     int sendAfter(const std::string& targetName, Message msg, uint64_t delayMs);
