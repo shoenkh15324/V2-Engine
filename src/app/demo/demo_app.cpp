@@ -2,6 +2,7 @@
 #include "core/common/log.hpp"
 #include "core/common/time.hpp"
 #include "core/common/sleep.hpp"
+#include "service/ipc/ipc_server_actor.hpp"
 #include <csignal>
 
 DemoApp* DemoApp::sInstance = nullptr;
@@ -34,6 +35,8 @@ void DemoApp::open(){
     //
     demoAppActor_ = actorSystem_.createActor<DemoAppActor>("demoApp", 128);
     demoAppActor_->startTimer(TimerExpired{0}, 100, true);
+    actorSystem_.createActor<IpcServerActor>("ipcServer", 128, "/tmp/v2_ipc.sock");
+
     //
     actorSystem_.start();
 }
