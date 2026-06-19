@@ -18,6 +18,8 @@ void DemoAppActor::handle(const Message& msg){
     std::visit(overloaded{
         [](const TimerExpired& timer){
             V2_LOG_INFO("Timer expired! / Id: %d, Time: %ld", timer.timerId, Time::nowMs());
+        },
+        [](const auto&){ // ← catch-all: 관심 없는 메시지는 무시
         }
     }, msg);
 }

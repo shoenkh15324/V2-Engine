@@ -18,7 +18,13 @@ public:
     void closeClient(int connFd);
     void shutdown();
 
+#if defined (__linux__)
+    int fd() const { return serverFd_; }
+#endif
+
 private:
-    int serverFd_ = -1;
     std::string path_;
+#if defined (__linux__)
+    int serverFd_ = -1;
+#endif
 };

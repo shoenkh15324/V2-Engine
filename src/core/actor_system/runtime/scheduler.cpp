@@ -3,7 +3,7 @@
 #include "core/common/log.hpp"
 
 #ifdef __linux__
-#include "dispatcher.hpp"
+    #include "dispatcher.hpp"
 #endif
 
 Scheduler::Scheduler() = default;

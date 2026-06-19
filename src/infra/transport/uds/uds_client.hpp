@@ -17,6 +17,12 @@ public:
     void disconnect();
     void shutdown();
 
+#if defined (__linux__)
+    int fd() const { return clientFd_; }
+#endif
+
 private:
+#if defined (__linux__)
     int clientFd_ = -1;
+#endif
 };

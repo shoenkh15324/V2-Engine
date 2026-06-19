@@ -18,6 +18,7 @@ public:
     Actor* actor() const { return actor_.get(); }
     IScheduler* scheduler() const { return scheduler_; }
     IActorRegistry* actorRegistry() const { return actorRegistry_; }
+    Dispatcher* dispatcher() const { return dispatcher_; }
 
 private:
     std::unique_ptr<Actor> actor_;
