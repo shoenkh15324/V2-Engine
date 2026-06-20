@@ -16,12 +16,6 @@ DemoApp::~DemoApp(){
     close();
 }
 
-void DemoAppActor::handle(const Message& msg){
-    std::visit(overloaded{
-        [](const auto&){} // ← catch-all: 관심 없는 메시지는 무시
-    }, msg);
-}
-
 void DemoApp::open(){
     V2_LOG_INFO("Project Name: %s", V2_ENGINE_NAME);
     V2_LOG_INFO("Project Version: v%s", V2_ENGINE_VERSION);
@@ -30,10 +24,8 @@ void DemoApp::open(){
     signal(SIGINT, onSignal);
     signal(SIGTERM, onSignal);
     //
-    demoAppActor_ = actorSystem_.createActor<DemoAppActor>("demoApp", 128);
     actorSystem_.createActor<TickActor>("tick", 32, 100);
     actorSystem_.createActor<IpcServerActor>("ipcServer", 128, "/tmp/v2_ipc.sock");
-
     //
     actorSystem_.start();
 }
