@@ -1,4 +1,5 @@
 #include "time.hpp"
+#include "core/common/config.h"
 #include <ctime>
 #include <cstdio>
 
@@ -25,7 +26,7 @@ std::time_t Time::nowEpoch(){
 Time::Date Time::nowDate(){
     std::time_t t = nowEpoch();
     std::tm tm{};
-#if defined(__linux__)
+#if V2_PLATFORM_LINUX
     localtime_r(&t, &tm);
 #else
     localtime_s(&tm, &t);
@@ -42,7 +43,7 @@ Time::Date Time::nowDate(){
 
 std::string Time::nowDateString(){
     auto d = nowDate();
-    char buf[32] = {0};
+    char buf[V2_DATE_STRING_BUF_SIZE] = {0};
     std::snprintf(buf, sizeof(buf),
         "%04d-%02d-%02d %02d:%02d:%02d",
         d.year, d.month, d.day,

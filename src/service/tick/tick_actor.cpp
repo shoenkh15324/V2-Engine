@@ -1,4 +1,6 @@
 #include "tick_actor.hpp"
+
+#if V2_ENABLE_TICK
 #include "core/common/log.hpp"
 #include "core/common/return.hpp"
 #include "core/common/time.hpp"
@@ -10,7 +12,7 @@ TickActor::TickActor(const std::string& name, uint64_t id, uint64_t tickMs) : Ac
 }
 
 void TickActor::onStart(){
-    startTimer(Tick{}, 100, true);
+    startTimer(Tick{}, tickMs_, true);
 }
 
 void TickActor::handle(const Message& msg){
@@ -21,3 +23,4 @@ void TickActor::handle(const Message& msg){
         [](const auto&){}
     }, msg);
 }
+#endif

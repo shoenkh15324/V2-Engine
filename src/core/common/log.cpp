@@ -1,9 +1,10 @@
 #include "log.hpp"
+#include "core/common/config.h"
 #include <cstdio>
 #include <cstdarg>
 #include <mutex>
 
-LogLevel gLevel = LogLevel::Verbose;
+LogLevel gLevel = static_cast<LogLevel>(V2_DEFAULT_LOG_LEVEL);
 std::mutex gMutex;
 
 const char* colorCode(LogLevel level){

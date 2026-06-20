@@ -1,4 +1,5 @@
 #pragma once
+#include "core/common/config.h"
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -54,7 +55,7 @@ private:
     mutable std::mutex mutex_;
     std::atomic<int> nextId_{1};
 
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     int timerFd_ = -1;
 #else
     std::thread thread_;

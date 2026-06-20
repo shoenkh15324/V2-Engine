@@ -1,8 +1,9 @@
 #include "timer.hpp"
+#include "core/common/config.h"
 #include "core/common/log.hpp"
 #include <cstring>
 
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     #include <sys/timerfd.h>
     #include <unistd.h>
     #include <cerrno>
@@ -12,7 +13,7 @@
 #endif
 
 Timer::Timer(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     timerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if(timerFd_ < 0){
         V2_LOG_ERROR("timerfd_create() failed, errno=%d", errno);
@@ -56,7 +57,7 @@ void Timer::clear(){
 }
 
 void Timer::start(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     //
 #else
     running_ = true;
@@ -84,7 +85,7 @@ void Timer::start(){
 }
 
 void Timer::stop(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(timerFd_ >= 0){
         ::close(timerFd_);
         timerFd_ = -1;
@@ -101,7 +102,7 @@ void Timer::stop(){
 }
 
 int Timer::fd() const {
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     return timerFd_;
 #else
     return -1;
@@ -109,7 +110,7 @@ int Timer::fd() const {
 }
 
 void Timer::onTick(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(timerFd_ >= 0){
         uint64_t val;
         ssize_t r;
@@ -151,7 +152,7 @@ void Timer::fire(){
 }
 
 void Timer::rearm(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(timerFd_ < 0) return;
     itimerspec spec{};
     if(!heap_.empty()){

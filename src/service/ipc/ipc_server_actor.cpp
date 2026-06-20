@@ -1,10 +1,13 @@
 #include "ipc_server_actor.hpp"
+
+#if V2_ENABLE_IPC
+#include "core/common/config.h"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/common/log.hpp"
 #include "core/common/return.hpp"
 
-#if defined (__linux__)
+#if V2_PLATFORM_LINUX
     #include <sys/socket.h>
     #include <unistd.h>
 #endif
@@ -37,7 +40,7 @@ void IpcServerActor::handle(const Message& msg){
             subscribeClientFd(ev.clientFd);
         },
         [this](const IpcDataReceived& ev){
-            uint8_t buf[IPC_SERVER_ACTOR_DATA_RECV_BUFFER_SIZE];
+            uint8_t buf[V2_IPC_RECV_BUFFER_SIZE];
             ssize_t n = ::recv(ev.clientFd, buf, sizeof(buf), MSG_DONTWAIT);
             if(n > 0){
                 V2_LOG_INFO("IpcServerActor: received %zd bytes from fd=%d", n, ev.clientFd);
@@ -89,3 +92,4 @@ void IpcServerActor::unsubscribeAll(){
         dispatcher->unsubscribe(server_.fd());
     }
 }
+#endif

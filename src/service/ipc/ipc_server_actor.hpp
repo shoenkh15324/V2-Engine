@@ -1,8 +1,10 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
+#include "core/common/config.h"
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 
+#if V2_ENABLE_IPC
 class IpcServerActor : public Actor{
 public:
     IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath);
@@ -26,3 +28,4 @@ private:
     std::string socketPath_;
     std::unordered_set<int> clientFds_;
 };
+#endif

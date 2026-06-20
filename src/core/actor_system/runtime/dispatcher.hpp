@@ -5,9 +5,10 @@
 #include <atomic>
 #include <mutex>
 #include <functional>
+#include "core/common/config.h"
 #include "core/common/semaphore.hpp"
 
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
 #include "core/common/epoll.hpp"
 #endif
 
@@ -16,7 +17,7 @@ class ActorContext;
 class Dispatcher{
 private:
     using Handler = std::function<void()>;
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     using WatchedFd = int;
 #endif
 
@@ -47,7 +48,7 @@ private:
     std::unordered_set<ActorContext*> inQueue_;
     std::unordered_map<WatchedFd, Handler> handlers_;
 
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     Epoll epoll_;
     int stopFd_ = -1;
 #endif

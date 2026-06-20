@@ -2,7 +2,7 @@
 #include "core/common/log.hpp"
 #include "core/common/return.hpp"
 
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <cerrno>
@@ -15,7 +15,7 @@ Dispatcher::Dispatcher(int workerCount) : workerCount_(workerCount){
 }
 
 void Dispatcher::start(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(epoll_.fd() < 0){ V2_LOG_ERROR("dispatcher needs a valid epoll fd");
         std::abort();
     }
@@ -33,7 +33,7 @@ void Dispatcher::start(){
 }
 
 Dispatcher::~Dispatcher(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(stopFd_ >= 0) ::close(stopFd_);
 #endif
 }
@@ -64,7 +64,7 @@ ActorContext* Dispatcher::acquire(){
 
 void Dispatcher::stop(){
     running_ = false;
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     uint64_t one = 1;
     ::write(stopFd_, &one, sizeof(one));
 #endif
@@ -72,14 +72,14 @@ void Dispatcher::stop(){
 }
 
 void Dispatcher::run(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     pthread_setname_np(pthread_self(), "v2-main");
     running_ = true;
-    const int maxEvents = 64;
+    const int maxEvents = V2_EPOLL_MAX_EVENTS;
     epoll_event epollEvents[maxEvents];
 
     while(running_){
-        int n = epoll_.wait(epollEvents, maxEvents, 1000);
+        int n = epoll_.wait(epollEvents, maxEvents, V2_EPOLL_WAIT_TIMEOUT_MS);
         if(n < 0){
             if(errno == EINTR) continue;
             break;
@@ -104,7 +104,7 @@ void Dispatcher::run(){
 }
 
 int Dispatcher::subscribe(WatchedFd fd, Handler handler){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     handlers_[fd] = std::move(handler);
     epoll_event ev{};
     ev.events = EPOLLIN;
@@ -121,7 +121,7 @@ int Dispatcher::subscribe(WatchedFd fd, Handler handler){
 }
 
 int Dispatcher::unsubscribe(WatchedFd fd){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     handlers_.erase(fd);
     epoll_ctl(epoll_.fd(), EPOLL_CTL_DEL, fd, nullptr);
     return Ok;

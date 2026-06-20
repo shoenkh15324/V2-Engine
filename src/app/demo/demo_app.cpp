@@ -1,14 +1,19 @@
 #include "demo_app.hpp"
+#include "core/common/config.h"
 #include "core/common/log.hpp"
 #include "core/common/time.hpp"
 #include "core/common/sleep.hpp"
+#if V2_ENABLE_IPC
 #include "service/ipc/ipc_server_actor.hpp"
+#endif
+#if V2_ENABLE_TICK
 #include "service/tick/tick_actor.hpp"
+#endif
 #include <csignal>
 
 DemoApp* DemoApp::sInstance = nullptr;
 
-DemoApp::DemoApp() : actorSystem_(4){
+DemoApp::DemoApp() : actorSystem_(V2_DEFAULT_WORKER_COUNT){
     sInstance = this;
 }
 
@@ -24,8 +29,12 @@ void DemoApp::open(){
     signal(SIGINT, onSignal);
     signal(SIGTERM, onSignal);
     //
-    actorSystem_.createActor<TickActor>("tick", 32, 100);
-    actorSystem_.createActor<IpcServerActor>("ipcServer", 128, "/tmp/v2_ipc.sock");
+#if V2_ENABLE_TICK
+    actorSystem_.createActor<TickActor>("tick", V2_DEFAULT_MAILBOX_SIZE, V2_DEFAULT_TICK_INTERVAL_MS);
+#endif
+#if V2_ENABLE_IPC
+    actorSystem_.createActor<IpcServerActor>("ipcServer", V2_DEFAULT_MAILBOX_SIZE, V2_DEFAULT_IPC_SOCKET_PATH);
+#endif
     //
     actorSystem_.start();
 }
@@ -47,7 +56,7 @@ void DemoApp::run(){
     V2_LOG_INFO("Demo App Run");
     actorSystem_.run();
     while(isRunning_){
-        Sleep::sleepMs(100);
+        Sleep::sleepMs(V2_DEMO_MAINLOOP_SLEEP_MS);
     }
 }
 

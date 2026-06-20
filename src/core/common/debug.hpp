@@ -1,10 +1,11 @@
 #pragma once
+#include "core/common/config.h"
 #include <cstdlib>
 #include <iostream>
 
-#if defined(_MSC_VER)
+#if V2_COMPILER_MSVC
     #define V2_BREAKPOINT() __debugbreak()
-#elif defined(__GNUC__) || defined(__clang__)
+#elif V2_COMPILER_GCC || V2_COMPILER_CLANG
     #define V2_BREAKPOINT() __builtin_trap()
 #else
     #define V2_BREAKPOINT() ((void)0)

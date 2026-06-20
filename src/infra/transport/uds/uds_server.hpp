@@ -1,4 +1,5 @@
 #pragma once
+#include "core/common/config.h"
 #include <string>
 #include <cstdint>
 
@@ -11,20 +12,20 @@ public:
     UdsServer(UdsServer&&) noexcept;
     UdsServer& operator=(UdsServer&&) noexcept;
 
-    int start(const std::string& path, int backlog = 5);
+    int start(const std::string& path, int backlog = V2_UDS_DEFAULT_BACKLOG);
     int accept();                   
     int send(int fd, const void* data, size_t size);
     int recv(int fd, void* data, size_t size);
     void closeClient(int connFd);
     void shutdown();
 
-#if defined (__linux__)
+#if V2_PLATFORM_LINUX
     int fd() const { return serverFd_; }
 #endif
 
 private:
     std::string path_;
-#if defined (__linux__)
+#if V2_PLATFORM_LINUX
     int serverFd_ = -1;
 #endif
 };

@@ -1,8 +1,9 @@
 #include "scheduler.hpp"
+#include "core/common/config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/log.hpp"
 
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     #include "dispatcher.hpp"
 #endif
 
@@ -24,7 +25,7 @@ void Scheduler::cancel(int timerId){
 }
 
 void Scheduler::subscribeTimerFd(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(dispatcher_ && timer_.fd() >= 0){
         dispatcher_->subscribe(timer_.fd(), [this](){ timer_.onTick(); });
     }
@@ -32,7 +33,7 @@ void Scheduler::subscribeTimerFd(){
 }
 
 void Scheduler::unsubscribeTimerFd(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     if(dispatcher_ && timer_.fd() >= 0){
         dispatcher_->unsubscribe(timer_.fd());
     }

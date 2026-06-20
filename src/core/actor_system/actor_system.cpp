@@ -34,7 +34,7 @@ void ActorSystem::stop(){
 }
 
 void ActorSystem::run(){
-#ifdef __linux__
+#if V2_PLATFORM_LINUX
     dispatcher_.run();
 #endif
 }

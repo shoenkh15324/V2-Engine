@@ -1,4 +1,5 @@
 #pragma once
+#include "core/common/config.h"
 #include <string>
 #include <cstdint>
 
@@ -17,12 +18,12 @@ public:
     void disconnect();
     void shutdown();
 
-#if defined (__linux__)
+#if V2_PLATFORM_LINUX
     int fd() const { return clientFd_; }
 #endif
 
 private:
-#if defined (__linux__)
+#if V2_PLATFORM_LINUX
     int clientFd_ = -1;
 #endif
 };
