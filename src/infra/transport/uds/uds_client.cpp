@@ -31,8 +31,8 @@ int UdsClient::connect(const std::string& path){
     }
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path.c_str(), sizeof(path.c_str()) - 1);
-    addr.sun_path[sizeof(path.c_str()) - 1] = '\0';
+    strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
+    addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
     if(::connect(clientFd_, (sockaddr*)&addr, sizeof(addr)) < 0){ V2_LOG_ERROR("connect(%s) failed", path.c_str());
         ::close(clientFd_);
         clientFd_ = -1;
@@ -54,8 +54,9 @@ int UdsClient::send(const void* data, size_t size){
             if(errno == EINTR){
                 continue;
             }
-            sent += static_cast<size_t>(n);
+            return Fail;
         }
+        sent += static_cast<size_t>(n);
     }
     return Ok;
 }
@@ -72,9 +73,10 @@ int UdsClient::recv(void* data, size_t size){
             return static_cast<int>(received);
         }
         if(n < 0){
-            if(errno = EINTR){
-                return Fail;
+            if(errno == EINTR){
+                continue;
             }
+            return Fail;
         }
         received += static_cast<size_t>(n);
     }
