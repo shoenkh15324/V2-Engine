@@ -42,11 +42,21 @@ void Actor::receiveMsg(Message msg){
 }
 
 int Actor::startTimer(Message msg, uint64_t delayMs, bool repeating){
-    return context_->scheduler() ? context_->scheduler()->addTimer(this, std::move(msg), delayMs, repeating) : Fail;
+    auto* sched = context_->scheduler();
+    if(!sched) return Fail;
+    int id = sched->addTimer(this, std::move(msg), delayMs, repeating);
+    if(id != Fail) timerIds_.insert(id);
+    return id;
 }
 
-void Actor::cancelTimer(int id){
-    if(context_->scheduler()){
-        context_->scheduler()->cancel(id);
-    }
+void Actor::cancelTimer(int timerId){
+    if(!context_->scheduler()) return;
+    context_->scheduler()->cancel(timerId);
+    timerIds_.erase(timerId);
+}
+
+Actor::~Actor(){
+    if(!context_->scheduler()) return;
+    for(int id : timerIds_) context_->scheduler()->cancel(id);
+    timerIds_.clear();
 }

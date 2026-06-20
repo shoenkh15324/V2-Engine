@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include "core/actor_system/messages/message.hpp"
 
 class ActorContext;
@@ -9,7 +10,7 @@ class Actor{
     friend class ActorContext;
 public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
-    virtual ~Actor() = default;
+    virtual ~Actor();
 
     Actor(const Actor&) = delete;
     Actor& operator=(const Actor&) = delete;
@@ -26,7 +27,7 @@ public:
     void receiveMsg(Message msg);
 
     int startTimer(Message msg, uint64_t delayMs, bool repeating);
-    void cancelTimer(int id);
+    void cancelTimer(int timerId);
 
     const std::string& name() const { return name_; }
     uint64_t id() const { return id_; }
@@ -38,4 +39,5 @@ private:
     ActorContext* context_ = nullptr;
     std::string name_;
     uint64_t id_;
+    std::unordered_set<int> timerIds_;
 };

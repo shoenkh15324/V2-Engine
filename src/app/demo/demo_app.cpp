@@ -3,6 +3,7 @@
 #include "core/common/time.hpp"
 #include "core/common/sleep.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
+#include "service/tick/tick_actor.hpp"
 #include <csignal>
 
 DemoApp* DemoApp::sInstance = nullptr;
@@ -17,11 +18,7 @@ DemoApp::~DemoApp(){
 
 void DemoAppActor::handle(const Message& msg){
     std::visit(overloaded{
-        [](const TimerExpired& timer){
-            V2_LOG_INFO("Timer expired! / Id: %d, Time: %ld", timer.timerId, Time::nowMs());
-        },
-        [](const auto&){ // ← catch-all: 관심 없는 메시지는 무시
-        }
+        [](const auto&){} // ← catch-all: 관심 없는 메시지는 무시
     }, msg);
 }
 
@@ -34,7 +31,7 @@ void DemoApp::open(){
     signal(SIGTERM, onSignal);
     //
     demoAppActor_ = actorSystem_.createActor<DemoAppActor>("demoApp", 128);
-    demoAppActor_->startTimer(TimerExpired{0}, 100, true);
+    actorSystem_.createActor<TickActor>("tick", 32, 100);
     actorSystem_.createActor<IpcServerActor>("ipcServer", 128, "/tmp/v2_ipc.sock");
 
     //

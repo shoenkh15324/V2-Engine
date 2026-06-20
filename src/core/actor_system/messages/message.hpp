@@ -1,6 +1,6 @@
 #pragma once
 #include <variant>
-#include "timer_messages.hpp"
+#include "tick_messages.hpp"
 #include "ipc_messages.hpp"
 
 template<class... Ts>
@@ -12,8 +12,8 @@ template<class... Ts>
 overloaded(Ts...)->overloaded<Ts...>;
 
 using Message = std::variant<
-    // Timer
-    TimerExpired,
+    // Tick
+    Tick,
     // Ipc
     IpcNewConnection,
     IpcDataReceived
