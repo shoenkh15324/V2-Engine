@@ -20,7 +20,9 @@
         ],
         "cmake.buildDirectory": "${workspaceFolder}/build",
         "cmake.configureOnOpen": true,
-        "cmake.buildArgs": ["-j", "16"],
+        "cmake.configureSettings": {
+            "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld"
+        },
         "editor.rename.enablePreview": true,
         "workbench.editor.enablePreview": false,
         "markdown.extension.preview.autoShowPreviewToSide": true,
