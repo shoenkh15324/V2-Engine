@@ -2,15 +2,15 @@
 #include <string>
 #include "core/actor_system/actor_system.hpp"
 
-class DemoApp{
+class MainApp{
 public:
-    DemoApp(const DemoApp&) = delete;
-    DemoApp& operator=(const DemoApp&) = delete;
-    DemoApp(DemoApp&&) = delete;
-    DemoApp& operator=(DemoApp&&) = delete;
+    MainApp(const MainApp&) = delete;
+    MainApp& operator=(const MainApp&) = delete;
+    MainApp(MainApp&&) = delete;
+    MainApp& operator=(MainApp&&) = delete;
 
-    DemoApp();
-    ~DemoApp();
+    MainApp();
+    ~MainApp();
     void open();
     void run();
     void close();
@@ -20,8 +20,8 @@ private:
 
 private:
     static void onSignal(int);
-    static DemoApp* sInstance;
+    static MainApp* sInstance;
     ActorSystem actorSystem_;
     bool isRunning_ = false;
-    std::string name_ = "demo";
+    std::string name_ = "Main";
 };

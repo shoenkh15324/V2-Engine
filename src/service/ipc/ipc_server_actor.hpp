@@ -4,7 +4,7 @@
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 
-#if V2_ENABLE_IPC
+#if V2_ENABLE_IPC_SERVER_ACTOR
 class IpcServerActor : public Actor{
 public:
     IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath);

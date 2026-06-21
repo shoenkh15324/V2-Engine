@@ -3,10 +3,10 @@
 #include "core/common/log.hpp"
 #include "core/common/time.hpp"
 #include "core/common/sleep.hpp"
-#if V2_ENABLE_IPC
+#if V2_ENABLE_IPC_SERVER_ACTOR
 #include "service/ipc/ipc_server_actor.hpp"
 #endif
-#if V2_ENABLE_TICK
+#if V2_ENABLE_TICK_ACTOR
 #include "service/tick/tick_actor.hpp"
 #endif
 #include <csignal>
@@ -29,12 +29,6 @@ void CliApp::open(){
     signal(SIGINT, onSignal);
     signal(SIGTERM, onSignal);
     //
-#if V2_ENABLE_TICK
-    actorSystem_.createActor<TickActor>("tick", V2_DEFAULT_MAILBOX_SIZE, V2_DEFAULT_TICK_INTERVAL_MS);
-#endif
-#if V2_ENABLE_IPC
-    actorSystem_.createActor<IpcServerActor>("ipcServer", V2_DEFAULT_MAILBOX_SIZE, V2_DEFAULT_IPC_SOCKET_PATH);
-#endif
     //
     actorSystem_.start();
 }
@@ -53,14 +47,15 @@ void CliApp::requestStop(){
 
 void CliApp::run(){
     isRunning_ = true;
-    V2_LOG_INFO("Demo App Run");
+    V2_LOG_INFO("%s App Run", name_.c_str());
     actorSystem_.run();
     while(isRunning_){
-        Sleep::sleepMs(V2_DEMO_MAINLOOP_SLEEP_MS);
+        Sleep::sleepMs(100);
     }
 }
 
 void CliApp::close(){
+    V2_LOG_INFO("%s App Close", name_.c_str());
     isRunning_ = false;
     actorSystem_.stop();
 }

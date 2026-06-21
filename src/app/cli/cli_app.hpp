@@ -23,5 +23,5 @@ private:
     static CliApp* sInstance;
     ActorSystem actorSystem_;
     bool isRunning_ = false;
-    std::string name_ = "cli";
+    std::string name_ = "Cli";
 };

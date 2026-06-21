@@ -1,6 +1,6 @@
 #include "ipc_server_actor.hpp"
 
-#if V2_ENABLE_IPC
+#if V2_ENABLE_IPC_SERVER_ACTOR
 #include "core/common/config.h"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"

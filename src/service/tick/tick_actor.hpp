@@ -2,7 +2,7 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config.h"
 
-#if V2_ENABLE_TICK
+#if V2_ENABLE_TICK_ACTOR
 class TickActor : public Actor{
 public:
     TickActor(const std::string& name, uint64_t id, uint64_t tickMs);

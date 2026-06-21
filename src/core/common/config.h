@@ -49,8 +49,8 @@
 // ============================================================================
 // Feature: IPC (Unix Domain Socket)
 // ============================================================================
-#ifndef V2_ENABLE_IPC
-#  define V2_ENABLE_IPC 1
+#ifndef V2_ENABLE_IPC_SERVER_ACTOR
+#  define V2_ENABLE_IPC_SERVER_ACTOR 1
 #endif
 #ifndef V2_IPC_RECV_BUFFER_SIZE
 #  define V2_IPC_RECV_BUFFER_SIZE 4096
@@ -65,8 +65,8 @@
 // ============================================================================
 // Feature: Tick Actor
 // ============================================================================
-#ifndef V2_ENABLE_TICK
-#  define V2_ENABLE_TICK 1
+#ifndef V2_ENABLE_TICK_ACTOR
+#  define V2_ENABLE_TICK_ACTOR 1
 #endif
 #ifndef V2_DEFAULT_TICK_INTERVAL_MS
 #  define V2_DEFAULT_TICK_INTERVAL_MS 100
@@ -87,6 +87,6 @@
 */
 #  define V2_DEFAULT_LOG_LEVEL 1
 #endif
-#ifndef V2_DEMO_MAINLOOP_SLEEP_MS
-#  define V2_DEMO_MAINLOOP_SLEEP_MS 100
+#ifndef V2_MAINAPP_MAINLOOP_SLEEP_MS
+#  define V2_MAINAPP_MAINLOOP_SLEEP_MS 100
 #endif

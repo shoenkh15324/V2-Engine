@@ -2,7 +2,7 @@
 set -e
 
 APPS=(
-    "v2-demo"
+    "v2_main"
     "v2-cli"
 )
 

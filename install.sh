@@ -9,8 +9,8 @@ BUILD_DIR="$PROJECT_DIR/build"
 # Format: "service_name:description:binary:dependency"
 # ============================================
 APPS=(
-    "v2-demo:V2 Engine Demo App:v2_demo:"
-    "v2-cli:V2 Engine CLI App:v2_cli:v2-demo.service"
+    "v2_main:V2 Engine Main App:v2_main:"
+    "v2_cli:V2 Engine CLI App:v2_cli:v2_main.service"
 )
 
 # ============================================
