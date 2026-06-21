@@ -3,7 +3,6 @@
 message(STATUS "Configuring Service Layer")
 
 add_library(v2_service STATIC
-    ${CMAKE_CURRENT_LIST_DIR}/dummy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ipc/ipc_server_actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/tick/tick_actor.cpp
 )

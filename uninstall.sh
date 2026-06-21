@@ -3,7 +3,6 @@ set -e
 
 APPS=(
     "v2_main"
-    "v2-cli"
 )
 
 for name in "${APPS[@]}"; do

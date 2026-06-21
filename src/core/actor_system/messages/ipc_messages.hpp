@@ -1,10 +1,10 @@
 #pragma once
-#include <cstdint>
+#include "core/common/config.h"
 
 struct IpcNewConnection{
-    int clientFd;
+    ConnHandle conn;
 };
 
 struct IpcDataReceived{
-    int clientFd;
+    ConnHandle conn;
 };

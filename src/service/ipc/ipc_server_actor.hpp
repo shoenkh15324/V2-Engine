@@ -20,12 +20,13 @@ public:
     void open();
 
 private:
-    void subscribeListenFd();
-    void subscribeClientFd(int clientFd);
+    void subscribeListener();
+    void subscribeClient(ConnHandle conn);
     void unsubscribeAll();
+    int handleCommand(ConnHandle conn, const std::string& cmd);
 
     UdsServer server_;
     std::string socketPath_;
-    std::unordered_set<int> clientFds_;
+    std::unordered_set<ConnHandle> connections_;
 };
 #endif

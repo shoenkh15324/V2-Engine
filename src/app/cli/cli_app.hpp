@@ -1,27 +1,16 @@
 #pragma once
 #include <string>
-#include "core/actor_system/actor_system.hpp"
+#include "infra/transport/uds/uds_client.hpp"
 
 class CliApp{
 public:
-    CliApp(const CliApp&) = delete;
-    CliApp& operator=(const CliApp&) = delete;
-    CliApp(CliApp&&) = delete;
-    CliApp& operator=(CliApp&&) = delete;
-
     CliApp();
     ~CliApp();
-    void open();
-    void run();
+    bool open();
+    int run(const std::string& cmd);
     void close();
 
 private:
-    void requestStop();
-
-private:
-    static void onSignal(int);
-    static CliApp* sInstance;
-    ActorSystem actorSystem_;
-    bool isRunning_ = false;
+    UdsClient client_;
     std::string name_ = "Cli";
 };

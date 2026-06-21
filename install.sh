@@ -10,7 +10,6 @@ BUILD_DIR="$PROJECT_DIR/build"
 # ============================================
 APPS=(
     "v2_main:V2 Engine Main App:v2_main:"
-    "v2_cli:V2 Engine CLI App:v2_cli:v2_main.service"
 )
 
 # ============================================
@@ -42,8 +41,9 @@ TARGETS=("$@")
 # Build
 # ============================================
 build() {
-    echo "==> Building..."
-    cmake -B "$BUILD_DIR" -Wno-dev 2>&1 | tail -1
+    local log_level="${LOG_LEVEL:-3}"
+    echo "==> Building... (log_level=${log_level})"
+    cmake -B "$BUILD_DIR" -Wno-dev -DV2_DEFAULT_LOG_LEVEL="${log_level}" 2>&1 | tail -1
     cmake --build "$BUILD_DIR" -j"$(nproc)" 2>&1 | tail -1
     echo ""
 }
@@ -79,7 +79,7 @@ EOF
 
     sudo systemctl daemon-reload
     sudo systemctl enable "$name"
-    sudo systemctl start "$name" 2>/dev/null || true
+    sudo systemctl restart "$name" 2>/dev/null || true
     systemctl is-active --quiet "$name" && echo "  (running)" || echo "  (start failed)"
 
     echo ""
@@ -112,5 +112,8 @@ else
         fi
     done
 fi
+
+echo "==> Creating symlink..."
+sudo ln -sf "$BUILD_DIR/v2_cli" /usr/local/bin/v2
 
 echo "==> Install Complete!"

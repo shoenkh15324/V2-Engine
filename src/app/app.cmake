@@ -34,7 +34,5 @@ if(BUILD_CLI_APP)
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_cli PRIVATE
         V2_APP_VERSION="0.0.1"
-        V2_DEFAULT_WORKER_COUNT=2
-        V2_ENABLE_TICK_ACTOR=0
     )
 endif()
