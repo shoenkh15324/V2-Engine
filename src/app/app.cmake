@@ -15,8 +15,6 @@ if(BUILD_MAIN_APP)
     )
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_main PRIVATE
-        V2_ENGINE_NAME="${PROJECT_NAME}"
-        V2_ENGINE_VERSION="${PROJECT_VERSION}"
         V2_APP_VERSION="0.0.5"
         V2_DEFAULT_WORKER_COUNT=4
         V2_MAINAPP_MAINLOOP_SLEEP_MS=100
@@ -33,6 +31,7 @@ if(BUILD_CLI_APP)
     )
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_cli PRIVATE
-        V2_APP_VERSION="0.0.1"
+        V2_APP_VERSION="0.0.2"
+        V2_DEFAULT_LOG_LEVEL=3
     )
 endif()

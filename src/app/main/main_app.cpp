@@ -22,6 +22,7 @@ MainApp::~MainApp(){
 }
 
 void MainApp::open(){
+    setLogLevel(static_cast<LogLevel>(V2_DEFAULT_LOG_LEVEL));
     setLogAppName(std::move(name_));
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
