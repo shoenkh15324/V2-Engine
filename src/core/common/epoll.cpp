@@ -17,9 +17,10 @@ Epoll::~Epoll(){
     }
 }
 
-Epoll::Epoll(Epoll&& other) noexcept : epollFd_(other.epollFd_) {
+Epoll::Epoll(Epoll&& other) noexcept : epollFd_(other.epollFd_){
     other.epollFd_ = -1;
 }
+
 Epoll& Epoll::operator=(Epoll&& other) noexcept {
     if(this != &other){
         if(epollFd_ >= 0){
@@ -45,7 +46,6 @@ int Epoll::mod(int fd, uint32_t events, void* ptr){
     epoll_event ev{};
     ev.events = events;
     ev.data.ptr = ptr;
-
     if(epoll_ctl(epollFd_, EPOLL_CTL_MOD, fd, &ev) < 0){ V2_LOG_ERROR("epoll_ctl MOD fd=%d failed, errno=%d", fd, errno);
         return Fail;
     }

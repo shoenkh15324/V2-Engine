@@ -87,9 +87,6 @@
 // ============================================================================
 // Utilities
 // ============================================================================
-#ifndef V2_DATE_STRING_BUF_SIZE
-    #define V2_DATE_STRING_BUF_SIZE 32
-#endif
 #ifndef V2_DEFAULT_LOG_LEVEL
     /*
         Verbose = 0,

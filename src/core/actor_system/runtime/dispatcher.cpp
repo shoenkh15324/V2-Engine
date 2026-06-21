@@ -1,34 +1,30 @@
 #include "dispatcher.hpp"
 #include "core/common/log.hpp"
 #include "core/common/return.hpp"
-
-#if V2_PLATFORM_LINUX
-#include <sys/eventfd.h>
-#include <unistd.h>
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
-#include <sys/prctl.h>
+
+#if V2_PLATFORM_LINUX
+    #include <sys/eventfd.h>
+    #include <unistd.h>
+    #include <sys/prctl.h>
 #endif
 
 Dispatcher::Dispatcher(int workerCount) : workerCount_(workerCount){
+    //
 }
 
 void Dispatcher::start(){
 #if V2_PLATFORM_LINUX
-    if(epoll_.fd() < 0){ V2_LOG_ERROR("dispatcher needs a valid epoll fd");
-        std::abort();
-    }
+    V2_ASSERT(epoll_.fd() < 0, "dispatcher needs a valid epoll fd");
     stopFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    if(stopFd_ < 0){ V2_LOG_ERROR("eventfd() failed");
-        std::abort();
-    }
+    V2_ASSERT(stopFd_ < 0, "eventfd() failed");
     epoll_event ev{};
     ev.events = EPOLLIN;
     ev.data.fd = stopFd_;
-    if(epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, stopFd_, &ev) < 0){ V2_LOG_ERROR("epoll_ctl ADD stopFd failed");
-        std::abort();
-    }
+    int result = epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, stopFd_, &ev);
+    V2_ASSERT(result < 0, "epoll_ctl ADD stopFd failed");
 #endif
 }
 

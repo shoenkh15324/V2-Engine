@@ -6,6 +6,7 @@ class Epoll{
 public:
     Epoll();
     ~Epoll();
+
     Epoll(const Epoll&) = delete;
     Epoll& operator=(const Epoll&) = delete;
     Epoll(Epoll&&) noexcept;
@@ -15,7 +16,6 @@ public:
     int mod(int fd, uint32_t events, void* ptr = nullptr);
     int del(int fd);
     int wait(epoll_event* events, int maxEvents, int timeoutMs = -1);
-
     int fd() const { return epollFd_; }
 
 private:

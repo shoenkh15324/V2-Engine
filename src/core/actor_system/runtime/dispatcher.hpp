@@ -22,8 +22,9 @@ private:
 #endif
 
 public:
-    explicit Dispatcher(int workerCount = 1);
+    explicit Dispatcher(int workerCount = V2_DEFAULT_WORKER_COUNT);
     ~Dispatcher();
+
     Dispatcher(const Dispatcher&) = delete;
     Dispatcher& operator=(const Dispatcher&) = delete;
     Dispatcher(Dispatcher&&) = delete;
@@ -36,7 +37,6 @@ public:
     ActorContext* acquire();
     int subscribe(WatchedFd fd, Handler handler);
     int unsubscribe(WatchedFd fd);
-
     bool isRunning() const { return running_; }
 
 private:

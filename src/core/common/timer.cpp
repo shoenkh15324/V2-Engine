@@ -2,11 +2,11 @@
 #include "core/common/config.h"
 #include "core/common/log.hpp"
 #include <cstring>
+#include <cerrno>
 
 #if V2_PLATFORM_LINUX
     #include <sys/timerfd.h>
     #include <unistd.h>
-    #include <cerrno>
 #else
     #include <thread>
     #include <condition_variable>
@@ -36,7 +36,7 @@ int Timer::add(uint64_t delayMs, bool repeating, Callback cb){
         std::lock_guard<std::mutex> lock(mutex_);
         heap_.push(timerNode);
         timers_[timerNode->id] = timerNode;
-        rearm();
+        scheduleNextTimer();
     }
     return timerNode->id;
 }
@@ -53,7 +53,7 @@ void Timer::clear(){
     std::lock_guard<std::mutex> lock(mutex_);
     heap_ = {};
     timers_.clear();
-    rearm();
+    scheduleNextTimer();
 }
 
 void Timer::start(){
@@ -78,7 +78,7 @@ void Timer::start(){
                 continue;
             }
             lock.unlock();
-            fire();
+            excuteExpiredTimers();
         }
     });
 #endif
@@ -109,7 +109,7 @@ int Timer::fd() const {
 #endif
 }
 
-void Timer::onTick(){
+void Timer::handleTimerEvent(){
 #if V2_PLATFORM_LINUX
     if(timerFd_ >= 0){
         uint64_t val;
@@ -119,15 +119,15 @@ void Timer::onTick(){
         }while(r < 0 && errno == EINTR);
     }
 #endif
-    fire();
+    excuteExpiredTimers();
 }
 
-void Timer::fire(){
+void Timer::excuteExpiredTimers(){
     std::vector<TimerPtr> ready;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto now = Clock::now();
-        while(!heap_.empty() && heap_.top()->expiry <= now){
+        while(!heap_.empty() && (heap_.top()->expiry <= now)){
             auto timerNode = heap_.top();
             heap_.pop();
             if(!timerNode->alive) continue;
@@ -147,11 +147,11 @@ void Timer::fire(){
                 timers_.erase(timerNode->id);
             }
         }
-        rearm();
+        scheduleNextTimer();
     }
 }
 
-void Timer::rearm(){
+void Timer::scheduleNextTimer(){
 #if V2_PLATFORM_LINUX
     if(timerFd_ < 0) return;
     itimerspec spec{};
@@ -162,6 +162,7 @@ void Timer::rearm(){
         if(!heap_.empty()){
             auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(heap_.top()->expiry - Clock::now()).count();
             if(ns < 0){
+                spec.it_value.tv_sec = 0;
                 spec.it_value.tv_nsec = 1;
             }else{
                 spec.it_value.tv_sec = ns / 1000000000;

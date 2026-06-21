@@ -21,7 +21,7 @@ public:
         return wasEmpty;
     }
 
-    bool pop(T& out) {
+    bool pop(T& out){
         std::lock_guard<std::mutex> lock(mutex_);
         if(count_ == 0){
             return false;

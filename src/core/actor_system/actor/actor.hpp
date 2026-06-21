@@ -22,8 +22,8 @@ public:
     
     void sendMsg(const std::string& name, Message msg);
     void sendMsg(uint64_t id, Message msg);
-    int sendAfter(const std::string& targetName, Message msg, uint64_t delayMs);
-    int sendAfter(uint64_t targetId, Message msg, uint64_t delayMs);
+    int sendMsgAfter(const std::string& targetName, Message msg, uint64_t delayMs);
+    int sendMsgAfter(uint64_t targetId, Message msg, uint64_t delayMs);
     void receiveMsg(Message msg);
 
     int startTimer(Message msg, uint64_t delayMs, bool repeating);
@@ -33,11 +33,11 @@ public:
     uint64_t id() const { return id_; }
 
 protected:
-    ActorContext* context() const { return context_; }
+    ActorContext* actorContext() const { return actorCtx_; }
 
 private:
-    ActorContext* context_ = nullptr;
+    ActorContext* actorCtx_ = nullptr;
     std::string name_;
-    uint64_t id_;
     std::unordered_set<int> timerIds_;
+    uint64_t id_;
 };

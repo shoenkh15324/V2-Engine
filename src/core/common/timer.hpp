@@ -17,6 +17,7 @@ public:
 
     Timer();
     ~Timer();
+
     Timer(const Timer&) = delete;
     Timer& operator=(const Timer&) = delete;
     Timer(Timer&&) = delete;
@@ -27,9 +28,10 @@ public:
     void clear();
     void start();
     void stop();
-
+    void handleTimerEvent();
+#if __linux__
     int fd() const;
-    void onTick();
+#endif
 
 private:
     struct TimerNode{
@@ -40,15 +42,17 @@ private:
         bool alive = true;
         Callback cb;
     };
+
     using TimerPtr = std::shared_ptr<TimerNode>;
+
     struct Compare{
         bool operator()(const TimerPtr& a, const TimerPtr& b) const {
             return a->expiry > b->expiry;
         }
     };
 
-    void fire();
-    void rearm();
+    void excuteExpiredTimers();
+    void scheduleNextTimer();
 
     std::priority_queue<TimerPtr, std::vector<TimerPtr>, Compare> heap_;
     std::unordered_map<int, TimerPtr> timers_;

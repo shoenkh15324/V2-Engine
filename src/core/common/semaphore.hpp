@@ -6,9 +6,10 @@
 class Semaphore{
 public:
     explicit Semaphore(int count = 0) : count_(count < 0 ? 0 : count){
-        V2_ASSERT(count >= 0);
+        V2_ASSERT(count >= 0, "Semaphore count must be bigger than 0.");
     }
     ~Semaphore() = default;
+    
     Semaphore(const Semaphore&) = delete;
     Semaphore& operator=(const Semaphore&) = delete;
     Semaphore(Semaphore&&) = delete;

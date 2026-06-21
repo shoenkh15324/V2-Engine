@@ -15,7 +15,7 @@ UdsClient::UdsClient(UdsClient&& other) noexcept : clientFd_(other.clientFd_){
     other.clientFd_ = -1;
 }
 
-UdsClient& UdsClient::operator=(UdsClient&& other) noexcept {
+UdsClient& UdsClient::operator=(UdsClient&& other) noexcept{
     if(this != &other){
         shutdown();
         clientFd_ = other.clientFd_;
@@ -68,7 +68,7 @@ int UdsClient::recv(void* data, size_t size){
     uint8_t* ptr = static_cast<uint8_t*>(data);
     size_t received = 0;
     while(received < size){
-        ssize_t n = ::recv(clientFd_, ptr + received, size - received, MSG_NOSIGNAL);
+        ssize_t n = ::recv(clientFd_, ptr + received, size - received, 0);
         if(n == 0){
             return static_cast<int>(received);
         }

@@ -51,14 +51,11 @@ int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
         response += "version: " V2_ENGINE_VERSION "\n";
         response += "uptime: " + std::to_string(uptimeMs) + "\n";
         response += "clients: " + std::to_string(connections_.size());
-    }else if(cmd == "help"){
-        response = "info: Show engine information\n";
-        response += "help: Show this help message";
     }else{
         response = "error: unknown command '" + cmd + "'";
     }
     server_.send(conn, response.data(), response.size());
-    context()->dispatcher()->unsubscribe(conn);
+    actorContext()->dispatcher()->unsubscribe(conn);
     connections_.erase(conn);
     server_.closeClient(conn);
     return Ok;
@@ -80,7 +77,7 @@ void IpcServerActor::handle(const Message& msg){
                 handleCommand(ev.conn, cmd);
             }else if(n == 0){
                 V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", ev.conn);
-                context()->dispatcher()->unsubscribe(ev.conn);
+                actorContext()->dispatcher()->unsubscribe(ev.conn);
                 server_.closeClient(ev.conn);
                 connections_.erase(ev.conn);
             }else{
@@ -93,9 +90,9 @@ void IpcServerActor::handle(const Message& msg){
 }
 
 void IpcServerActor::subscribeListener(){
-    auto* dispatcher = context()->dispatcher();
+    auto* dispatcher = actorContext()->dispatcher();
     int listenFd = server_.fd();
-    ActorContext* ctx = context();
+    ActorContext* ctx = actorContext();
     dispatcher->subscribe(listenFd, [ctx, this, listenFd](){
         ConnHandle conn = static_cast<ConnHandle>(server_.accept());
         if(conn >= 0){
@@ -106,15 +103,15 @@ void IpcServerActor::subscribeListener(){
 }
 
 void IpcServerActor::subscribeClient(ConnHandle conn){
-    auto* dispatcher = context()->dispatcher();
-    ActorContext* ctx = context();
+    auto* dispatcher = actorContext()->dispatcher();
+    ActorContext* ctx = actorContext();
     dispatcher->subscribe(conn, [ctx, this, conn](){
         ctx->enqueue(IpcDataReceived{conn});
     });
 }
 
 void IpcServerActor::unsubscribeAll(){
-    auto* dispatcher = context() ? context()->dispatcher() : nullptr;
+    auto* dispatcher = actorContext() ? actorContext()->dispatcher() : nullptr;
     if(!dispatcher) return;
     for(ConnHandle conn : connections_){
         dispatcher->unsubscribe(conn);

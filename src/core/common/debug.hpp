@@ -12,11 +12,12 @@
 #endif
 
 #ifndef NDEBUG
-    #define V2_ASSERT(x) \
+    #define V2_ASSERT(x, msg) \
         do{ \
             if(!(x)){ \
                 std::cerr \
                     << "\n[ASSERT FAILED]\n" \
+                    << "Message    : " << msg << "\n" \
                     << "Expression : " << #x << "\n" \
                     << "File       : " << __FILE__ << "\n" \
                     << "Line       : " << __LINE__ << "\n" \

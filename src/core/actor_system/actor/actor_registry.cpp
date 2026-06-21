@@ -22,11 +22,11 @@ void ActorRegistry::clear(){
 Actor* ActorRegistry::findByName(const std::string& name) const {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = byName_.find(name);
-    return it != byName_.end() ? it->second : nullptr;
+    return (it != byName_.end()) ? it->second : nullptr;
 }
 
 Actor* ActorRegistry::findById(uint64_t id) const {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = byId_.find(id);
-    return it != byId_.end() ? it->second : nullptr;
+    return (it != byId_.end()) ? it->second : nullptr;
 }

@@ -6,11 +6,11 @@
 
 class Dispatcher;
 
-class Scheduler : public IScheduler
-{
+class Scheduler : public IScheduler{
 public:
-    Scheduler();
+    Scheduler() = default;
     ~Scheduler();
+
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
     Scheduler(Scheduler&&) = delete;
@@ -18,12 +18,13 @@ public:
 
     void start(Dispatcher* dispatcher = nullptr);
     void stop();
-    int addTimer(Actor* target, Message message, uint64_t delayMs, bool repeating = false) override;
+    int addTimer(Actor* target, Message message, uint64_t timeMs, bool repeating = false) override;
     void cancel(int timerId) override;
 
 private:
-    void subscribeTimerFd();
-    void unsubscribeTimerFd();
+    void subscribeTimer();
+    void unsubscribeTimer();
+
     Timer timer_;
     Dispatcher* dispatcher_ = nullptr;
 };

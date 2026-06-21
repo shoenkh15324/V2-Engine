@@ -3,9 +3,8 @@
 #include "core/actor_system/runtime/dispatcher.hpp"
 
 ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
-: actor_(std::move(actor)), mailbox_(mailboxSize)
-{
-    actor_->context_ = this;
+: actor_(std::move(actor)), mailbox_(mailboxSize){
+    actor_->actorCtx_ = this;
     dispatcher_ = dispatcher;
     scheduler_ = scheduler;
     actorRegistry_ = actorRegistry;

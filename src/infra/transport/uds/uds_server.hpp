@@ -3,10 +3,11 @@
 #include <string>
 #include <cstdint>
 
-class UdsServer {
+class UdsServer{
 public:
     UdsServer() = default;
     ~UdsServer();
+    
     UdsServer(const UdsServer&) = delete;
     UdsServer& operator=(const UdsServer&) = delete;
     UdsServer(UdsServer&&) noexcept;

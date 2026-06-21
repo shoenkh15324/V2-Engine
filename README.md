@@ -35,7 +35,7 @@
 | **std::variant 메시지** | 타입-safe 디스패치 — `std::visit` 기반, 상속/형변환 불필요 |
 | **Thread Pool Dispatcher** | Worker N개가 ready queue에서 액터를 꺼내 실행 (협력적 스케줄링) |
 | **epoll Event Loop** | `epoll_wait()` 기반 중앙 리액터 — Timer FD, Stop FD, Transport I/O 통합 |
-| **Timer/Scheduler** | `timerfd_create()` + priority queue, `sendAfter()`/`startTimer()`/`cancelTimer()` |
+| **Timer/Scheduler** | `timerfd_create()` + priority queue, `sendMsgAfter()`/`startTimer()`/`cancelTimer()` |
 | **Unix Domain Socket** | `UdsServer` / `UdsClient` (AF_UNIX, SOCK_STREAM) |
 | **IPC Server Actor** | UDS 기반 멀티클라이언트 명령어 처리, key:value 응답 프로토콜 |
 | **CLI Tool** | 컬러 출력, 로컬/서버 명령어 분리, 자동 uptime 포매팅 |

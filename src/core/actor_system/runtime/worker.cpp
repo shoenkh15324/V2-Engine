@@ -2,8 +2,7 @@
 #include "dispatcher.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 
-Worker::Worker(Dispatcher* dispatcher, int id, int maxBatch)
-    : dispatcher_(dispatcher), id_(id), maxBatch_(maxBatch){
+Worker::Worker(Dispatcher* dispatcher, int id, int maxBatch) : dispatcher_(dispatcher), id_(id), maxBatch_(maxBatch){
     threadName_ = "v2-worker" + std::to_string(id_);
 }
 

@@ -6,10 +6,11 @@
 #include <unistd.h>
 #include <cerrno>
 
-UdsServer::~UdsServer() { shutdown(); }
+UdsServer::~UdsServer(){ 
+    shutdown();
+}
 
-UdsServer::UdsServer(UdsServer&& other) noexcept
-    : serverFd_(other.serverFd_), path_(std::move(other.path_)){
+UdsServer::UdsServer(UdsServer&& other) noexcept : serverFd_(other.serverFd_), path_(std::move(other.path_)){
     other.serverFd_ = -1;
 }
 
@@ -23,7 +24,7 @@ UdsServer& UdsServer::operator=(UdsServer&& other) noexcept{
     return *this;
 }
 
-int UdsServer::start(const std::string& path, int backlog) {
+int UdsServer::start(const std::string& path, int backlog){
     unlink(path.c_str()); // 기존 소켓 파일 제거
     serverFd_ = socket(AF_UNIX, SOCK_STREAM, 0);
     if(serverFd_ < 0){ V2_LOG_ERROR("socket() failed");

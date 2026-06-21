@@ -5,7 +5,7 @@
 #include <algorithm>
 
 RingBuffer::RingBuffer(size_t size) : buffer_(size){
-    V2_ASSERT(size > 0);
+    V2_ASSERT(size > 0, "RingBuffer size must be bigger than 0.");
 }
 
 int RingBuffer::push(const uint8_t* data, size_t size){

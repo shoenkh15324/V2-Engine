@@ -9,9 +9,9 @@ enum class LogLevel{
     Error = 3,
 };
 
+LogLevel getLogLevel();
 void setLogLevel(LogLevel level);
 void setLogAppName(const std::string& name);
-LogLevel getLogLevel();
 void logPrint(LogLevel level, const char* file, int line, const char* func, const char* fmt, ...);
 
 #define V2_LOG(...) logPrint(LogLevel::Verbose, __FILE__, __LINE__, __func__, __VA_ARGS__);

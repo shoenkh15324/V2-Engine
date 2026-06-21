@@ -13,6 +13,12 @@ class ActorContext{
 public:
     ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry);
     ~ActorContext();
+
+    ActorContext(const ActorContext&) = delete;
+    ActorContext& operator=(const ActorContext&) = delete;
+    ActorContext(ActorContext&&) = delete;
+    ActorContext& operator=(ActorContext&&) = delete;
+
     void enqueue(Message msg);
     void run(int maxBatch);
     Actor* actor() const { return actor_.get(); }

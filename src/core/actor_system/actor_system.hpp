@@ -9,6 +9,7 @@
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/config.h"
 #include "core/common/log.hpp"
+#include "core/common/debug.hpp"
 
 class Worker;
 
@@ -16,6 +17,7 @@ class ActorSystem{
 public:
     explicit ActorSystem(int numWorkers = 1);
     ~ActorSystem();
+    
     ActorSystem(const ActorSystem&) = delete;
     ActorSystem& operator=(const ActorSystem&) = delete;
     ActorSystem(ActorSystem&&) = delete;
@@ -23,7 +25,7 @@ public:
 
     template<typename T, typename ... Args>
     T* createActor(const std::string& name, size_t mailboxSize = V2_DEFAULT_MAILBOX_SIZE, Args&& ... args){
-        static_assert(std::is_base_of_v<Actor, T>, "T must derive from Actor");
+        V2_ASSERT((std::is_base_of_v<Actor, T>), "T must derive from Actor");
         auto actor = std::make_unique<T>(name, nextActorId_++, std::forward<Args>(args)...);
         auto actorCtx = std::make_unique<ActorContext>(std::move(actor), mailboxSize, &dispatcher_, &scheduler_, &actorRegistry_);
         T* ptr = static_cast<T*>(actorCtx->actor());

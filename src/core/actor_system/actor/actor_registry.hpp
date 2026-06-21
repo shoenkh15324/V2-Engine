@@ -11,6 +11,7 @@ class ActorRegistry : public IActorRegistry{
 public:
     ActorRegistry() = default;
     ~ActorRegistry() = default;
+    
     ActorRegistry(const ActorRegistry&) = delete;
     ActorRegistry& operator=(const ActorRegistry&) = delete;
     ActorRegistry(ActorRegistry&&) = delete;

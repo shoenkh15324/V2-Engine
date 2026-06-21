@@ -7,6 +7,7 @@ class UdsClient{
 public:
     UdsClient() = default;
     ~UdsClient();
+    
     UdsClient(const UdsClient&) = delete;
     UdsClient& operator=(const UdsClient&) = delete;
     UdsClient(UdsClient&&) noexcept;
