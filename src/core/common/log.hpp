@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 enum class LogLevel{
     Verbose = 0,
@@ -9,6 +10,7 @@ enum class LogLevel{
 };
 
 void setLogLevel(LogLevel level);
+void setLogAppName(const std::string& name);
 LogLevel getLogLevel();
 void logPrint(LogLevel level, const char* file, int line, const char* func, const char* fmt, ...);
 

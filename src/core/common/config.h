@@ -27,6 +27,9 @@
 // ============================================================================
 // Core Engine
 // ============================================================================
+#ifndef V2_APP_VERSION
+#  define V2_APP_VERSION "0.0.1"
+#endif
 #ifndef V2_DEFAULT_MAILBOX_SIZE
 #  define V2_DEFAULT_MAILBOX_SIZE 128
 #endif

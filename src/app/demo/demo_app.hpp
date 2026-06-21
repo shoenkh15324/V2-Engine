@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "core/actor_system/actor_system.hpp"
 
 class DemoApp{
@@ -22,4 +23,5 @@ private:
     static DemoApp* sInstance;
     ActorSystem actorSystem_;
     bool isRunning_ = false;
+    std::string name_ = "demo";
 };

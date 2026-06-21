@@ -5,6 +5,7 @@
 #include <mutex>
 
 LogLevel gLevel = static_cast<LogLevel>(V2_DEFAULT_LOG_LEVEL);
+static std::string gLogAppName = "";
 std::mutex gMutex;
 
 const char* colorCode(LogLevel level){
@@ -29,6 +30,10 @@ void setLogLevel(LogLevel level){
     gLevel = level;
 }
 
+void setLogAppName(const std::string& name){
+    gLogAppName = name;
+}
+
 LogLevel getLogLevel(){
     return gLevel;
 }
@@ -36,7 +41,7 @@ LogLevel getLogLevel(){
 void logPrint(LogLevel level, const char* file, int line, const char* func, const char* fmt, ...){
     if(level < gLevel) return;
     std::lock_guard<std::mutex> lock(gMutex);
-    fprintf(stderr, "%s%s %s:%d (%s) ", colorCode(level), levelLabel(level), file, line, func);
+    fprintf(stderr, "%s%s[%s] %s:%d (%s) ", colorCode(level), levelLabel(level), gLogAppName.c_str(), file, line, func);
     va_list args;
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);

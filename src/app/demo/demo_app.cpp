@@ -22,10 +22,10 @@ DemoApp::~DemoApp(){
 }
 
 void DemoApp::open(){
-    V2_LOG_INFO("Project Name: %s", V2_ENGINE_NAME);
-    V2_LOG_INFO("Project Version: v%s", V2_ENGINE_VERSION);
-    V2_LOG_INFO("Bulid Data: %s", Time::nowDateString().c_str());
-    V2_LOG_INFO("Demo App Open");
+    setLogAppName(std::move(name_));
+    V2_LOG_INFO("%s App Open", name_.c_str());
+    V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
+    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
     signal(SIGINT, onSignal);
     signal(SIGTERM, onSignal);
     //

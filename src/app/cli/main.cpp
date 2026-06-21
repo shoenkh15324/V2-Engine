@@ -1,5 +1,8 @@
-#include <iostream>
+#include "app/cli/cli_app.hpp"
 
 int main(int, char**){
-    std::cout << "Cli App\n";
+    CliApp app;
+    app.open();
+    app.run();
+    return 0;
 }
