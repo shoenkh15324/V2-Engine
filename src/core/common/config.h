@@ -40,7 +40,7 @@
     #define V2_ENGINE_NAME "V2 Engine"
 #endif
 #ifndef V2_ENGINE_VERSION
-    #define V2_ENGINE_VERSION "0.0.1"
+    #define V2_ENGINE_VERSION "0.1.0"
 #endif
 #ifndef V2_DEFAULT_MAILBOX_SIZE
     #define V2_DEFAULT_MAILBOX_SIZE 128
