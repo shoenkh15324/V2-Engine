@@ -18,6 +18,10 @@ int main(int argc, char** argv){
         CliApp::printLocalVersion();
         return 0;
     }
+    if(cmd == "--status" || cmd == "status"){
+        CliApp::printLocalStatus();
+        return 0;
+    }
 
     CliApp app;
     if(!app.open()){

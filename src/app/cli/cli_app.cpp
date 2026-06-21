@@ -66,15 +66,50 @@ void CliApp::printLocalHelp(){
         << "\n"
         << CLR("\033[33m") << "  Commands:" << CLR("\033[0m") << "\n"
         << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "      Show engine information\n"
-        << "    " << CLR("\033[32m") << "help" << CLR("\033[0m") << "      Show this help message\n"
         << "\n"
         << CLR("\033[33m") << "  Options:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "--version" << CLR("\033[0m") << "  Show version information\n";
+        << "    " << CLR("\033[32m") << "help" << CLR("\033[0m") << "      Show this help message\n"
+        << "    " << CLR("\033[32m") << "version" << CLR("\033[0m") << "   Show version information\n"
+        << "    " << CLR("\033[32m") << "status" << CLR("\033[0m") << "    Show daemon status\n";
 }
 
 void CliApp::printLocalVersion(){
     std::cout
         << CLR("\033[36m\033[1m") << "  V2 Engine " << CLR("\033[0m") << V2_APP_VERSION << "\n";
+}
+
+void CliApp::printLocalStatus(){
+    std::string socketPath = V2_DEFAULT_IPC_SOCKET_PATH;
+    bool sockExists = (access(socketPath.c_str(), F_OK) == 0);
+
+    std::cout << CLR("\033[36m\033[1m") << "  V2 Engine \342\200\224 Status" << CLR("\033[0m") << "\n";
+
+    if(!sockExists){
+        std::cout << "    Daemon: " << CLR("\033[31m") << "stopped" << CLR("\033[0m") << "\n"
+                  << "    Socket: " << socketPath << " (not found)\n";
+        return;
+    }
+
+    UdsClient probe;
+    bool alive = (probe.connect(socketPath) == Ok);
+    probe.shutdown();
+
+    if(alive){
+        std::cout << "    Daemon: " << CLR("\033[32m") << "running" << CLR("\033[0m") << "\n";
+    }else{
+        std::cout << "    Daemon: " << CLR("\033[31m") << "dead (stale socket)" << CLR("\033[0m") << "\n";
+    }
+
+    std::cout << "    Socket: " << socketPath << "\n";
+
+    FILE* fp = ::popen("pidof v2_main 2>/dev/null", "r");
+    if(fp){
+        char buf[16] = {};
+        if(std::fgets(buf, sizeof(buf), fp)){
+            std::cout << "    PID:    " << buf;
+        }
+        ::pclose(fp);
+    }
 }
 
 void CliApp::printResponse(const std::string& resp){

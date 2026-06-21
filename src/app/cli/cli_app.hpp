@@ -12,6 +12,7 @@ public:
 
     static void printLocalHelp();
     static void printLocalVersion();
+    static void printLocalStatus();
 
 private:
     void printResponse(const std::string& response);
