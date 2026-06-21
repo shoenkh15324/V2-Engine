@@ -31,19 +31,31 @@ void IpcServerActor::open(){
         return;
     }
     ::chmod(socketPath_.c_str(), 0777);
+    startTime_ = Time::now();
     subscribeListener();
     V2_LOG_INFO("IpcServerActor: listening on %s", socketPath_.c_str());
 }
 
 int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
     V2_LOG_INFO("IpcServerActor: command received (conn=%d) [%s]", conn, cmd.c_str());
+    /*
+     * Response format (key: value lines, parsed by CLI):
+     *   key: value
+     *   error: <message>
+     *   cmd_name: Description    ← for help listing
+     */
     std::string response;
     if(cmd == "info"){
-        response = V2_ENGINE_NAME " " V2_ENGINE_VERSION;
+        auto uptimeMs = Time::toMs(Time::now() - startTime_);
+        response += "name: " V2_ENGINE_NAME "\n";
+        response += "version: " V2_ENGINE_VERSION "\n";
+        response += "uptime: " + std::to_string(uptimeMs) + "\n";
+        response += "clients: " + std::to_string(connections_.size());
     }else if(cmd == "help"){
-        response = "Available commands: info, help";
+        response = "info: Show engine information\n";
+        response += "help: Show this help message";
     }else{
-        response = "unknown command: " + cmd;
+        response = "error: unknown command '" + cmd + "'";
     }
     server_.send(conn, response.data(), response.size());
     context()->dispatcher()->unsubscribe(conn);

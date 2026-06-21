@@ -1,6 +1,7 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config.h"
+#include "core/common/time.hpp"
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 
@@ -28,5 +29,6 @@ private:
     UdsServer server_;
     std::string socketPath_;
     std::unordered_set<ConnHandle> connections_;
+    Time::TimeStamp startTime_{};
 };
 #endif
