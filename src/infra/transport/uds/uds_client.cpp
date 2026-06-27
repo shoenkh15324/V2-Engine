@@ -1,4 +1,6 @@
 #include "uds_client.hpp"
+
+#if !V2_PLATFORM_WINDOWS
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include <sys/socket.h>
@@ -93,3 +95,5 @@ void UdsClient::disconnect(){
 void UdsClient::shutdown(){
     disconnect();
 }
+
+#endif

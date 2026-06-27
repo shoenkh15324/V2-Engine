@@ -3,6 +3,8 @@
 #include <string>
 #include <cstdint>
 
+#if !V2_PLATFORM_WINDOWS
+
 class UdsServer{
 public:
     UdsServer() = default;
@@ -19,14 +21,11 @@ public:
     int recv(int fd, void* data, size_t size);
     void closeClient(int connFd);
     void shutdown();
-
-#if V2_PLATFORM_LINUX
     int fd() const { return serverFd_; }
-#endif
 
 private:
     std::string path_;
-#if V2_PLATFORM_LINUX
     int serverFd_ = -1;
-#endif
 };
+
+#endif

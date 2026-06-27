@@ -1,3 +1,6 @@
+#include "core/common/util/platform_config.h"
+
+#if V2_PLATFORM_LINUX
 #include "core/common/os/epoll.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
@@ -67,5 +70,7 @@ int Epoll::wait(epoll_event* events, int maxEvents, int timeoutMs){
     if(n < 0){ V2_LOG_ERROR("epoll_wait() failed, errno=%d", errno);
         return Fail;
     }
-    return n; // number of ready FDs
+    return n;
 }
+
+#endif

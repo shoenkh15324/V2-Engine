@@ -29,7 +29,7 @@ public:
     void start();
     void stop();
     void handleTimerEvent();
-#if __linux__
+#if V2_PLATFORM_LINUX
     int fd() const;
 #endif
 

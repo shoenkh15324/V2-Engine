@@ -1,21 +1,18 @@
 #include "monitor_actor.hpp"
-#include "core/common/util/platform_config.h"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include <vector>
+#include <fstream>
+#include <sstream>
 
 #if V2_PLATFORM_LINUX
-    #include <sys/socket.h>
-    #include <sys/stat.h>
-    #include <unistd.h>
-    #include <fstream>
-    #include <sstream>
-#endif
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-
-MonitorActor::MonitorActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog, int recvBufferSize, int pollIntervalMs) : Actor(std::move(name), id), socketPath_(socketPath), backlog_(backlog), recvBufferSize_(recvBufferSize){
+MonitorActor::MonitorActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog, int recvBufferSize, int pollIntervalMs) : Actor(std::move(name), id), socketPath_(socketPath), backlog_(backlog), recvBufferSize_(recvBufferSize), pollIntervalMs_(pollIntervalMs){
     //
 }
 
@@ -30,14 +27,14 @@ void MonitorActor::onStart(){
     }
     ::chmod(socketPath_.c_str(), 0777);
     startTime_ = Time::now();
-    startTimer(MonitorPoll{}, pollIntervalMs_, true);
     subscribeListener();
+    startTimer(MonitorPoll{}, pollIntervalMs_, true);
     V2_LOG_INFO("MonitorActor: listening on %s", socketPath_.c_str());
 }
 
 void MonitorActor::handle(const Message& msg){
     std::visit(overloaded{
-        [this](const MonitorPoll& ev){
+        [this](const MonitorPoll&){
             MonitorSnapshot snap;
             snap.timestampMs = Time::nowMs();
             snap.clientCount = static_cast<int>(connections_.size());
@@ -50,7 +47,7 @@ void MonitorActor::handle(const Message& msg){
                 actorInfo.mailboxCapacity = actor->mailboxCapacity();
                 snap.actors.push_back(std::move(actorInfo));
             });
-            
+
             collectSystemResources(snap.resources);
 
             std::string data = serializeSnapshot(snap);
@@ -74,72 +71,6 @@ void MonitorActor::handle(const Message& msg){
     }, msg);
 }
 
-void MonitorActor::subscribeListener(){
-    auto* dispathcer = actorContext()->dispatcher();
-    int listenFd = server_.fd();
-    ActorContext* ctx = actorContext();
-    dispathcer->subscribe(listenFd, [this, ctx, listenFd](){
-        ConnHandle conn = static_cast<ConnHandle>(server_.accept());
-        if(conn > 0){
-            connections_.insert(conn);
-            ctx->enqueue(MonitorNewConnection{conn});
-        }
-    });
-}
-
-void MonitorActor::subscribeClient(ConnHandle conn){
-    auto* dispathcer = actorContext()->dispatcher();
-    ActorContext* ctx = actorContext();
-    dispathcer->subscribe(conn, [this, ctx, conn](){
-        char buf[64];
-        ssize_t n = ::recv(conn, buf, sizeof(buf), MSG_DONTWAIT);
-        if(n <= 0 && (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))){
-            ctx->enqueue(MonitorClientDisconnected{conn});
-        }
-    });
-}
-
-void MonitorActor::unsubscribeAll(){
-    auto* dispathcer = actorContext()->dispatcher();
-    if(!dispathcer) return;
-    for(ConnHandle conn : connections_){
-        dispathcer->unsubscribe(conn);
-        ::close(conn);
-    }
-    connections_.clear();
-    if(server_.fd() >= 0){
-        dispathcer->unsubscribe(server_.fd());
-    }
-}
-
-void MonitorActor::collectSystemResources(MonitorSnapshot::SystemResources& resources){
-    std::ifstream status("/proc/self/status");
-    std::string line;
-    while(std::getline(status, line)){
-        if(line.compare(0, 7, "VmRss:") == 0){
-            resources.memoryRssKb = std::stoul(line.substr(7));
-        }else if(line.compare(0, 8, "VmSize:") == 0){
-            resources.memoryTotalKb = std::stoul(line.substr(8));
-        }
-    }
-    std::ifstream stat("/proc/self/stat");
-    uint64_t utime, stime;
-    std::string ignore;
-    // field 13=utime, 14=stime
-    for(int i = 0; i < 14; i++){
-        if(i == 0){
-            stat >> ignore; // pid
-        }else if(i == 1){
-            std::getline(stat, ignore, ')'); // comm
-        }else{
-            stat >> ignore;
-        }
-    }
-    // After skipping 14 fields, we need to re-read properly
-    // ... 실제 구현 시 clk_tck 변환 필요
-    (void)utime; (void)stime; // 추후 구현
-}
-
 std::string MonitorActor::serializeSnapshot(const MonitorSnapshot& snap){
     std::string data;
     data += "timestamp:" + std::to_string(snap.timestampMs) + "\n";
@@ -155,3 +86,70 @@ std::string MonitorActor::serializeSnapshot(const MonitorSnapshot& snap){
     data += "cpu:" + std::to_string(snap.resources.cpuPercent) + "\n";
     return data;
 }
+
+void MonitorActor::subscribeListener(){
+    auto* dispatcher = actorContext()->dispatcher();
+    int listenFd = server_.fd();
+    ActorContext* ctx = actorContext();
+    dispatcher->subscribe(listenFd, [this, ctx, listenFd](){
+        ConnHandle conn = static_cast<ConnHandle>(server_.accept());
+        if(conn >= 0){
+            connections_.insert(conn);
+            ctx->enqueue(MonitorNewConnection{conn});
+        }
+    });
+}
+
+void MonitorActor::subscribeClient(ConnHandle conn){
+    auto* dispatcher = actorContext()->dispatcher();
+    ActorContext* ctx = actorContext();
+    dispatcher->subscribe(conn, [this, ctx, conn](){
+        char buf[64];
+        ssize_t n = ::recv(conn, buf, sizeof(buf), MSG_DONTWAIT);
+        if(n <= 0 && (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))){
+            ctx->enqueue(MonitorClientDisconnected{conn});
+        }
+    });
+}
+
+void MonitorActor::unsubscribeAll(){
+    auto* dispatcher = actorContext() ? actorContext()->dispatcher() : nullptr;
+    if(!dispatcher) return;
+    for(ConnHandle conn : connections_){
+        dispatcher->unsubscribe(conn);
+        ::close(conn);
+    }
+    connections_.clear();
+    if(server_.fd() >= 0){
+        dispatcher->unsubscribe(server_.fd());
+    }
+}
+
+void MonitorActor::collectSystemResources(MonitorSnapshot::SystemResources& resources){
+#if V2_PLATFORM_LINUX
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while(std::getline(status, line)){
+        if(line.compare(0, 7, "VmRss:") == 0){
+            resources.memoryRssKb = std::stoul(line.substr(7));
+        }else if(line.compare(0, 8, "VmSize:") == 0){
+            resources.memoryTotalKb = std::stoul(line.substr(8));
+        }
+    }
+    std::ifstream stat("/proc/self/stat");
+    uint64_t utime, stime;
+    std::string ignore;
+    for(int i = 0; i < 14; i++){
+        if(i == 0){
+            stat >> ignore;
+        }else if(i == 1){
+            std::getline(stat, ignore, ')');
+        }else{
+            stat >> ignore;
+        }
+    }
+    (void)utime; (void)stime;
+#endif
+}
+
+#endif

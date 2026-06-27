@@ -8,9 +8,7 @@ target_sources(v2_infra PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/transport/dummy.cpp
 )
 
-if(WIN32)
-    #
-elseif(UNIX)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(v2_infra PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/transport/uds/uds_server.cpp
         ${CMAKE_CURRENT_LIST_DIR}/transport/uds/uds_client.cpp

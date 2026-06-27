@@ -5,6 +5,8 @@
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 
+#if V2_PLATFORM_LINUX
+
 class IpcServerActor : public Actor{
 public:
     IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog = 5, int recvBufferSize = 4096);
@@ -32,3 +34,5 @@ private:
     std::unordered_set<ConnHandle> connections_;
     Time::TimeStamp startTime_{};
 };
+
+#endif

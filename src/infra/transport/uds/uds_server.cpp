@@ -1,4 +1,6 @@
 #include "infra/transport/uds/uds_server.hpp"
+
+#if !V2_PLATFORM_WINDOWS
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include <sys/socket.h>
@@ -25,7 +27,7 @@ UdsServer& UdsServer::operator=(UdsServer&& other) noexcept{
 }
 
 int UdsServer::start(const std::string& path, int backlog){
-    unlink(path.c_str()); // 기존 소켓 파일 제거
+    unlink(path.c_str());
     serverFd_ = socket(AF_UNIX, SOCK_STREAM, 0);
     if(serverFd_ < 0){ V2_LOG_ERROR("socket() failed");
         return Fail;
@@ -111,3 +113,5 @@ void UdsServer::shutdown(){
         path_.clear();
     }
 }
+
+#endif

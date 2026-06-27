@@ -3,6 +3,8 @@
 #include <string>
 #include <cstdint>
 
+#if !V2_PLATFORM_WINDOWS
+
 class UdsClient{
 public:
     UdsClient() = default;
@@ -18,13 +20,10 @@ public:
     int recv(void* data, size_t size);
     void disconnect();
     void shutdown();
-
-#if V2_PLATFORM_LINUX
     int fd() const { return clientFd_; }
-#endif
 
 private:
-#if V2_PLATFORM_LINUX
     int clientFd_ = -1;
-#endif
 };
+
+#endif

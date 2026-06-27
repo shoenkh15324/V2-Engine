@@ -1,7 +1,11 @@
 #pragma once
 #include <string>
-#include "infra/transport/uds/uds_client.hpp"
+#include "core/common/util/platform_config.h"
 #include "core/common/config/runtime_config.h"
+
+#if V2_PLATFORM_LINUX
+    #include "infra/transport/uds/uds_client.hpp"
+#endif
 
 class CliApp{
 public:
@@ -20,6 +24,8 @@ private:
     static bool shouldColor();
 
     RuntimeConfig cfg_;
+#if V2_PLATFORM_LINUX
     UdsClient client_;
+#endif
     std::string name_ = "Cli";
 };

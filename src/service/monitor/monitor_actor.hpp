@@ -7,7 +7,6 @@
 #include <vector>
 #include <string>
 
-
 struct MonitorSnapshot{
     struct ActorInfo{
         std::string name;
@@ -26,6 +25,8 @@ struct MonitorSnapshot{
     int clientCount;
 };
 
+#if !V2_PLATFORM_WINDOWS
+
 class MonitorActor : public Actor{
 public:
     MonitorActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog, int recvBufferSize, int pollIntervalMs);
@@ -43,17 +44,18 @@ private:
     void subscribeListener();
     void subscribeClient(ConnHandle conn);
     void unsubscribeAll();
-
     void collectSystemResources(MonitorSnapshot::SystemResources& resources);
     std::string serializeSnapshot(const MonitorSnapshot& snap);
 
     UdsServer server_;
     std::string socketPath_;
     int backlog_;
-    int pollIntervalMs_;
     int recvBufferSize_;
+    int pollIntervalMs_;
     std::unordered_set<ConnHandle> connections_;
     Time::TimeStamp startTime_;
     uint64_t lastCpuTime_ = 0;
     uint64_t lastWallTime_ = 0;
 };
+
+#endif

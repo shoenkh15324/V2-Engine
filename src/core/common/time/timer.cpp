@@ -62,7 +62,11 @@ void Timer::start(){
 #else
     running_ = true;
     thread_ = std::thread([this]{
+    #if V2_PLATFORM_LINUX
         pthread_setname_np(pthread_self(), "v2-timer");
+    #elif V2_PLATFORM_MACOS
+        pthread_setname_np("v2-timer");
+    #endif
         while(running_){
             std::unique_lock<std::mutex> lock(mutex_);
             while(!heap_.empty() && !heap_.top()->alive){

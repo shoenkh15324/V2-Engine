@@ -1,5 +1,8 @@
 #pragma once
+#include "core/common/util/platform_config.h"
 #include <cstdint>
+
+#if V2_PLATFORM_LINUX
 #include <sys/epoll.h>
 
 class Epoll{
@@ -21,3 +24,5 @@ public:
 private:
     int epollFd_ = -1;
 };
+
+#endif

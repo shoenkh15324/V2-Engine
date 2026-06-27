@@ -3,12 +3,14 @@
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
-#include "core/common/config/runtime_config.h"
 #include <iostream>
 #include <sstream>
-#include <cstdio>
-#include <unistd.h>
 #include <vector>
+#include <cstdio>
+
+#if !V2_PLATFORM_WINDOWS
+    #include <unistd.h>
+#endif
 
 #define CLR(c) (shouldColor() ? (c) : "")
 
@@ -25,16 +27,21 @@ bool CliApp::open(){
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
-
+#if !V2_PLATFORM_WINDOWS
     if(client_.connect(cfg_.ipcSocketPath) != Ok){
         V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
         return false;
     }
     V2_LOG_INFO("%s App: connected to main app", name_.c_str());
+#else
+    V2_LOG_ERROR("%s App: CLI not supported on Windows yet", name_.c_str());
+    return false;
+#endif
     return true;
 }
 
 int CliApp::run(const std::string& cmd){
+#if V2_PLATFORM_LINUX
     V2_LOG_INFO("%s App Run", name_.c_str());
     V2_LOG_INFO("%s App: sending command [%s]", name_.c_str(), cmd.c_str());
 
@@ -51,16 +58,26 @@ int CliApp::run(const std::string& cmd){
         V2_LOG_INFO("%s App: received response [%s]", name_.c_str(), resp.c_str());
     }
     return 0;
+#else
+    (void)cmd;
+    return 1;
+#endif
 }
 
 void CliApp::close(){
-    V2_LOG_INFO("%s App Close", name_.c_str());
+#if V2_PLATFORM_LINUX
     client_.shutdown();
+#endif
+    V2_LOG_INFO("%s App Close", name_.c_str());
 }
 
 bool CliApp::shouldColor(){
+#if V2_PLATFORM_LINUX
     static bool color = isatty(STDOUT_FILENO);
     return color;
+#else
+    return false;
+#endif
 }
 
 void CliApp::printLocalHelp(){
@@ -80,6 +97,7 @@ void CliApp::printLocalVersion(){
 }
 
 void CliApp::printLocalStatus(){
+#if V2_PLATFORM_LINUX
     std::string socketPath = RuntimeConfig{}.ipcSocketPath;
     bool sockExists = (access(socketPath.c_str(), F_OK) == 0);
 
@@ -111,6 +129,10 @@ void CliApp::printLocalStatus(){
         }
         ::pclose(fp);
     }
+#else
+    std::cout << "  V2 Engine \342\200\224 Status\n"
+              << "    Daemon: not supported on Windows yet\n";
+#endif
 }
 
 void CliApp::printResponse(const std::string& resp){
