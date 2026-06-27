@@ -1,14 +1,13 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include "core/common/time.hpp"
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 
-#if V2_ENABLE_IPC_SERVER_ACTOR
 class IpcServerActor : public Actor{
 public:
-    IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath);
+    IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog = 5, int recvBufferSize = 4096);
     ~IpcServerActor() override;
     
     IpcServerActor(const IpcServerActor&) = delete;
@@ -28,7 +27,8 @@ private:
 
     UdsServer server_;
     std::string socketPath_;
+    int backlog_;
+    int recvBufferSize_;
     std::unordered_set<ConnHandle> connections_;
     Time::TimeStamp startTime_{};
 };
-#endif

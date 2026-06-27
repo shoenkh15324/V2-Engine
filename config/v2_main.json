@@ -1,0 +1,6 @@
+{
+    "log_level": 0,
+    "worker_count": 4,
+    "enable_tick": true,
+    "enable_ipc_server": true
+}

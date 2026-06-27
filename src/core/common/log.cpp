@@ -1,10 +1,10 @@
 #include "log.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include <cstdio>
 #include <cstdarg>
 #include <mutex>
 
-LogLevel gLevel = static_cast<LogLevel>(V2_DEFAULT_LOG_LEVEL);
+LogLevel gLevel = LogLevel::Error;
 static std::string gLogAppName = "";
 std::mutex gMutex;
 

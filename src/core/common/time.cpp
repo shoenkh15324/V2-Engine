@@ -1,5 +1,5 @@
 #include "time.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include <ctime>
 #include <cstdio>
 

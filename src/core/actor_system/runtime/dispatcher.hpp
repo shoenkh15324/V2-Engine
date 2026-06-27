@@ -5,7 +5,8 @@
 #include <atomic>
 #include <mutex>
 #include <functional>
-#include "core/common/config.h"
+#include <vector>
+#include "core/common/platform_config.h"
 #include "core/common/semaphore.hpp"
 
 #if V2_PLATFORM_LINUX
@@ -22,7 +23,7 @@ private:
 #endif
 
 public:
-    explicit Dispatcher(int workerCount = V2_DEFAULT_WORKER_COUNT);
+    explicit Dispatcher(int workerCount, int epollMaxEvents = 64, int epollWaitTimeoutMs = 1000);
     ~Dispatcher();
 
     Dispatcher(const Dispatcher&) = delete;
@@ -41,6 +42,8 @@ public:
 
 private:
     int workerCount_ = 0;
+    int epollMaxEvents_ = 64;
+    int epollWaitTimeoutMs_ = 1000;
     Semaphore sema_{0};
     std::mutex mutex_;
     std::atomic<bool> running_{false};
@@ -51,5 +54,6 @@ private:
 #if V2_PLATFORM_LINUX
     Epoll epoll_;
     int stopFd_ = -1;
+    std::vector<epoll_event> epollEvents_;
 #endif
 };

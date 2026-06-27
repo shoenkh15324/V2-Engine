@@ -1,5 +1,5 @@
 #include "scheduler.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/log.hpp"
 #include "dispatcher.hpp"

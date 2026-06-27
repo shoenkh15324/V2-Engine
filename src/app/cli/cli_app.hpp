@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include "infra/transport/uds/uds_client.hpp"
+#include "core/common/runtime_config.h"
 
 class CliApp{
 public:
@@ -18,6 +19,7 @@ private:
     void printResponse(const std::string& response);
     static bool shouldColor();
 
+    RuntimeConfig cfg_;
     UdsClient client_;
     std::string name_ = "Cli";
 };

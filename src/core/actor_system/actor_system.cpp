@@ -2,10 +2,11 @@
 #include "core/actor_system/runtime/worker.hpp"
 #include "core/actor_system/actor/actor.hpp"
 
-ActorSystem::ActorSystem(int numWorkers) : dispatcher_(numWorkers){
+ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs)
+    : dispatcher_(numWorkers, epollMaxEvents, epollWaitTimeoutMs){
     workers_.reserve(numWorkers);
     for(int i = 0; i < numWorkers; i++){
-        workers_.push_back(std::make_unique<Worker>(&dispatcher_, i));
+        workers_.push_back(std::make_unique<Worker>(&dispatcher_, i, maxBatch));
     }
 }
 

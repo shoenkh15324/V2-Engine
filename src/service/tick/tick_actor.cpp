@@ -1,6 +1,4 @@
 #include "tick_actor.hpp"
-
-#if V2_ENABLE_TICK_ACTOR
 #include "core/common/log.hpp"
 #include "core/common/return.hpp"
 #include "core/common/time.hpp"
@@ -23,4 +21,3 @@ void TickActor::handle(const Message& msg){
         [](const auto&){}
     }, msg);
 }
-#endif

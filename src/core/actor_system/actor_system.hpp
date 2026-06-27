@@ -7,7 +7,7 @@
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include "core/common/log.hpp"
 #include "core/common/debug.hpp"
 
@@ -15,7 +15,7 @@ class Worker;
 
 class ActorSystem{
 public:
-    explicit ActorSystem(int numWorkers = 1);
+    explicit ActorSystem(int numWorkers, int maxBatch = 32, int epollMaxEvents = 64, int epollWaitTimeoutMs = 1000);
     ~ActorSystem();
     
     ActorSystem(const ActorSystem&) = delete;
@@ -24,7 +24,7 @@ public:
     ActorSystem& operator=(ActorSystem&&) = delete;
 
     template<typename T, typename ... Args>
-    T* createActor(const std::string& name, size_t mailboxSize = V2_DEFAULT_MAILBOX_SIZE, Args&& ... args){
+    T* createActor(const std::string& name, size_t mailboxSize = 512, Args&& ... args){
         V2_ASSERT((std::is_base_of_v<Actor, T>), "T must derive from Actor");
         auto actor = std::make_unique<T>(name, nextActorId_++, std::forward<Args>(args)...);
         auto actorCtx = std::make_unique<ActorContext>(std::move(actor), mailboxSize, &dispatcher_, &scheduler_, &actorRegistry_);

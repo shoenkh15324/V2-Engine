@@ -16,12 +16,7 @@ if(BUILD_MAIN_APP)
     )
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_main PRIVATE
-        V2_APP_VERSION="0.0.5"
-        V2_DEFAULT_LOG_LEVEL=1
-        V2_ENABLE_IPC_SERVER_ACTOR=1
-        V2_ENABLE_TICK_ACTOR=1
-        V2_DEFAULT_WORKER_COUNT=4
-        V2_MAINAPP_MAINLOOP_SLEEP_MS=100
+        V2_APP_VERSION="0.2.0"
     )
 endif()
 
@@ -36,9 +31,6 @@ if(BUILD_CLI_APP)
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_cli PRIVATE
         V2_APP_VERSION="0.0.2"
-        V2_ENABLE_IPC_SERVER_ACTOR=1
-        V2_DEFAULT_MAILBOX_SIZE=32
-        V2_WORKER_MAX_BATCH=8
     )
 endif()
 
@@ -50,13 +42,8 @@ if(BUILD_TUI_APP)
     target_include_directories(v2_tui PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
-    target_link_libraries(v2_tui PRIVATE
-        v2_service v2_core v2_infra 
-        ftxui::ftxui
-    )
+    target_link_libraries(v2_tui PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_tui PRIVATE
         V2_APP_VERSION="0.0.1"
-        V2_ENABLE_IPC_SERVER_ACTOR=1
-        V2_ENABLE_MONITOR_ACTOR=1
     )
 endif()

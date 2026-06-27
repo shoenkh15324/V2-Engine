@@ -1,12 +1,14 @@
 #include "cli_app.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include "core/common/log.hpp"
 #include "core/common/time.hpp"
 #include "core/common/return.hpp"
+#include "core/common/runtime_config.h"
 #include <iostream>
 #include <sstream>
 #include <cstdio>
 #include <unistd.h>
+#include <vector>
 
 #define CLR(c) (shouldColor() ? (c) : "")
 
@@ -17,13 +19,14 @@ CliApp::~CliApp(){
 }
 
 bool CliApp::open(){
-    setLogLevel(static_cast<LogLevel>(V2_DEFAULT_LOG_LEVEL));
+    cfg_ = RuntimeConfig::loadFromFile("config/v2_cli.json");
+    setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
     setLogAppName(name_);
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
 
-    if(client_.connect(V2_DEFAULT_IPC_SOCKET_PATH) != Ok){
+    if(client_.connect(cfg_.ipcSocketPath) != Ok){
         V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
         return false;
     }
@@ -40,10 +43,10 @@ int CliApp::run(const std::string& cmd){
         return 1;
     }
 
-    char buf[V2_IPC_RECV_BUFFER_SIZE];
-    int n = client_.recv(buf, sizeof(buf));
+    std::vector<char> buf(cfg_.ipcRecvBufferSize);
+    int n = client_.recv(buf.data(), buf.size());
     if(n > 0){
-        std::string resp(buf, n);
+        std::string resp(buf.data(), n);
         printResponse(resp);
         V2_LOG_INFO("%s App: received response [%s]", name_.c_str(), resp.c_str());
     }
@@ -66,21 +69,18 @@ void CliApp::printLocalHelp(){
         << CLR("\033[33m") << "  Usage:" << CLR("\033[0m") << " v2 <command>\n"
         << "\n"
         << CLR("\033[33m") << "  Commands:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "      Show engine information\n"
-        << "\n"
-        << CLR("\033[33m") << "  Options:" << CLR("\033[0m") << "\n"
         << "    " << CLR("\033[32m") << "help" << CLR("\033[0m") << "      Show this help message\n"
+        << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "      Show system information\n"
         << "    " << CLR("\033[32m") << "version" << CLR("\033[0m") << "   Show version information\n"
         << "    " << CLR("\033[32m") << "status" << CLR("\033[0m") << "    Show daemon status\n";
 }
 
 void CliApp::printLocalVersion(){
-    std::cout
-        << CLR("\033[36m\033[1m") << "  V2 Engine " << CLR("\033[0m") << V2_APP_VERSION << "\n";
+    std::cout << CLR("\033[36m\033[1m") << "  V2 Engine " << CLR("\033[0m") << V2_APP_VERSION << "\n";
 }
 
 void CliApp::printLocalStatus(){
-    std::string socketPath = V2_DEFAULT_IPC_SOCKET_PATH;
+    std::string socketPath = RuntimeConfig{}.ipcSocketPath;
     bool sockExists = (access(socketPath.c_str(), F_OK) == 0);
 
     std::cout << CLR("\033[36m\033[1m") << "  V2 Engine \342\200\224 Status" << CLR("\033[0m") << "\n";

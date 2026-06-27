@@ -1,7 +1,5 @@
 #include "ipc_server_actor.hpp"
-
-#if V2_ENABLE_IPC_SERVER_ACTOR
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/common/log.hpp"
@@ -12,8 +10,9 @@
     #include <sys/stat.h>
     #include <unistd.h>
 #endif
+#include <vector>
 
-IpcServerActor::IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath) : Actor(std::move(name), id), socketPath_(socketPath){
+IpcServerActor::IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog, int recvBufferSize) : Actor(std::move(name), id), socketPath_(socketPath), backlog_(backlog), recvBufferSize_(recvBufferSize){
     //
 }
 
@@ -27,7 +26,7 @@ void IpcServerActor::onStart(){
 }
 
 void IpcServerActor::open(){
-    if(server_.start(socketPath_) != Ok){ V2_LOG_ERROR("IpcServerActor: failed to start UDS server on %s", socketPath_.c_str());
+    if(server_.start(socketPath_, backlog_) != Ok){ V2_LOG_ERROR("IpcServerActor: failed to start UDS server on %s", socketPath_.c_str());
         return;
     }
     ::chmod(socketPath_.c_str(), 0777);
@@ -68,11 +67,11 @@ void IpcServerActor::handle(const Message& msg){
             subscribeClient(ev.conn);
         },
         [this](const IpcDataReceived& ev){
-            uint8_t buf[V2_IPC_RECV_BUFFER_SIZE];
-            ssize_t n = ::recv(ev.conn, buf, sizeof(buf), MSG_DONTWAIT);
+            std::vector<uint8_t> buf(recvBufferSize_);
+            ssize_t n = ::recv(ev.conn, buf.data(), buf.size(), MSG_DONTWAIT);
             if(n > 0){
                 V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, ev.conn);
-                std::string cmd(reinterpret_cast<char*>(buf), n);
+                std::string cmd(reinterpret_cast<char*>(buf.data()), n);
                 if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
                 handleCommand(ev.conn, cmd);
             }else if(n == 0){
@@ -122,4 +121,3 @@ void IpcServerActor::unsubscribeAll(){
         dispatcher->unsubscribe(server_.fd());
     }
 }
-#endif

@@ -1,5 +1,5 @@
 #pragma once
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include <atomic>
 #include <thread>
 #include <string>
@@ -8,7 +8,7 @@ class Dispatcher;
 
 class Worker{
 public:
-    explicit Worker(Dispatcher* dispatcher, int id, int maxBatch = V2_WORKER_MAX_BATCH);
+    explicit Worker(Dispatcher* dispatcher, int id, int maxBatch);
     ~Worker();
 
     void start();

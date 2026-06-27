@@ -1,5 +1,5 @@
 #include "timer.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include "core/common/log.hpp"
 #include <cstring>
 #include <cerrno>

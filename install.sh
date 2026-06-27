@@ -70,7 +70,7 @@ Wants=${deps}" )
 [Service]
 Type=simple
 ExecStart=${BUILD_DIR}/${bin}
-WorkingDirectory=${BUILD_DIR}
+WorkingDirectory=${PROJECT_DIR}
 Restart=always
 
 [Install]

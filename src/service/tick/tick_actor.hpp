@@ -1,8 +1,7 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 
-#if V2_ENABLE_TICK_ACTOR
 class TickActor : public Actor{
 public:
     TickActor(const std::string& name, uint64_t id, uint64_t tickMs);
@@ -18,4 +17,3 @@ public:
 private:
     uint64_t tickMs_;
 };
-#endif

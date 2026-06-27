@@ -16,6 +16,17 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/common/ring_buffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/time.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/timer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/runtime_config.cpp
+)
+
+target_compile_definitions(v2_core PUBLIC
+    V2_ENGINE_NAME="${PROJECT_NAME}"
+    V2_ENGINE_VERSION="${PROJECT_VERSION}"
+)
+
+target_link_libraries(v2_core PUBLIC
+    nlohmann_json::nlohmann_json
+    ftxui::ftxui
 )
 
 if(WIN32)

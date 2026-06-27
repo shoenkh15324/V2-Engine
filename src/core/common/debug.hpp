@@ -1,5 +1,5 @@
 #pragma once
-#include "core/common/config.h"
+#include "core/common/platform_config.h"
 #include <cstdlib>
 #include <iostream>
 

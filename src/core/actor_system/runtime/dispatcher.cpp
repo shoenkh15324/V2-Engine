@@ -11,20 +11,25 @@
     #include <sys/prctl.h>
 #endif
 
-Dispatcher::Dispatcher(int workerCount) : workerCount_(workerCount){
+Dispatcher::Dispatcher(int workerCount, int epollMaxEvents, int epollWaitTimeoutMs)
+    : workerCount_(workerCount), epollMaxEvents_(epollMaxEvents), epollWaitTimeoutMs_(epollWaitTimeoutMs)
+#if V2_PLATFORM_LINUX
+    , epollEvents_(epollMaxEvents)
+#endif
+{
     //
 }
 
 void Dispatcher::start(){
 #if V2_PLATFORM_LINUX
-    V2_ASSERT(epoll_.fd() < 0, "dispatcher needs a valid epoll fd");
+    V2_ASSERT(epoll_.fd() >= 0, "dispatcher needs a valid epoll fd");
     stopFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    V2_ASSERT(stopFd_ < 0, "eventfd() failed");
+    V2_ASSERT(stopFd_ >= 0, "eventfd() failed");
     epoll_event ev{};
     ev.events = EPOLLIN;
     ev.data.fd = stopFd_;
     int result = epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, stopFd_, &ev);
-    V2_ASSERT(result < 0, "epoll_ctl ADD stopFd failed");
+    V2_ASSERT(result >= 0, "epoll_ctl ADD stopFd failed");
 #endif
 }
 
@@ -71,17 +76,14 @@ void Dispatcher::run(){
 #if V2_PLATFORM_LINUX
     pthread_setname_np(pthread_self(), "v2-main");
     running_ = true;
-    const int maxEvents = V2_EPOLL_MAX_EVENTS;
-    epoll_event epollEvents[maxEvents];
-
     while(running_){
-        int n = epoll_.wait(epollEvents, maxEvents, V2_EPOLL_WAIT_TIMEOUT_MS);
+        int n = epoll_.wait(epollEvents_.data(), epollMaxEvents_, epollWaitTimeoutMs_);
         if(n < 0){
             if(errno == EINTR) continue;
             break;
         }
         for(int i = 0; i < n; i++){
-            if(epollEvents[i].data.fd == stopFd_){
+            if(epollEvents_[i].data.fd == stopFd_){
                 uint64_t val;
                 ssize_t r;
                 do{
@@ -89,7 +91,7 @@ void Dispatcher::run(){
                 }while(r < 0 && errno == EINTR);
                 continue;
             }
-            WatchedFd fd = epollEvents[i].data.fd;
+            WatchedFd fd = epollEvents_[i].data.fd;
             auto it = handlers_.find(fd);
             if(it != handlers_.end()){
                 it->second();
