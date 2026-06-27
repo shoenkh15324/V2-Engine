@@ -43,10 +43,10 @@
     #define V2_ENGINE_VERSION "0.1.0"
 #endif
 #ifndef V2_DEFAULT_MAILBOX_SIZE
-    #define V2_DEFAULT_MAILBOX_SIZE 128
+    #define V2_DEFAULT_MAILBOX_SIZE 512 // byte
 #endif
 #ifndef V2_WORKER_MAX_BATCH
-    #define V2_WORKER_MAX_BATCH -1
+    #define V2_WORKER_MAX_BATCH 32
 #endif
 #ifndef V2_DEFAULT_WORKER_COUNT
     #define V2_DEFAULT_WORKER_COUNT 1
@@ -62,7 +62,7 @@
 // Feature: IPC (Unix Domain Socket)
 // ============================================================================
 #ifndef V2_ENABLE_IPC_SERVER_ACTOR
-    #define V2_ENABLE_IPC_SERVER_ACTOR 1
+    #define V2_ENABLE_IPC_SERVER_ACTOR 0
 #endif
 #ifndef V2_IPC_RECV_BUFFER_SIZE
     #define V2_IPC_RECV_BUFFER_SIZE 4096
@@ -78,10 +78,23 @@
 // Feature: Tick Actor
 // ============================================================================
 #ifndef V2_ENABLE_TICK_ACTOR
-    #define V2_ENABLE_TICK_ACTOR 1
+    #define V2_ENABLE_TICK_ACTOR 0
 #endif
 #ifndef V2_DEFAULT_TICK_INTERVAL_MS
     #define V2_DEFAULT_TICK_INTERVAL_MS 100
+#endif
+
+// ============================================================================
+// Feature: Monitor Actor
+// ============================================================================
+#ifndef V2_ENABLE_MONITOR_ACTOR
+    #define V2_ENABLE_MONITOR_ACTOR 0
+#endif
+#ifndef V2_DEFAULT_MONITOR_TIMER_INTERVAL_MS
+    #define V2_DEFAULT_MONITOR_TIMER_INTERVAL_MS 100
+#endif
+#ifndef V2_DEFAULT_MONITOR_SOCKET_PATH
+    #define V2_DEFAULT_MONITOR_SOCKET_PATH "/tmp/v2_monitor.sock"
 #endif
 
 // ============================================================================
@@ -94,7 +107,7 @@
         Warn = 2,
         Error = 3,
     */
-    #define V2_DEFAULT_LOG_LEVEL 1
+    #define V2_DEFAULT_LOG_LEVEL 3
 #endif
 #ifndef V2_MAINAPP_MAINLOOP_SLEEP_MS
     #define V2_MAINAPP_MAINLOOP_SLEEP_MS 100
