@@ -1,6 +1,6 @@
-#include "epoll.hpp"
-#include "core/common/log.hpp"
-#include "core/common/return.hpp"
+#include "core/common/os/epoll.hpp"
+#include "core/common/log/log.hpp"
+#include "core/common/util/return.hpp"
 #include <unistd.h>
 #include <cerrno>
 

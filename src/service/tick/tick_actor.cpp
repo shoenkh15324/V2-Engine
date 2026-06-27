@@ -1,7 +1,7 @@
 #include "tick_actor.hpp"
-#include "core/common/log.hpp"
-#include "core/common/return.hpp"
-#include "core/common/time.hpp"
+#include "core/common/log/log.hpp"
+#include "core/common/util/return.hpp"
+#include "core/common/time/time.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
 

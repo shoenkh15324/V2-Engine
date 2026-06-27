@@ -1,5 +1,5 @@
 #pragma once
-#include "core/common/platform_config.h"
+#include "core/common/util/platform_config.h"
 #include <atomic>
 #include <chrono>
 #include <cstdint>

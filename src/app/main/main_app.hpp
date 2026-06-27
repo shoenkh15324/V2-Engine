@@ -3,7 +3,7 @@
 #include <string>
 #include <atomic>
 #include "core/actor_system/actor_system.hpp"
-#include "core/common/runtime_config.h"
+#include "core/common/config/runtime_config.h"
 
 class MainApp{
 public:

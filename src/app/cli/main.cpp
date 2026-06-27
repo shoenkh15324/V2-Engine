@@ -1,5 +1,5 @@
 #include "app/cli/cli_app.hpp"
-#include "core/common/log.hpp"
+#include "core/common/log/log.hpp"
 #include <iostream>
 #include <string>
 

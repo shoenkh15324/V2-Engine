@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
-#include "core/common/platform_config.h"
+#include "core/common/util/platform_config.h"
 
 struct RuntimeConfig{
     // Engine

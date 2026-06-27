@@ -1,5 +1,5 @@
 #include "app/main/main_app.hpp"
-#include "core/common/log.hpp"
+#include "core/common/log/log.hpp"
 
 int main(int, char**){
     V2_LOG_INFO("Project Name: %s", V2_ENGINE_NAME);

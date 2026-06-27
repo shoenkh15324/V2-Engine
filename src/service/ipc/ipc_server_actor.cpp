@@ -1,9 +1,9 @@
 #include "ipc_server_actor.hpp"
-#include "core/common/platform_config.h"
+#include "core/common/util/platform_config.h"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
-#include "core/common/log.hpp"
-#include "core/common/return.hpp"
+#include "core/common/log/log.hpp"
+#include "core/common/util/return.hpp"
 
 #if V2_PLATFORM_LINUX
     #include <sys/socket.h>

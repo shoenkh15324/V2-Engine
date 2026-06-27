@@ -1,7 +1,7 @@
 #pragma once
 #include <mutex>
 #include <condition_variable>
-#include "debug.hpp"
+#include "core/common/util/debug.hpp"
 
 class Semaphore{
 public:

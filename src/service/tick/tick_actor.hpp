@@ -1,6 +1,6 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
-#include "core/common/platform_config.h"
+#include "core/common/util/platform_config.h"
 
 class TickActor : public Actor{
 public:

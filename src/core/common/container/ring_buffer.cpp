@@ -1,6 +1,6 @@
-#include "ring_buffer.hpp"
-#include "debug.hpp"
-#include "return.hpp"
+#include "core/common/container/ring_buffer.hpp"
+#include "core/common/util/debug.hpp"
+#include "core/common/util/return.hpp"
 #include <cstring>
 #include <algorithm>
 

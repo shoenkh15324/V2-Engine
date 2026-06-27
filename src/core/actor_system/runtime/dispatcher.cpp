@@ -1,6 +1,6 @@
 #include "dispatcher.hpp"
-#include "core/common/log.hpp"
-#include "core/common/return.hpp"
+#include "core/common/log/log.hpp"
+#include "core/common/util/return.hpp"
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>

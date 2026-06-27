@@ -1,7 +1,7 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
-#include "core/common/platform_config.h"
-#include "core/common/time.hpp"
+#include "core/common/util/platform_config.h"
+#include "core/common/time/time.hpp"
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 

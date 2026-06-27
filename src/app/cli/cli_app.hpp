@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include "infra/transport/uds/uds_client.hpp"
-#include "core/common/runtime_config.h"
+#include "core/common/config/runtime_config.h"
 
 class CliApp{
 public:

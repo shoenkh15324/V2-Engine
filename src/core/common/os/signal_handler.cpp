@@ -1,5 +1,5 @@
-#include "signal_handler.hpp"
-#include "core/common/platform_config.h"
+#include "core/common/os/signal_handler.hpp"
+#include "core/common/util/platform_config.h"
 
 #if V2_PLATFORM_LINUX || V2_PLATFORM_MACOS
 #include <csignal>

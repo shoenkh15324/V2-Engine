@@ -6,11 +6,11 @@
 #include <mutex>
 #include <functional>
 #include <vector>
-#include "core/common/platform_config.h"
-#include "core/common/semaphore.hpp"
+#include "core/common/util/platform_config.h"
+#include "core/common/os/semaphore.hpp"
 
 #if V2_PLATFORM_LINUX
-#include "core/common/epoll.hpp"
+#include "core/common/os/epoll.hpp"
 #endif
 
 class ActorContext;

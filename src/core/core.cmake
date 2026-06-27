@@ -12,12 +12,12 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/worker.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/log.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/ring_buffer.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/time.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/timer.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/runtime_config.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/signal_handler.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/log/log.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/container/ring_buffer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/time/time.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/time/timer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/config/runtime_config.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/os/signal_handler.cpp
 )
 
 target_compile_definitions(v2_core PUBLIC
@@ -35,7 +35,7 @@ if(WIN32)
     #
 elseif(UNIX)
     target_sources(v2_core PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/common/epoll.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/common/os/epoll.cpp
     )
 endif()
 
