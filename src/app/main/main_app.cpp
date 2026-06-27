@@ -3,29 +3,28 @@
 #include "core/common/log.hpp"
 #include "core/common/time.hpp"
 #include "core/common/sleep.hpp"
+#include "core/common/signal_handler.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"
 #include <csignal>
 
-MainApp* MainApp::sInstance = nullptr;
-
-MainApp::MainApp(){
-    sInstance = this;
-}
+MainApp::MainApp() = default;
 
 MainApp::~MainApp(){
     close();
 }
 
 void MainApp::open(){
-    cfg_ = RuntimeConfig::loadFromFile("config/v2_main.json");
+    cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_main.json");
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
     setLogAppName(std::move(name_));
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
-    signal(SIGINT, onSignal);
-    signal(SIGTERM, onSignal);
+    //
+    auto& sig = SignalHandler::instance();
+    sig.listen(SIGINT, [this](int){ requestStop(); });
+    sig.listen(SIGTERM, [this](int){ requestStop(); });
     //
     actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs);
@@ -34,14 +33,8 @@ void MainApp::open(){
     actorSystem_->start();
 }
 
-void MainApp::onSignal(int){
-    if(sInstance){
-        sInstance->requestStop();
-    }
-}
-
 void MainApp::requestStop(){
-    isRunning_ = false;
+    isRunning_.store(false);
     V2_LOG_INFO("");
     if(actorSystem_) actorSystem_->requestStop();
 }
@@ -50,14 +43,14 @@ void MainApp::run(){
     isRunning_ = true;
     V2_LOG_INFO("%s App Run", name_.c_str());
     if(actorSystem_) actorSystem_->run();
-    while(isRunning_){
+    while(isRunning_.load()){
         Sleep::sleepMs(cfg_.mainLoopSleepMs);
     }
 }
 
 void MainApp::close(){
     V2_LOG_INFO("%s App Close", name_.c_str());
-    isRunning_ = false;
+    isRunning_.store(false);
     if(actorSystem_) actorSystem_->stop();
     actorSystem_.reset();
 }

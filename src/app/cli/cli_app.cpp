@@ -19,7 +19,7 @@ CliApp::~CliApp(){
 }
 
 bool CliApp::open(){
-    cfg_ = RuntimeConfig::loadFromFile("config/v2_cli.json");
+    cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_cli.json");
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
     setLogAppName(name_);
     V2_LOG_INFO("%s App Open", name_.c_str());
