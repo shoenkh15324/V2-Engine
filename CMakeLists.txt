@@ -12,6 +12,14 @@ include(${CMAKE_CURRENT_LIST_DIR}/src/infra/infra.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/service/service.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
 
+# Fetch
+include(FetchContent)
+FetchContent_Declare(ftxui
+    GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
+    GIT_TAG v7.0.0
+)
+FetchContent_MakeAvailable(ftxui)
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()

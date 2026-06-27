@@ -62,7 +62,7 @@
 // Feature: IPC (Unix Domain Socket)
 // ============================================================================
 #ifndef V2_ENABLE_IPC_SERVER_ACTOR
-    #define V2_ENABLE_IPC_SERVER_ACTOR 0
+    #define V2_ENABLE_IPC_SERVER_ACTOR 1
 #endif
 #ifndef V2_IPC_RECV_BUFFER_SIZE
     #define V2_IPC_RECV_BUFFER_SIZE 4096
@@ -78,7 +78,7 @@
 // Feature: Tick Actor
 // ============================================================================
 #ifndef V2_ENABLE_TICK_ACTOR
-    #define V2_ENABLE_TICK_ACTOR 0
+    #define V2_ENABLE_TICK_ACTOR 1
 #endif
 #ifndef V2_DEFAULT_TICK_INTERVAL_MS
     #define V2_DEFAULT_TICK_INTERVAL_MS 100
@@ -88,7 +88,7 @@
 // Feature: Monitor Actor
 // ============================================================================
 #ifndef V2_ENABLE_MONITOR_ACTOR
-    #define V2_ENABLE_MONITOR_ACTOR 0
+    #define V2_ENABLE_MONITOR_ACTOR 1
 #endif
 #ifndef V2_DEFAULT_MONITOR_TIMER_INTERVAL_MS
     #define V2_DEFAULT_MONITOR_TIMER_INTERVAL_MS 100

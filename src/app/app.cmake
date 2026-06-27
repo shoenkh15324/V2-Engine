@@ -4,6 +4,7 @@ message(STATUS "Configuring App Layer")
 
 option(BUILD_MAIN_APP "Build main app" ON)
 option(BUILD_CLI_APP "Build cli app" ON)
+option(BUILD_TUI_APP "Build tui app" ON)
 
 if(BUILD_MAIN_APP)
     add_executable(v2_main
@@ -16,6 +17,9 @@ if(BUILD_MAIN_APP)
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_main PRIVATE
         V2_APP_VERSION="0.0.5"
+        V2_DEFAULT_LOG_LEVEL=1
+        V2_ENABLE_IPC_SERVER_ACTOR=1
+        V2_ENABLE_TICK_ACTOR=1
         V2_DEFAULT_WORKER_COUNT=4
         V2_MAINAPP_MAINLOOP_SLEEP_MS=100
     )
@@ -32,6 +36,27 @@ if(BUILD_CLI_APP)
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_cli PRIVATE
         V2_APP_VERSION="0.0.2"
-        V2_DEFAULT_LOG_LEVEL=3
+        V2_ENABLE_IPC_SERVER_ACTOR=1
+        V2_DEFAULT_MAILBOX_SIZE=32
+        V2_WORKER_MAX_BATCH=8
+    )
+endif()
+
+if(BUILD_TUI_APP)
+    add_executable(v2_tui
+        ${CMAKE_CURRENT_LIST_DIR}/tui/main.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/tui/tui_app.cpp
+    )
+    target_include_directories(v2_tui PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/../../src
+    )
+    target_link_libraries(v2_tui PRIVATE
+        v2_service v2_core v2_infra 
+        ftxui::ftxui
+    )
+    target_compile_definitions(v2_tui PRIVATE
+        V2_APP_VERSION="0.0.1"
+        V2_ENABLE_IPC_SERVER_ACTOR=1
+        V2_ENABLE_MONITOR_ACTOR=1
     )
 endif()

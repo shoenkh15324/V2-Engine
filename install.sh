@@ -115,5 +115,6 @@ fi
 
 echo "==> Creating symlink..."
 sudo ln -sf "$BUILD_DIR/v2_cli" /usr/local/bin/v2
+sudo ln -sf "$BUILD_DIR/v2_tui" /usr/local/bin/v2_tui
 
 echo "==> Install Complete!"
