@@ -6,6 +6,7 @@
 #include "core/common/os/signal_handler.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"
+#include "service/monitor/monitor_actor.hpp"
 #include <csignal>
 
 MainApp::MainApp() = default;
@@ -29,6 +30,7 @@ void MainApp::open(){
     actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs);
     if(cfg_.enableIpcServer) actorSystem_->createActor<IpcServerActor>("ipc_server", cfg_.mailboxSize, cfg_.ipcSocketPath, cfg_.udsBacklog, cfg_.ipcRecvBufferSize);
+    if(cfg_.enableMonitor) actorSystem_->createActor<MonitorActor>("monitor", cfg_.mailboxSize, cfg_.monitorSocketPath, cfg_.monitorBacklog, cfg_.monitorRecvBufferSize, cfg_.monitorPollIntervalMs);
     //
     actorSystem_->start();
 }

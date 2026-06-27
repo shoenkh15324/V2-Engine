@@ -2,6 +2,7 @@
 #include <variant>
 #include "tick_messages.hpp"
 #include "ipc_messages.hpp"
+#include "monitor_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 
@@ -16,5 +17,9 @@ using Message = std::variant<
     Tick,
     // Ipc
     IpcNewConnection,
-    IpcDataReceived
+    IpcDataReceived,
+    // Monitor
+    MonitorPoll,
+    MonitorNewConnection,
+    MonitorClientDisconnected
 >;

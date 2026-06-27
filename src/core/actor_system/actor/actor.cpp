@@ -61,3 +61,11 @@ void Actor::cancelTimer(int timerId){
     actorCtx_->scheduler()->cancel(timerId);
     timerIds_.erase(timerId);
 }
+
+size_t Actor::mailboxCount() const {
+    return actorCtx_ ? actorCtx_->mailboxCount() : 0;
+}
+
+size_t Actor::mailboxCapacity() const {
+    return actorCtx_ ? actorCtx_->mailboxCapacity() : 0;
+}

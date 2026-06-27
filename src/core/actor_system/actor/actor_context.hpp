@@ -26,6 +26,9 @@ public:
     IActorRegistry* actorRegistry() const { return actorRegistry_; }
     Dispatcher* dispatcher() const { return dispatcher_; }
 
+    size_t mailboxCount() const;
+    size_t mailboxCapacity() const;
+
 private:
     std::unique_ptr<Actor> actor_;
     Mailbox<Message> mailbox_;

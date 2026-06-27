@@ -29,6 +29,9 @@ public:
     int startTimer(Message msg, uint64_t delayMs, bool repeating);
     void cancelTimer(int timerId);
 
+    size_t mailboxCount() const;
+    size_t mailboxCapacity() const;
+
     const std::string& name() const { return name_; }
     uint64_t id() const { return id_; }
 

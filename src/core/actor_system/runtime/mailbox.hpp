@@ -4,7 +4,7 @@
 #include <mutex>
 
 template <typename T>
-class Mailbox {
+class Mailbox{
 public:
     explicit Mailbox(size_t size) : buffer_(size), capacity_(size), count_(0), head_(0), tail_(0){}
 

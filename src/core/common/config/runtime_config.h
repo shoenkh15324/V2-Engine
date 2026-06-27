@@ -9,8 +9,6 @@ struct RuntimeConfig{
     int workerCount = 1;
     int workerMaxBatch = 32;
     int mainLoopSleepMs = 1000;
-
-    // Mailbox
     int mailboxSize = 512;
 
     // Tick
@@ -21,6 +19,8 @@ struct RuntimeConfig{
     bool enableMonitor = false;
     std::string monitorSocketPath = "/tmp/v2_monitor.sock";
     int monitorPollIntervalMs = 100;
+    int monitorRecvBufferSize = 4096;
+    int monitorBacklog = 5;
 
 #if V2_PLATFORM_LINUX
     // Epoll

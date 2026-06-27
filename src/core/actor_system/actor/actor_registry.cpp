@@ -30,3 +30,10 @@ Actor* ActorRegistry::findById(uint64_t id) const {
     auto it = byId_.find(id);
     return (it != byId_.end()) ? it->second : nullptr;
 }
+
+void ActorRegistry::forEachActor(const std::function<void(Actor*)>& callback) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for(auto& [id, actor] : byId_){
+        callback(actor);
+    }
+}

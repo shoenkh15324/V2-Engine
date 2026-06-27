@@ -22,6 +22,7 @@ public:
     void clear();
     Actor* findByName(const std::string& name) const override;
     Actor* findById(uint64_t id) const override;
+    void forEachActor(const std::function<void(Actor*)>& callback) const override;
 
 private:
     mutable std::mutex mutex_;

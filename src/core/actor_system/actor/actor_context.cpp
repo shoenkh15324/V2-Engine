@@ -38,3 +38,10 @@ void ActorContext::run(int maxBatch){
     }
 }
 
+size_t ActorContext::mailboxCount() const {
+    return mailbox_.count();
+}
+
+size_t ActorContext::mailboxCapacity() const {
+    return mailbox_.capacity();
+}
