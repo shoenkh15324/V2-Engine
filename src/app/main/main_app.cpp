@@ -44,7 +44,7 @@ void MainApp::requestStop(){
 }
 
 void MainApp::run(){
-    isRunning_ = true;
+    isRunning_.store(true);
     V2_LOG_INFO("%s App Run", name_.c_str());
     if(actorSystem_) actorSystem_->run();
     while(isRunning_.load()){

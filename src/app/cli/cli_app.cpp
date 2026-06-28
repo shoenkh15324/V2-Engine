@@ -8,7 +8,7 @@
 #include <vector>
 #include <cstdio>
 
-#if !V2_PLATFORM_WINDOWS
+#if V2_PLATFORM_LINUX
     #include <unistd.h>
 #endif
 
@@ -20,24 +20,25 @@ CliApp::~CliApp(){
     close();
 }
 
-bool CliApp::open(){
+int CliApp::open(){
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_cli.json");
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
-    setLogAppName(name_);
+    setLogAppName(std::move(name_));
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
-#if !V2_PLATFORM_WINDOWS
-    if(client_.connect(cfg_.ipcSocketPath) != Ok){
-        V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
-        return false;
+    //
+#if V2_PLATFORM_LINUX
+    if(client_.connect(cfg_.ipcSocketPath) != Ok){ V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
+        return Fail;
     }
     V2_LOG_INFO("%s App: connected to main app", name_.c_str());
 #else
     V2_LOG_ERROR("%s App: CLI not supported on Windows yet", name_.c_str());
-    return false;
+    return Fail;
 #endif
-    return true;
+    //
+    return Ok;
 }
 
 int CliApp::run(const std::string& cmd){
@@ -89,7 +90,8 @@ void CliApp::printLocalHelp(){
         << "    " << CLR("\033[32m") << "help" << CLR("\033[0m") << "      Show this help message\n"
         << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "      Show system information\n"
         << "    " << CLR("\033[32m") << "version" << CLR("\033[0m") << "   Show version information\n"
-        << "    " << CLR("\033[32m") << "status" << CLR("\033[0m") << "    Show daemon status\n";
+        << "    " << CLR("\033[32m") << "status" << CLR("\033[0m") << "    Show daemon status\n"
+        << "    " << CLR("\033[32m") << "monitor" << CLR("\033[0m") << "   Open TUI monitor\n";
 }
 
 void CliApp::printLocalVersion(){
@@ -133,6 +135,21 @@ void CliApp::printLocalStatus(){
     std::cout << "  V2 Engine \342\200\224 Status\n"
               << "    Daemon: not supported on Windows yet\n";
 #endif
+}
+
+int CliApp::launchMonitor(char** argv){
+#if V2_PLATFORM_LINUX
+    std::string self = argv[0];
+    auto seq = self.rfind('/');
+    if(seq != std::string::npos){
+        std::string tuiPath = self.substr(0, seq + 1) + "v2_tui";
+        execv(tuiPath.c_str(), argv);
+    }
+    execvp("v2_tui", argv);
+#endif
+    V2_LOG_ERROR("Cli App: failed to launch v2_tui");
+    std::cerr << "Error: failed to launch v2_tui (is it installed?)\n";
+    return Ok;
 }
 
 void CliApp::printResponse(const std::string& resp){

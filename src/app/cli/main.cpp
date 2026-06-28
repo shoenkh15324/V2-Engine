@@ -22,9 +22,12 @@ int main(int argc, char** argv){
         CliApp::printLocalStatus();
         return 0;
     }
+    if(cmd == "--monitor" || cmd == "monitor"){
+        return CliApp::launchMonitor(argv);;
+    }
 
     CliApp app;
-    if(!app.open()){
+    if(app.open()){
         V2_LOG_ERROR("Cli App: failed to open");
         return 1;
     }

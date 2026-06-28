@@ -11,21 +11,29 @@ class CliApp{
 public:
     CliApp();
     ~CliApp();
-    bool open();
+
+    CliApp(const CliApp&) = delete;
+    CliApp& operator=(const CliApp&) = delete;
+    CliApp(CliApp&&) = delete;
+    CliApp& operator=(CliApp&&) = delete;
+
+    int open();
     int run(const std::string& cmd);
     void close();
 
     static void printLocalHelp();
     static void printLocalVersion();
     static void printLocalStatus();
+    static int launchMonitor(char** argv);
 
 private:
     void printResponse(const std::string& response);
     static bool shouldColor();
 
     RuntimeConfig cfg_;
+    std::string name_ = "Cli";
+
 #if V2_PLATFORM_LINUX
     UdsClient client_;
-#endif
-    std::string name_ = "Cli";
+#endif    
 };
