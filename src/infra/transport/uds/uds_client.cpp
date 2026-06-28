@@ -67,22 +67,13 @@ int UdsClient::recv(void* data, size_t size){
     if(clientFd_ < 0){ V2_LOG_ERROR("Invalid Arg");
         return InvalidArg;
     }
-    uint8_t* ptr = static_cast<uint8_t*>(data);
-    size_t received = 0;
-    while(received < size){
-        ssize_t n = ::recv(clientFd_, ptr + received, size - received, 0);
-        if(n == 0){
-            return static_cast<int>(received);
-        }
-        if(n < 0){
-            if(errno == EINTR){
-                continue;
-            }
-            return Fail;
-        }
-        received += static_cast<size_t>(n);
+    ssize_t n = ::recv(clientFd_, data, size, 0);
+    if(n == 0) return 0;
+    if(n < 0){
+        if(errno == EINTR) return 0;
+        return Fail;
     }
-    return static_cast<int>(received);
+    return static_cast<int>(n);
 }
 
 void UdsClient::disconnect(){

@@ -38,6 +38,7 @@ if(BUILD_TUI_APP)
     add_executable(v2_tui
         ${CMAKE_CURRENT_LIST_DIR}/tui/main.cpp
         ${CMAKE_CURRENT_LIST_DIR}/tui/tui_app.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/tui/render_util.cpp
     )
     target_include_directories(v2_tui PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/../../src

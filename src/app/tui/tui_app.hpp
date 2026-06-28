@@ -1,9 +1,14 @@
 #pragma once
 #include "core/common/util/platform_config.h"
 #include "core/common/config/runtime_config.h"
+#include "service/monitor/monitor_data.hpp"
 #include <string>
 #include <atomic>
 #include <memory>
+#include <thread>
+#include <mutex>
+#include <vector>
+
 
 #include "ftxui/component/app.hpp"
 #include "ftxui/component/component.hpp"
@@ -28,9 +33,15 @@ public:
 
 private:
     void requestStop();
+    void recvLoop();
+    void handleLine(const std::string& line);
     ftxui::Element render();
 
     RuntimeConfig cfg_;
+    MonitorSnapshot snapshot_, pendingSnapshot_;
+    mutable std::mutex mutex_;
+    std::string recvBuffer_;
+    std::thread recvThread_;
     std::string name_ = "Tui";
     std::atomic<bool> isRunning_{false};
     std::unique_ptr<ftxui::App> screen_;

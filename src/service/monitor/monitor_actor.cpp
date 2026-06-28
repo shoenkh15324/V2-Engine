@@ -5,7 +5,7 @@
 #include "core/common/util/return.hpp"
 #include <vector>
 #include <fstream>
-#include <sstream>
+#include <ctime>
 
 #if V2_PLATFORM_LINUX
 #include <sys/socket.h>
@@ -40,7 +40,7 @@ void MonitorActor::handle(const Message& msg){
             snap.clientCount = static_cast<int>(connections_.size());
 
             actorContext()->actorRegistry()->forEachActor([&](Actor* actor){
-                MonitorSnapshot::ActorInfo actorInfo;
+                ActorInfo actorInfo;
                 actorInfo.name = actor->name();
                 actorInfo.id = actor->id();
                 actorInfo.mailboxCount = actor->mailboxCount();
@@ -69,22 +69,6 @@ void MonitorActor::handle(const Message& msg){
         },
         [](const auto&){}
     }, msg);
-}
-
-std::string MonitorActor::serializeSnapshot(const MonitorSnapshot& snap){
-    std::string data;
-    data += "timestamp:" + std::to_string(snap.timestampMs) + "\n";
-    data += "clients:" + std::to_string(snap.clientCount) + "\n";
-    for(const auto& actor : snap.actors){
-        data += "actor:" + actor.name +
-                " id:" + std::to_string(actor.id) +
-                " mb:" + std::to_string(actor.mailboxCount) +
-                "/" + std::to_string(actor.mailboxCapacity) + "\n";
-    }
-    data += "mem_rss:" + std::to_string(snap.resources.memoryRssKb) + "\n";
-    data += "mem_total:" + std::to_string(snap.resources.memoryTotalKb) + "\n";
-    data += "cpu:" + std::to_string(snap.resources.cpuPercent) + "\n";
-    return data;
 }
 
 void MonitorActor::subscribeListener(){
@@ -125,30 +109,37 @@ void MonitorActor::unsubscribeAll(){
     }
 }
 
-void MonitorActor::collectSystemResources(MonitorSnapshot::SystemResources& resources){
+void MonitorActor::collectSystemResources(SystemResources& resources){
 #if V2_PLATFORM_LINUX
     std::ifstream status("/proc/self/status");
     std::string line;
     while(std::getline(status, line)){
-        if(line.compare(0, 7, "VmRss:") == 0){
-            resources.memoryRssKb = std::stoul(line.substr(7));
-        }else if(line.compare(0, 8, "VmSize:") == 0){
-            resources.memoryTotalKb = std::stoul(line.substr(8));
+        if(line.compare(0, 6, "VmRSS:") == 0){
+            resources.memoryRssKb = std::stoul(line.substr(6));
+        }else if(line.compare(0, 7, "VmSize:") == 0){
+            resources.memoryTotalKb = std::stoul(line.substr(7));
         }
     }
-    std::ifstream stat("/proc/self/stat");
-    uint64_t utime, stime;
-    std::string ignore;
-    for(int i = 0; i < 14; i++){
-        if(i == 0){
-            stat >> ignore;
-        }else if(i == 1){
-            std::getline(stat, ignore, ')');
-        }else{
-            stat >> ignore;
+
+    struct timespec ts;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
+    uint64_t cpuNs = (uint64_t)ts.tv_sec * 1000000000 + (uint64_t)ts.tv_nsec;
+    uint64_t nowWall = Time::nowMs();
+
+    cpuHistory_.push_back({cpuNs, nowWall});
+    while(cpuHistory_.size() > 1 && nowWall - cpuHistory_.front().wallMs > kCpuWindowMs)
+        cpuHistory_.pop_front();
+
+    if(cpuHistory_.size() >= 2){
+        auto& first = cpuHistory_.front();
+        auto& last = cpuHistory_.back();
+        uint64_t deltaCpuNs = last.cpuNs - first.cpuNs;
+        uint64_t deltaWall = last.wallMs - first.wallMs;
+        if(deltaWall > 0){
+            resources.cpuPercent = (double)deltaCpuNs * 100.0 / (deltaWall * 1000000.0);
+            if(resources.cpuPercent > 100.0f) resources.cpuPercent = 100.0f;
         }
     }
-    (void)utime; (void)stime;
 #endif
 }
 

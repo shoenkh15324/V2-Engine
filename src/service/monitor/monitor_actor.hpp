@@ -2,28 +2,12 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/util/platform_config.h"
 #include "core/common/time/time.hpp"
+#include "service/monitor/monitor_data.hpp"
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 #include <vector>
 #include <string>
-
-struct MonitorSnapshot{
-    struct ActorInfo{
-        std::string name;
-        uint64_t id;
-        size_t mailboxCount;
-        size_t mailboxCapacity;
-    };
-    struct SystemResources{
-        uint64_t memoryRssKb = 0;
-        uint64_t memoryTotalKb = 0;
-        float cpuPercent = 0.0;
-    };
-    uint64_t timestampMs;
-    std::vector<ActorInfo> actors;
-    SystemResources resources;
-    int clientCount;
-};
+#include <deque>
 
 #if !V2_PLATFORM_WINDOWS
 
@@ -44,8 +28,7 @@ private:
     void subscribeListener();
     void subscribeClient(ConnHandle conn);
     void unsubscribeAll();
-    void collectSystemResources(MonitorSnapshot::SystemResources& resources);
-    std::string serializeSnapshot(const MonitorSnapshot& snap);
+    void collectSystemResources(SystemResources& resources);
 
     UdsServer server_;
     std::string socketPath_;
@@ -54,8 +37,9 @@ private:
     int pollIntervalMs_;
     std::unordered_set<ConnHandle> connections_;
     Time::TimeStamp startTime_;
-    uint64_t lastCpuTime_ = 0;
-    uint64_t lastWallTime_ = 0;
+    struct CpuSample { uint64_t cpuNs; uint64_t wallMs; };
+    std::deque<CpuSample> cpuHistory_;
+    static constexpr uint64_t kCpuWindowMs = 1000;
 };
 
 #endif
