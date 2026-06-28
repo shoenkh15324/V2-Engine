@@ -123,17 +123,22 @@ ftxui::Element TuiApp::render(){
         snap = snapshot_;
     }
 
-    auto mainContent = vbox({
-        renderActorList(snap.actors) | flex,
+    auto& r = snap.resources;
+    float memPct = (r.memoryTotalKb > 0)
+        ? ((float)r.memoryRssKb / (float)r.memoryTotalKb * 100.0f) : 0.0f;
+
+    auto leftPanel = renderActorList(snap.actors) | flex;
+    auto rightPanel = vbox({
+        renderProcessInfo(r),
         separator(),
-        renderSystemResources(snap.resources),
-    });
+        renderSystemResources(r) | flex,
+    }) | flex;
 
     if(screen_) screen_->RequestAnimationFrame();
     return vbox({
-        renderHeader(client_.fd() >= 0, snap.actors.size(), snap.clientCount) | borderRounded,
+        renderHeader(client_.fd() >= 0, snap.actors.size(), snap.clientCount, r.uptimeMs, r.cpuPercent, memPct) | borderRounded,
         separator(),
-        mainContent | flex,
+        hbox({ leftPanel, separator(), rightPanel }) | flex,
         separator(),
         renderFooter() | borderRounded,
     });

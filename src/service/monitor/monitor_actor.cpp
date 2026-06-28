@@ -111,6 +111,8 @@ void MonitorActor::unsubscribeAll(){
 
 void MonitorActor::collectSystemResources(SystemResources& resources){
 #if V2_PLATFORM_LINUX
+    resources.uptimeMs = static_cast<uint64_t>(Time::toMs(Time::now() - startTime_));
+
     std::ifstream status("/proc/self/status");
     std::string line;
     while(std::getline(status, line)){
@@ -118,6 +120,28 @@ void MonitorActor::collectSystemResources(SystemResources& resources){
             resources.memoryRssKb = std::stoul(line.substr(6));
         }else if(line.compare(0, 7, "VmSize:") == 0){
             resources.memoryTotalKb = std::stoul(line.substr(7));
+        }else if(line.compare(0, 8, "Threads:") == 0){
+            resources.threadCount = std::stoul(line.substr(8));
+        }else if(line.compare(0, 7, "VmPeak:") == 0){
+            resources.vmPeakKb = std::stoul(line.substr(7));
+        }else if(line.compare(0, 6, "VmHWM:") == 0){
+            resources.vmHwmKb = std::stoul(line.substr(6));
+        }else if(line.compare(0, 7, "VmSwap:") == 0){
+            resources.vmSwapKb = std::stoul(line.substr(7));
+        }
+    }
+
+    std::ifstream loadavg("/proc/loadavg");
+    if(loadavg){
+        loadavg >> resources.loadAvg1 >> resources.loadAvg5 >> resources.loadAvg15;
+    }
+
+    std::ifstream meminfo("/proc/meminfo");
+    while(std::getline(meminfo, line)){
+        if(line.compare(0, 10, "MemTotal:") == 0){
+            resources.sysMemTotalKb = std::stoull(line.substr(10));
+        }else if(line.compare(0, 13, "MemAvailable:") == 0){
+            resources.sysMemAvailKb = std::stoull(line.substr(13));
         }
     }
 
