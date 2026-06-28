@@ -16,7 +16,7 @@ if(BUILD_MAIN_APP)
     )
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_main PRIVATE
-        V2_APP_VERSION="0.2.0"
+        V2_APP_VERSION="0.2.1"
     )
 endif()
 
@@ -30,7 +30,7 @@ if(BUILD_CLI_APP)
     )
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_cli PRIVATE
-        V2_APP_VERSION="0.0.2"
+        V2_APP_VERSION="0.0.3"
     )
 endif()
 
@@ -45,6 +45,6 @@ if(BUILD_TUI_APP)
     )
     target_link_libraries(v2_tui PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_tui PRIVATE
-        V2_APP_VERSION="0.0.1"
+        V2_APP_VERSION="0.1.0"
     )
 endif()
