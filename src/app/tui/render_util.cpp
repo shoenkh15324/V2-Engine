@@ -4,23 +4,24 @@
 #include <sstream>
 #include <iomanip>
 #include <unistd.h>
+#include <thread>
 #include <ftxui/screen/terminal.hpp>
 
-namespace {
-
-// Soft pastel color palette
+namespace{
+// Clear color palette (muted shell, crisp data)
 ftxui::Color cCyan, cGreen, cYellow, cRed, cBlue, cWhite, cDim, cGaugeBg;
 std::once_flag colorInitFlag;
+
 void initColors(){
     std::call_once(colorInitFlag, []{
-        cCyan    = ftxui::Color::RGB(153, 229, 229);
-        cGreen   = ftxui::Color::RGB(153, 255, 153);
-        cYellow  = ftxui::Color::RGB(255, 255, 153);
-        cRed     = ftxui::Color::RGB(255, 153, 153);
-        cBlue    = ftxui::Color::RGB(153, 204, 255);
-        cWhite   = ftxui::Color::RGB(230, 230, 230);
-        cDim     = ftxui::Color::RGB(192, 192, 192);
-        cGaugeBg = ftxui::Color::RGB(102, 102, 110);
+        cCyan = ftxui::Color::RGB(153, 229, 229);
+        cGreen = ftxui::Color::RGB(153, 255, 153);
+        cYellow = ftxui::Color::RGB(255, 255, 153);
+        cRed = ftxui::Color::RGB(255, 153, 153);
+        cBlue = ftxui::Color::RGB(153, 204, 255);
+        cWhite = ftxui::Color::RGB(249, 249, 249);
+        cDim = ftxui::Color::RGB(160, 160, 160);
+        cGaugeBg = ftxui::Color::RGB(94, 94, 102);
     });
 }
 
@@ -68,8 +69,10 @@ ftxui::Element cellGauge(float progress, ftxui::Color col, int cells){
     for(int i = 0; i < filled; ++i) filledStr += "■";
     for(int i = filled; i < cells; ++i) emptyStr += "□";
     Elements elems;
+    elems.push_back(text(" "));
     if(filled > 0) elems.push_back(text(filledStr) | color(col));
     if(filled < cells) elems.push_back(text(emptyStr) | color(cGaugeBg));
+    elems.push_back(text(" "));
     return hbox(std::move(elems));
 }
 
@@ -97,29 +100,29 @@ ftxui::Element renderActorList(const std::vector<ActorInfo>& actors){
     int cells = gaugeCells();
     Elements actorRows;
     for(const auto& a : actors){
-        float progress = a.mailboxCapacity > 0
-            ? (float)a.mailboxCount / (float)a.mailboxCapacity : 0.0f;
+        float progress = (a.mailboxCapacity > 0) ? ((float)a.mailboxCount / (float)a.mailboxCapacity) : 0.0f;
 
         auto bar = cellGauge(progress, gaugeColor(progress), cells);
-        float mbPct = progress * 100.0f;
+        float mailboxPercent = progress * 100.0f;
 
-        auto mbText = text(std::to_string(a.mailboxCount) + "/"
-                          + std::to_string(a.mailboxCapacity)
-                          + " (" + fmtPct(mbPct) + "%) ") | color(cDim);
+        auto mailboxText = hbox({
+            text(" " + std::to_string(a.mailboxCount) + "/" + std::to_string(a.mailboxCapacity) + " "),
+            text("(" + fmtPct(mailboxPercent) + "%) ") | color(gaugeColor(progress)),
+        });
 
         auto statusColor = (a.mailboxCount > 0) ? cGreen : cDim;
-        auto statusIcon  = (a.mailboxCount > 0) ? " ●" : " ○";
+        auto statusIcon = (a.mailboxCount > 0) ? " ● " : " ○ ";
         auto statusLabel = (a.mailboxCount > 0) ? "Active" : "Idle";
 
         actorRows.push_back(
             hbox({
                 text("  " + std::to_string(a.id) + "  ") | color(cBlue),
                 separator(),
-                text(" " + a.name + " ") | bold | color(cWhite) | size(WIDTH, GREATER_THAN, 14),
+                text(" " + a.name + " ") | color(cWhite) | size(WIDTH, GREATER_THAN, 14),
                 separator(),
                 bar | flex,
                 separator(),
-                mbText,
+                mailboxText,
                 separator(),
                 text(statusIcon) | color(statusColor),
                 text(statusLabel) | color(statusColor) | size(WIDTH, GREATER_THAN, 6),
@@ -150,7 +153,9 @@ ftxui::Element renderSystemResources(const SystemResources& res){
     float rssMb = (float)res.memoryRssKb / 1024.0f;
     float totalMb = (float)res.memoryTotalKb / 1024.0f;
 
-    float loadFrac = res.loadAvg1 / 8.0f;
+    unsigned int nproc = std::thread::hardware_concurrency();
+    if(nproc == 0) nproc = 1;
+    float loadFrac = res.loadAvg1 / nproc;
     if(loadFrac > 1.0f) loadFrac = 1.0f;
 
     float sysMemFrac = (res.sysMemTotalKb > 0)
@@ -158,27 +163,41 @@ ftxui::Element renderSystemResources(const SystemResources& res){
     float sysTotalMb = (float)res.sysMemTotalKb / 1024.0f;
     float sysAvailMb = (float)res.sysMemAvailKb / 1024.0f;
 
-    auto sysRow = [&](const std::string& label, ftxui::Element gauge, const std::string& value){
+    auto sysRow = [&](const std::string& label, ftxui::Element gauge, ftxui::Element value){
         return hbox({
             text(" " + label + " ") | bold | size(WIDTH, GREATER_THAN, 6) | color(cCyan),
             separator(),
             std::move(gauge),
             separator(),
             filler(),
-            text(" " + value + " ") | color(cWhite),
+            std::move(value),
         });
     };
 
     return window(
         text(" System Resources ") | bold | color(cCyan),
         vbox({
-            sysRow("CPU", cellGauge(cpuFrac, gaugeColor(cpuFrac), cells), fmtPct(res.cpuPercent) + "%"),
+            sysRow("CPU", cellGauge(cpuFrac, gaugeColor(cpuFrac), cells), text(" " + fmtPct(res.cpuPercent) + "% ") | color(gaugeColor(cpuFrac))),
             separator(),
-            sysRow("MEM", cellGauge(memFrac, gaugeColor(memFrac), cells), fmtPct(rssMb) + " / " + fmtPct(totalMb) + " MB (" + fmtPct(memFrac * 100.0f) + "%)"),
+            sysRow("MEM", cellGauge(memFrac, gaugeColor(memFrac), cells), hbox({
+                text(" " + fmtPct(rssMb) + " / " + fmtPct(totalMb) + " MB ") | color(cWhite),
+                text("(" + fmtPct(memFrac * 100.0f) + "%) ") | color(gaugeColor(memFrac)),
+            })),
             separator(),
-            sysRow("SYS", cellGauge(sysMemFrac, cBlue, cells), fmtPct(sysTotalMb - sysAvailMb) + " / " + fmtPct(sysTotalMb) + " MB (" + fmtPct(sysMemFrac * 100.0f) + "%)"),
+            sysRow("SYS", cellGauge(sysMemFrac, gaugeColor(sysMemFrac), cells), hbox({
+                text(" " + fmtPct(sysTotalMb - sysAvailMb) + " / " + fmtPct(sysTotalMb) + " MB ") | color(cWhite),
+                text("(" + fmtPct(sysMemFrac * 100.0f) + "%) ") | color(gaugeColor(sysMemFrac)),
+            })),
             separator(),
-            sysRow("LOAD", cellGauge(loadFrac, cBlue, cells), fmtPct(res.loadAvg1) + " / " + fmtPct(res.loadAvg5) + " / " + fmtPct(res.loadAvg15)),
+            sysRow("LOAD", cellGauge(loadFrac, gaugeColor(loadFrac), cells), hbox({
+                text(" 1m:" + fmtPct(res.loadAvg1 / nproc * 100.0f) + "% ") | color(gaugeColor(res.loadAvg1 / nproc)),
+                separator(),
+                text(" 5m:" + fmtPct(res.loadAvg5 / nproc * 100.0f) + "% ") | color(gaugeColor(res.loadAvg5 / nproc)),
+                separator(),
+                text(" 15m:" + fmtPct(res.loadAvg15 / nproc * 100.0f) + "% ") | color(gaugeColor(res.loadAvg15 / nproc)),
+                separator(),
+                text(" " + std::to_string(nproc) + " cores ") | color(cWhite),
+            })),
         })
     );
 }

@@ -88,8 +88,8 @@ void MonitorActor::collectSystemResources(SystemResources& resources){
 
     std::ifstream meminfo("/proc/meminfo");
     while(std::getline(meminfo, line)){
-        if(line.compare(0, 10, "MemTotal:") == 0){
-            resources.sysMemTotalKb = std::stoull(line.substr(10));
+        if(line.compare(0, 9, "MemTotal:") == 0){
+            resources.sysMemTotalKb = std::stoull(line.substr(9));
         }else if(line.compare(0, 13, "MemAvailable:") == 0){
             resources.sysMemAvailKb = std::stoull(line.substr(13));
         }

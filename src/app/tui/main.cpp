@@ -6,5 +6,5 @@ int main(int argc, char** argv){
     TuiApp app;
     if(app.open() != Ok) return 1;
     app.run();
-    return app.close();
+    return 0;
 }

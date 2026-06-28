@@ -77,22 +77,22 @@ bool parseSnapshotLine(const std::string& line, MonitorSnapshot& snap){
             r.uptimeMs = std::stoull(line.substr(10));
         }else if(line.compare(0, 8, "threads:") == 0){
             r.threadCount = std::stoull(line.substr(8));
-        }else if(line.compare(0, 10, "vm_peak_kb:") == 0){
-            r.vmPeakKb = std::stoull(line.substr(10));
-        }else if(line.compare(0, 9, "vm_hwm_kb:") == 0){
-            r.vmHwmKb = std::stoull(line.substr(9));
-        }else if(line.compare(0, 10, "vm_swap_kb:") == 0){
-            r.vmSwapKb = std::stoull(line.substr(10));
+        }else if(line.compare(0, 11, "vm_peak_kb:") == 0){
+            r.vmPeakKb = std::stoull(line.substr(11));
+        }else if(line.compare(0, 10, "vm_hwm_kb:") == 0){
+            r.vmHwmKb = std::stoull(line.substr(10));
+        }else if(line.compare(0, 11, "vm_swap_kb:") == 0){
+            r.vmSwapKb = std::stoull(line.substr(11));
         }else if(line.compare(0, 10, "load_avg1:") == 0){
             r.loadAvg1 = std::stof(line.substr(10));
         }else if(line.compare(0, 10, "load_avg5:") == 0){
             r.loadAvg5 = std::stof(line.substr(10));
         }else if(line.compare(0, 11, "load_avg15:") == 0){
             r.loadAvg15 = std::stof(line.substr(11));
-        }else if(line.compare(0, 15, "sys_mem_total_kb:") == 0){
-            r.sysMemTotalKb = std::stoull(line.substr(15));
-        }else if(line.compare(0, 16, "sys_mem_avail_kb:") == 0){
-            r.sysMemAvailKb = std::stoull(line.substr(16));
+        }else if(line.compare(0, 17, "sys_mem_total_kb:") == 0){
+            r.sysMemTotalKb = std::stoull(line.substr(17));
+        }else if(line.compare(0, 17, "sys_mem_avail_kb:") == 0){
+            r.sysMemAvailKb = std::stoull(line.substr(17));
         }else{
             return false;
         }

@@ -1,5 +1,5 @@
 {
-    "worker_max_batch": 8,
+    "worker_count": 0,
     "mailbox_size": 64,
     "epoll_max_events": 16,
     "enable_ipc_server": true
