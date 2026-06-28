@@ -17,9 +17,9 @@ public:
     IpcServerActor(IpcServerActor&&) = delete;
     IpcServerActor& operator=(IpcServerActor&&) = delete;
 
-    void onStart() override;
+    int open() override;
+    int close() override;
     void handle(const Message& msg) override;
-    void open();
 
 private:
     void subscribeListener();
@@ -28,11 +28,11 @@ private:
     int handleCommand(ConnHandle conn, const std::string& cmd);
 
     UdsServer server_;
+    Time::TimeStamp startTime_{};
     std::string socketPath_;
+    std::unordered_set<ConnHandle> connections_;
     int backlog_;
     int recvBufferSize_;
-    std::unordered_set<ConnHandle> connections_;
-    Time::TimeStamp startTime_{};
 };
 
 #endif

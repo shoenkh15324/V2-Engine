@@ -21,7 +21,8 @@ public:
     MonitorActor(MonitorActor&&) = delete;
     MonitorActor& operator=(MonitorActor&&) = delete;
 
-    void onStart() override;
+    int open() override;
+    int close() override;
     void handle(const Message& msg) override;
 
 private:
@@ -30,15 +31,19 @@ private:
     void unsubscribeAll();
     void collectSystemResources(SystemResources& resources);
 
+    struct CpuSample{
+        uint64_t cpuNs;
+        uint64_t wallMs;
+    };
+
     UdsServer server_;
+    Time::TimeStamp startTime_;
     std::string socketPath_;
+    std::unordered_set<ConnHandle> connections_;
+    std::deque<CpuSample> cpuHistory_;
     int backlog_;
     int recvBufferSize_;
     int pollIntervalMs_;
-    std::unordered_set<ConnHandle> connections_;
-    Time::TimeStamp startTime_;
-    struct CpuSample { uint64_t cpuNs; uint64_t wallMs; };
-    std::deque<CpuSample> cpuHistory_;
     static constexpr uint64_t kCpuWindowMs = 1000;
 };
 

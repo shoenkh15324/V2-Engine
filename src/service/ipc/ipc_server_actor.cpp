@@ -19,72 +19,6 @@ IpcServerActor::~IpcServerActor(){
     server_.shutdown();
 }
 
-void IpcServerActor::onStart(){
-    open();
-}
-
-void IpcServerActor::open(){
-    if(server_.start(socketPath_, backlog_) != Ok){ V2_LOG_ERROR("IpcServerActor: failed to start UDS server on %s", socketPath_.c_str());
-        return;
-    }
-    ::chmod(socketPath_.c_str(), 0777);
-    startTime_ = Time::now();
-    subscribeListener();
-    V2_LOG_INFO("IpcServerActor: listening on %s", socketPath_.c_str());
-}
-
-int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
-    V2_LOG_INFO("IpcServerActor: command received (conn=%d) [%s]", conn, cmd.c_str());
-    /*
-     * Response format (key: value lines, parsed by CLI):
-     *   key: value
-     *   error: <message>
-     *   cmd_name: Description    ← for help listing
-     */
-    std::string response;
-    if(cmd == "info"){
-        auto uptimeMs = Time::toMs(Time::now() - startTime_);
-        response += "name: " V2_ENGINE_NAME "\n";
-        response += "version: " V2_ENGINE_VERSION "\n";
-        response += "uptime: " + std::to_string(uptimeMs) + "\n";
-        response += "clients: " + std::to_string(connections_.size());
-    }else{
-        response = "error: unknown command '" + cmd + "'";
-    }
-    server_.send(conn, response.data(), response.size());
-    actorContext()->dispatcher()->unsubscribe(conn);
-    connections_.erase(conn);
-    server_.closeClient(conn);
-    return Ok;
-}
-
-void IpcServerActor::handle(const Message& msg){
-    std::visit(overloaded{
-        [this](const IpcNewConnection& ev){
-            V2_LOG_INFO("IpcServerActor: client connected (conn=%d)", ev.conn);
-            subscribeClient(ev.conn);
-        },
-        [this](const IpcDataReceived& ev){
-            std::vector<uint8_t> buf(recvBufferSize_);
-            ssize_t n = ::recv(ev.conn, buf.data(), buf.size(), MSG_DONTWAIT);
-            if(n > 0){
-                V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, ev.conn);
-                std::string cmd(reinterpret_cast<char*>(buf.data()), n);
-                if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
-                handleCommand(ev.conn, cmd);
-            }else if(n == 0){
-                V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", ev.conn);
-                actorContext()->dispatcher()->unsubscribe(ev.conn);
-                server_.closeClient(ev.conn);
-                connections_.erase(ev.conn);
-            }else{
-                V2_LOG_ERROR("IpcServerActor: recv error (conn=%d)", ev.conn);
-            }
-        },
-        [](const auto&){ // ← catch-all: 관심 없는 메시지는 무시
-        }
-    }, msg);
-}
 
 void IpcServerActor::subscribeListener(){
     auto* dispatcher = actorContext()->dispatcher();
@@ -118,6 +52,87 @@ void IpcServerActor::unsubscribeAll(){
     if(server_.fd() >= 0){
         dispatcher->unsubscribe(server_.fd());
     }
+}
+
+int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
+    V2_LOG_INFO("IpcServerActor: command received (conn=%d) [%s]", conn, cmd.c_str());
+    /*
+     * Response format (key: value lines, parsed by CLI):
+     *   key: value
+     *   error: <message>
+     *   cmd_name: Description    ← for help listing
+     */
+    std::string response;
+    if(cmd == "info"){
+        auto uptimeMs = Time::toMs(Time::now() - startTime_);
+        response += "name: " V2_ENGINE_NAME "\n";
+        response += "version: " V2_ENGINE_VERSION "\n";
+        response += "uptime: " + std::to_string(uptimeMs) + "\n";
+        response += "clients: " + std::to_string(connections_.size());
+    }else{
+        response = "error: unknown command '" + cmd + "'";
+    }
+    server_.send(conn, response.data(), response.size());
+    actorContext()->dispatcher()->unsubscribe(conn);
+    connections_.erase(conn);
+    server_.closeClient(conn);
+    return Ok;
+}
+
+int IpcServerActor::open(){
+    if(state_ != Closed) close();
+    state_ = Opening;
+    //
+    if(server_.start(socketPath_, backlog_) != Ok){ V2_LOG_ERROR("IpcServerActor: failed to start UDS server on %s", socketPath_.c_str());
+        state_ = Closed;
+        return Fail;
+    }
+    ::chmod(socketPath_.c_str(), 0777);
+    startTime_ = Time::now();
+    subscribeListener();
+    //
+    state_ = Opened;
+    V2_LOG_INFO("IpcServerActor: listening on %s", socketPath_.c_str());
+    return Ok;
+}
+
+int IpcServerActor::close(){
+    state_ = Closing;
+    //
+    unsubscribeAll();
+    server_.shutdown();
+    //
+    state_ = Closed;
+    return Ok;
+}
+
+void IpcServerActor::handle(const Message& msg){
+    if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
+    std::visit(overloaded{
+        [this](const IpcNewConnection& ev){
+            V2_LOG_INFO("IpcServerActor: client connected (conn=%d)", ev.conn);
+            subscribeClient(ev.conn);
+        },
+        [this](const IpcDataReceived& ev){
+            std::vector<uint8_t> buf(recvBufferSize_);
+            ssize_t n = ::recv(ev.conn, buf.data(), buf.size(), MSG_DONTWAIT);
+            if(n > 0){
+                V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, ev.conn);
+                std::string cmd(reinterpret_cast<char*>(buf.data()), n);
+                if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
+                handleCommand(ev.conn, cmd);
+            }else if(n == 0){
+                V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", ev.conn);
+                actorContext()->dispatcher()->unsubscribe(ev.conn);
+                server_.closeClient(ev.conn);
+                connections_.erase(ev.conn);
+            }else{
+                V2_LOG_ERROR("IpcServerActor: recv error (conn=%d)", ev.conn);
+            }
+        },
+        [](const auto&){ // ← catch-all: 관심 없는 메시지는 무시
+        }
+    }, msg);
 }
 
 #endif

@@ -4,6 +4,14 @@
 #include <unordered_set>
 #include "core/actor_system/messages/message.hpp"
 
+enum ActorState : uint8_t{
+    Closed = 0,
+    Closing,
+    Opening,
+    Opened,
+    Inherited
+};
+
 class ActorContext;
 
 class Actor{
@@ -17,7 +25,8 @@ public:
     Actor(Actor&&) = delete;
     Actor& operator=(Actor&&) = delete;
 
-    virtual void onStart() {}
+    virtual int open() = 0;
+    virtual int close() = 0;
     virtual void handle(const Message& msg) = 0;
     
     void sendMsg(const std::string& name, Message msg);
@@ -37,10 +46,12 @@ public:
 
 protected:
     ActorContext* actorContext() const { return actorCtx_; }
+    
+    ActorState state_{Closed};
+    std::unordered_set<int> timerIds_;
 
 private:
     ActorContext* actorCtx_ = nullptr;
     std::string name_;
-    std::unordered_set<int> timerIds_;
     uint64_t id_;
 };

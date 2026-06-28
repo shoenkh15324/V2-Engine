@@ -19,7 +19,7 @@ void ActorSystem::start(){
     dispatcher_.start();
     scheduler_.start(&dispatcher_);
     for(auto& ctx : actorContexts_){
-        ctx->actor()->onStart();
+        ctx->actor()->open();
     }
     for(auto& w : workers_){
         w->start();
@@ -27,6 +27,9 @@ void ActorSystem::start(){
 }
 
 void ActorSystem::stop(){
+    for(auto& ctx : actorContexts_){
+        ctx->actor()->close();
+    }
     scheduler_.stop();
     dispatcher_.stop();
     for(auto& w : workers_){
@@ -41,6 +44,9 @@ void ActorSystem::run(){
 }
 
 void ActorSystem::requestStop(){
+    for(auto& ctx : actorContexts_){
+        ctx->actor()->close();
+    }
     scheduler_.stop();
     dispatcher_.stop();
     for(auto& w : workers_){

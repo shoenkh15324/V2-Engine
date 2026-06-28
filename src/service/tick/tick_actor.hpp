@@ -11,7 +11,8 @@ public:
     TickActor(TickActor&&) = delete;
     TickActor& operator=(TickActor&&) = delete;
 
-    void onStart() override;
+    int open() override;
+    int close() override;
     void handle(const Message& msg) override;
     
 private:

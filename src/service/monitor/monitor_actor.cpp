@@ -21,56 +21,6 @@ MonitorActor::~MonitorActor(){
     server_.shutdown();
 }
 
-void MonitorActor::onStart(){
-    if(server_.start(socketPath_, backlog_) != Ok){ V2_LOG_ERROR("MonitorActor: failed to start UDS server on %s", socketPath_.c_str());
-        return;
-    }
-    ::chmod(socketPath_.c_str(), 0777);
-    startTime_ = Time::now();
-    subscribeListener();
-    startTimer(MonitorPoll{}, pollIntervalMs_, true);
-    V2_LOG_INFO("MonitorActor: listening on %s", socketPath_.c_str());
-}
-
-void MonitorActor::handle(const Message& msg){
-    std::visit(overloaded{
-        [this](const MonitorPoll&){
-            MonitorSnapshot snap;
-            snap.timestampMs = Time::nowMs();
-            snap.clientCount = static_cast<int>(connections_.size());
-
-            actorContext()->actorRegistry()->forEachActor([&](Actor* actor){
-                ActorInfo actorInfo;
-                actorInfo.name = actor->name();
-                actorInfo.id = actor->id();
-                actorInfo.mailboxCount = actor->mailboxCount();
-                actorInfo.mailboxCapacity = actor->mailboxCapacity();
-                snap.actors.push_back(std::move(actorInfo));
-            });
-
-            collectSystemResources(snap.resources);
-
-            std::string data = serializeSnapshot(snap);
-            for(ConnHandle conn : connections_){
-                server_.send(conn, data.data(), data.size());
-            }
-        },
-        [this](const MonitorNewConnection& ev){
-            V2_LOG_INFO("MonitorActor: client connected (conn=%d)", ev.conn);
-            connections_.insert(ev.conn);
-            subscribeClient(ev.conn);
-        },
-        [this](const MonitorClientDisconnected& ev){
-            if(connections_.find(ev.conn) == connections_.end()) return;
-            actorContext()->dispatcher()->unsubscribe(ev.conn);
-            server_.closeClient(ev.conn);
-            connections_.erase(ev.conn);
-            V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", ev.conn);
-        },
-        [](const auto&){}
-    }, msg);
-}
-
 void MonitorActor::subscribeListener(){
     auto* dispatcher = actorContext()->dispatcher();
     int listenFd = server_.fd();
@@ -165,6 +115,74 @@ void MonitorActor::collectSystemResources(SystemResources& resources){
         }
     }
 #endif
+}
+
+int MonitorActor::open(){
+    if(state_ != Closed) close();
+    state_ = Opening;
+    //
+    if(server_.start(socketPath_, backlog_) != Ok){ V2_LOG_ERROR("MonitorActor: failed to start UDS server on %s", socketPath_.c_str());
+        state_ = Closed;
+        return Fail;
+    }
+    ::chmod(socketPath_.c_str(), 0777);
+    startTime_ = Time::now();
+    subscribeListener();
+    startTimer(MonitorPoll{}, pollIntervalMs_, true);
+    //
+    state_ = Opened;
+    V2_LOG_INFO("MonitorActor: listening on %s", socketPath_.c_str());
+    return Ok;
+}
+
+int MonitorActor::close(){
+    state_ = Closing;
+    //
+    unsubscribeAll();
+    server_.shutdown();
+    //
+    state_ = Closed;
+    return Ok;
+}
+
+void MonitorActor::handle(const Message& msg){
+    if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
+    std::visit(overloaded{
+        [this](const MonitorPoll&){
+            MonitorSnapshot snap;
+            snap.timestampMs = Time::nowMs();
+            snap.clientCount = static_cast<int>(connections_.size());
+
+            actorContext()->actorRegistry()->forEachActor([&](Actor* actor){
+                ActorInfo actorInfo;
+                actorInfo.name = actor->name();
+                actorInfo.id = actor->id();
+                actorInfo.mailboxCount = actor->mailboxCount();
+                actorInfo.mailboxCapacity = actor->mailboxCapacity();
+                snap.actors.push_back(std::move(actorInfo));
+            });
+
+            collectSystemResources(snap.resources);
+
+            std::string data = serializeSnapshot(snap);
+            for(ConnHandle conn : connections_){
+                server_.send(conn, data.data(), data.size());
+            }
+        },
+        [this](const MonitorNewConnection& ev){
+            V2_LOG_INFO("MonitorActor: client connected (conn=%d)", ev.conn);
+            connections_.insert(ev.conn);
+            subscribeClient(ev.conn);
+        },
+        [this](const MonitorClientDisconnected& ev){
+            if(connections_.find(ev.conn) == connections_.end()) return;
+            actorContext()->dispatcher()->unsubscribe(ev.conn);
+            server_.closeClient(ev.conn);
+            connections_.erase(ev.conn);
+            V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", ev.conn);
+        },
+        [](const auto&){}
+    }, msg);
 }
 
 #endif
