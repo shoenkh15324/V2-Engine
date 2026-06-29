@@ -93,8 +93,19 @@ src/
 
 ---
 
-## ⚙️ 필요 환경
+## ⚙️ 개발 환경
 
-- C++17 (GCC / Clang)
-- Linux (epoll, timerfd, eventfd)
-- FTXui (CMake FetchContent 자동 다운로드)
+### 필수
+
+* C++17 지원 컴파일러 (GCC / Clang)
+* CMake 3.10 이상
+* Ninja Build
+* Linux 환경 (`epoll`, `timerfd`, `eventfd` 사용)
+* `lld` 링커 (Linux)
+
+### 외부 라이브러리
+
+다음 라이브러리는 **CMake FetchContent**를 통해 자동으로 다운로드되므로 별도의 설치가 필요하지 않습니다.
+
+* FTXUI (v7.0.0)
+* nlohmann/json (v3.12.0)
