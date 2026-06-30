@@ -15,4 +15,8 @@ done
 sudo systemctl daemon-reload
 sudo systemctl reset-failed 2>/dev/null || true
 
+echo "==> Removing D-Bus policy..."
+sudo rm -f /etc/dbus-1/system.d/com.v2.engine.conf
+sudo systemctl reload dbus 2>/dev/null || true
+
 echo "==> Uninstall complete!"

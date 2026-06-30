@@ -35,9 +35,9 @@ struct RuntimeConfig{
 
     // Dbus
     bool enableDbus = false;
-    std::string dbusBusName = "com.v2.test";
-    std::string dbusObjectPath = "/com/v2/test";
-    std::string dbusInterfaceName = "com.v2.test.engine";
+    std::string dbusBusName = "com.v2.engine";
+    std::string dbusObjectPath = "/com/v2/engine";
+    std::string dbusInterfaceName = "com.v2.engine";
 #endif
 
     static RuntimeConfig loadFromFile(const std::string& path);

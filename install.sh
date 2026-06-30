@@ -45,6 +45,7 @@ install_deps() {
 
     local packages=(
         "libsdbus-c++-dev"
+        "lld"
     )
 
     echo "============================================"
@@ -79,6 +80,33 @@ build() {
     echo "==> Building... (log_level=${log_level})"
     cmake -B "$BUILD_DIR" -Wno-dev -DV2_DEFAULT_LOG_LEVEL="${log_level}" 2>&1 | tail -1
     cmake --build "$BUILD_DIR" -j"$(nproc)" 2>&1 | tail -1
+    echo ""
+}
+
+# ============================================
+# Install D-Bus system policy
+# ============================================
+install_dbus_policy() {
+    local conf_file="/etc/dbus-1/system.d/com.v2.engine.conf"
+
+    echo "==> Installing D-Bus policy..."
+
+    sudo tee "$conf_file" > /dev/null << 'EOF'
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy user="root">
+    <allow own="com.v2.engine"/>
+  </policy>
+  <policy context="default">
+    <allow send_destination="com.v2.engine"/>
+    <allow receive_sender="com.v2.engine"/>
+  </policy>
+</busconfig>
+EOF
+
+    sudo systemctl reload dbus 2>/dev/null || echo "  (D-Bus reload skipped, will apply on next restart)"
+
     echo ""
 }
 
@@ -124,6 +152,7 @@ EOF
 # ============================================
 install_deps
 build
+install_dbus_policy
 
 if [[ " ${TARGETS[*]} " =~ " all " ]]; then
     for app in "${APPS[@]}"; do
