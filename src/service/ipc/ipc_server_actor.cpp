@@ -110,25 +110,25 @@ int IpcServerActor::close(){
 void IpcServerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
     std::visit(overloaded{
-        [this](const IpcNewConnection& ev){
-            V2_LOG_INFO("IpcServerActor: client connected (conn=%d)", ev.conn);
-            subscribeClient(ev.conn);
+        [this](const IpcNewConnection& msg){
+            V2_LOG_INFO("IpcServerActor: client connected (conn=%d)", msg.conn);
+            subscribeClient(msg.conn);
         },
-        [this](const IpcDataReceived& ev){
+        [this](const IpcDataReceived& msg){
             std::vector<uint8_t> buf(recvBufferSize_);
-            ssize_t n = ::recv(ev.conn, buf.data(), buf.size(), MSG_DONTWAIT);
+            ssize_t n = ::recv(msg.conn, buf.data(), buf.size(), MSG_DONTWAIT);
             if(n > 0){
-                V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, ev.conn);
+                V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, msg.conn);
                 std::string cmd(reinterpret_cast<char*>(buf.data()), n);
                 if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
-                handleCommand(ev.conn, cmd);
+                handleCommand(msg.conn, cmd);
             }else if(n == 0){
-                V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", ev.conn);
-                actorContext()->dispatcher()->unsubscribe(ev.conn);
-                server_.closeClient(ev.conn);
-                connections_.erase(ev.conn);
+                V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", msg.conn);
+                actorContext()->dispatcher()->unsubscribe(msg.conn);
+                server_.closeClient(msg.conn);
+                connections_.erase(msg.conn);
             }else{
-                V2_LOG_ERROR("IpcServerActor: recv error (conn=%d)", ev.conn);
+                V2_LOG_ERROR("IpcServerActor: recv error (conn=%d)", msg.conn);
             }
         },
         [](const auto&){ // ← catch-all: 관심 없는 메시지는 무시

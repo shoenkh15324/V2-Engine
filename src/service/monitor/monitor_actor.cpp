@@ -170,17 +170,17 @@ void MonitorActor::handle(const Message& msg){
                 server_.send(conn, data.data(), data.size());
             }
         },
-        [this](const MonitorNewConnection& ev){
-            V2_LOG_INFO("MonitorActor: client connected (conn=%d)", ev.conn);
-            connections_.insert(ev.conn);
-            subscribeClient(ev.conn);
+        [this](const MonitorNewConnection& msg){
+            V2_LOG_INFO("MonitorActor: client connected (conn=%d)", msg.conn);
+            connections_.insert(msg.conn);
+            subscribeClient(msg.conn);
         },
-        [this](const MonitorClientDisconnected& ev){
-            if(connections_.find(ev.conn) == connections_.end()) return;
-            actorContext()->dispatcher()->unsubscribe(ev.conn);
-            server_.closeClient(ev.conn);
-            connections_.erase(ev.conn);
-            V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", ev.conn);
+        [this](const MonitorClientDisconnected& msg){
+            if(connections_.find(msg.conn) == connections_.end()) return;
+            actorContext()->dispatcher()->unsubscribe(msg.conn);
+            server_.closeClient(msg.conn);
+            connections_.erase(msg.conn);
+            V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", msg.conn);
         },
         [](const auto&){}
     }, msg);
