@@ -16,7 +16,7 @@ if(BUILD_MAIN_APP)
     )
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
     target_compile_definitions(v2_main PRIVATE
-        V2_APP_VERSION="0.2.1"
+        V2_APP_VERSION="0.3.0"
     )
 endif()
 
