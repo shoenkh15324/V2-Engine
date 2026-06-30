@@ -28,6 +28,8 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
+find_package(sdbus-c++ REQUIRED)
+
 # Build Type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)

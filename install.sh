@@ -34,6 +34,40 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     usage
 fi
 
+# ============================================
+# Install dependencies
+# ============================================
+install_deps() {
+    if [[ -n "$SKIP_DEPS" ]]; then
+        echo "==> Skipping dependency installation (SKIP_DEPS is set)"
+        return
+    fi
+
+    local packages=(
+        "libsdbus-c++-dev"
+    )
+
+    echo "============================================"
+    echo "  V2-Engine Dependency Installation"
+    echo "============================================"
+    echo "  The following packages will be installed:"
+    for pkg in "${packages[@]}"; do
+        echo "    - $pkg"
+    done
+    echo ""
+    echo "  (set SKIP_DEPS=1 to skip this step)"
+    echo ""
+
+    if [[ -t 0 ]]; then
+        read -p "  Proceed with installation? [y/N] " confirm
+        [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "  Skipping dependency installation."; return; }
+    fi
+
+    echo "==> Installing dependencies..."
+    sudo apt install -y "${packages[@]}"
+    echo ""
+}
+
 TARGETS=("$@")
 [[ ${#TARGETS[@]} -eq 0 ]] && TARGETS=(all)
 
@@ -88,6 +122,7 @@ EOF
 # ============================================
 # Main
 # ============================================
+install_deps
 build
 
 if [[ " ${TARGETS[*]} " =~ " all " ]]; then
