@@ -97,6 +97,7 @@ int IpcServerActor::open(){
 }
 
 int IpcServerActor::close(){
+    if(state_ == Closed) return Ok;
     state_ = Closing;
     //
     unsubscribeAll();

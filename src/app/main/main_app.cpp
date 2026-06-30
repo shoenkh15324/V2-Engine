@@ -7,6 +7,7 @@
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"
 #include "service/monitor/monitor_actor.hpp"
+#include "service/dbus/dbus_actor.hpp"
 #include <csignal>
 
 MainApp::MainApp() = default;
@@ -32,6 +33,7 @@ void MainApp::open(){
     if(cfg_.enableMonitor) actorSystem_->createActor<MonitorActor>("monitor", cfg_.mailboxSize, cfg_.monitorSocketPath, cfg_.monitorBacklog, cfg_.monitorRecvBufferSize, cfg_.monitorPollIntervalMs);
 #if V2_PLATFORM_LINUX
     if(cfg_.enableIpcServer) actorSystem_->createActor<IpcServerActor>("ipc_server", cfg_.mailboxSize, cfg_.ipcSocketPath, cfg_.udsBacklog, cfg_.ipcRecvBufferSize);
+    if(cfg_.enableDbus) actorSystem_->createActor<DbusActor>("dbus_actor", cfg_.mailboxSize, cfg_.dbusBusName, cfg_.dbusObjectPath, cfg_.dbusInterfaceName);
 #endif
     //
     actorSystem_->start();

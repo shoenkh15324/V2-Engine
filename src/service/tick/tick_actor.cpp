@@ -20,6 +20,7 @@ int TickActor::open(){
 }
 
 int TickActor::close(){
+    if(state_ == Closed) return Ok;
     state_ = Closing;
     //
     for(int id : timerIds_) cancelTimer(id);

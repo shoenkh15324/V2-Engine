@@ -3,6 +3,7 @@
 #include "tick_messages.hpp"
 #include "ipc_messages.hpp"
 #include "monitor_messages.hpp"
+#include "dbus_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 

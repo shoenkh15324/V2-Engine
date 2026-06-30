@@ -32,6 +32,12 @@ struct RuntimeConfig{
     std::string ipcSocketPath = "/tmp/v2_ipc.sock";
     int ipcRecvBufferSize = 4096;
     int udsBacklog = 5;
+
+    // Dbus
+    bool enableDbus = false;
+    std::string dbusBusName = "com.v2.test";
+    std::string dbusObjectPath = "/com/v2/test";
+    std::string dbusInterfaceName = "com.v2.test.engine";
 #endif
 
     static RuntimeConfig loadFromFile(const std::string& path);

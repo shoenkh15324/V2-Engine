@@ -136,6 +136,7 @@ int MonitorActor::open(){
 }
 
 int MonitorActor::close(){
+    if(state_ == Closed) return Ok;
     state_ = Closing;
     //
     unsubscribeAll();

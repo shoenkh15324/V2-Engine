@@ -11,7 +11,9 @@ add_library(v2_service STATIC
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(v2_service PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/ipc/ipc_server_actor.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/dbus/dbus_actor.cpp
     )
+    target_link_libraries(v2_service PRIVATE SDBusCpp::sdbus-c++)
 endif()
 
 target_link_libraries(v2_service PUBLIC v2_core)

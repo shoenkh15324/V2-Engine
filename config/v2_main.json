@@ -3,5 +3,6 @@
     "worker_count": 1,
     "enable_tick": true,
     "enable_ipc_server": true,
-    "enable_monitor":true
+    "enable_monitor": true,
+    "enable_dbus": true
 }

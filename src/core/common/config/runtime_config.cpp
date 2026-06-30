@@ -41,7 +41,13 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("ipc_socket_path")) cfg.ipcSocketPath = j["ipc_socket_path"];
         if(j.contains("ipc_recv_buffer_size")) cfg.ipcRecvBufferSize = j["ipc_recv_buffer_size"];
         if(j.contains("uds_backlog")) cfg.udsBacklog = j["uds_backlog"];
-        
+
+        // Dbus Actor
+        if(j.contains("enable_dbus")) cfg.enableDbus = j["enable_dbus"];
+        if(j.contains("dbus_bus_name")) cfg.dbusBusName = j["dbus_bus_name"];
+        if(j.contains("dbus_object_path")) cfg.dbusObjectPath = j["dbus_object_path"];
+        if (j.contains("dbus_interface_name")) cfg.dbusInterfaceName = j["dbus_interface_name"];
+
 #endif
     }catch(...){}
     return cfg;
