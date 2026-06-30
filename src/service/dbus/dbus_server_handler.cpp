@@ -7,7 +7,7 @@ DbusServerHandler::DbusServerHandler(sdbus::IConnection& connection, Actor& acto
 
 }
 
-DbusServerHandler::~DbusServerHandler() {
+DbusServerHandler::~DbusServerHandler(){
     close();
 }
 

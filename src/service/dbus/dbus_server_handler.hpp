@@ -14,7 +14,7 @@
 class DbusServerHandler{
 public:
     DbusServerHandler(sdbus::IConnection& connection, Actor& actor);
-    ~DbusServerHandler() = default;
+    ~DbusServerHandler();
 
     DbusServerHandler(const DbusServerHandler&) = delete;
     DbusServerHandler& operator=(const DbusServerHandler&) = delete;
