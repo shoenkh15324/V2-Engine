@@ -13,6 +13,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         ${CMAKE_CURRENT_LIST_DIR}/ipc/ipc_server_actor.cpp
         ${CMAKE_CURRENT_LIST_DIR}/dbus/dbus_actor.cpp
         ${CMAKE_CURRENT_LIST_DIR}/dbus/dbus_server_handler.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/dbus/dbus_client_handler.cpp
     )
     target_link_libraries(v2_service PRIVATE SDBusCpp::sdbus-c++)
 endif()
