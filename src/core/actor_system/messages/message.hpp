@@ -22,5 +22,15 @@ using Message = std::variant<
     // Monitor
     MonitorPoll,
     MonitorNewConnection,
-    MonitorClientDisconnected
+    MonitorClientDisconnected,
+    // Dbus
+    DbusRegisterMethod,
+    DbusUnregisterMethod,
+    DbusRegisterResult,
+    DbusIncomingMethodCall,
+    DbusMethodCallResult,
+    DbusProxyCallRequest,
+    DbusProxyCallResult,
+    DbusSubscribeSignal,
+    DbusSignalEvent
 >;
