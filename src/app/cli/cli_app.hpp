@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include "core/common/config/runtime_config.h"
 
 #if V2_PLATFORM_LINUX

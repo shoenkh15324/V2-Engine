@@ -1,5 +1,5 @@
 #pragma once
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include "core/common/config/runtime_config.h"
 #include "service/monitor/monitor_data.hpp"
 #include <string>

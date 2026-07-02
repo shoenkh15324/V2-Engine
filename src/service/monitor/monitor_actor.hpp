@@ -1,6 +1,6 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include "core/common/time/time.hpp"
 #include "service/monitor/monitor_data.hpp"
 #include "infra/transport/uds/uds_server.hpp"

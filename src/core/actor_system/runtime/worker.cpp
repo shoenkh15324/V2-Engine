@@ -1,7 +1,7 @@
 #include "worker.hpp"
 #include "dispatcher.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include <pthread.h>
 
 Worker::Worker(Dispatcher* dispatcher, int id, int maxBatch) : dispatcher_(dispatcher), id_(id), maxBatch_(maxBatch){

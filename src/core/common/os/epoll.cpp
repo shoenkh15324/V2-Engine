@@ -1,4 +1,4 @@
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 
 #if V2_PLATFORM_LINUX
 #include "core/common/os/epoll.hpp"

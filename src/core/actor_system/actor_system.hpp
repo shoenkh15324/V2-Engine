@@ -7,7 +7,7 @@
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
 

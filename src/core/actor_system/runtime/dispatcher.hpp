@@ -6,7 +6,7 @@
 #include <mutex>
 #include <functional>
 #include <vector>
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include "core/common/os/semaphore.hpp"
 
 #if V2_PLATFORM_LINUX

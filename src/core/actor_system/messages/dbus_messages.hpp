@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 
 struct DbusRegisterMethod{
     std::string objectPath;

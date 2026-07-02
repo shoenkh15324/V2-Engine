@@ -1,5 +1,5 @@
 #include "cli_app.hpp"
-#include "core/common/util/platform_config.h"
+#include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
