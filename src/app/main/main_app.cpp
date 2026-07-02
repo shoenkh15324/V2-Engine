@@ -8,6 +8,7 @@
 #include "service/tick/tick_actor.hpp"
 #include "service/monitor/monitor_actor.hpp"
 #include "service/dbus/dbus_actor.hpp"
+#include "service/device_manager/device_manager_actor.hpp"
 #include <csignal>
 
 MainApp::MainApp() = default;
@@ -29,6 +30,7 @@ void MainApp::open(){
     sig.listen(SIGTERM, [this](int){ requestStop(); });
     //
     actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
+    actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs);
     if(cfg_.enableMonitor) actorSystem_->createActor<MonitorActor>("monitor", cfg_.mailboxSize, cfg_.monitorSocketPath, cfg_.monitorBacklog, cfg_.monitorRecvBufferSize, cfg_.monitorPollIntervalMs);
 #if V2_PLATFORM_LINUX

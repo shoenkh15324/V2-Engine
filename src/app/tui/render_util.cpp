@@ -66,8 +66,8 @@ ftxui::Element cellGauge(float progress, ftxui::Color col, int cells){
     if(filled > cells) filled = cells;
     if(filled < 0) filled = 0;
     std::string filledStr, emptyStr;
-    for(int i = 0; i < filled; ++i) filledStr += "■";
-    for(int i = filled; i < cells; ++i) emptyStr += "□";
+    for(int i = 0; i < filled; ++i) filledStr += "|";
+    for(int i = filled; i < cells; ++i) emptyStr += "|";
     Elements elems;
     elems.push_back(text(" "));
     if(filled > 0) elems.push_back(text(filledStr) | color(col));
@@ -118,7 +118,7 @@ ftxui::Element renderActorList(const std::vector<ActorInfo>& actors){
             hbox({
                 text("  " + std::to_string(a.id) + "  ") | color(cBlue),
                 separator(),
-                text(" " + a.name + " ") | color(cWhite) | size(WIDTH, GREATER_THAN, 14),
+                text(" " + a.name + " ") | color(cWhite) | size(WIDTH, GREATER_THAN, 30),
                 separator(),
                 bar | flex,
                 separator(),

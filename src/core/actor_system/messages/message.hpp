@@ -4,6 +4,7 @@
 #include "ipc_messages.hpp"
 #include "monitor_messages.hpp"
 #include "dbus_messages.hpp"
+#include "device_manager_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 
@@ -32,5 +33,10 @@ using Message = std::variant<
     DbusProxyCallRequest,
     DbusProxyCallResult,
     DbusSubscribeSignal,
-    DbusSignalEvent
+    DbusSignalEvent,
+    // Device Manager
+    DeviceRegister,
+    DeviceUnregister,
+    DeviceEnumerate,
+    DeviceList
 >;
