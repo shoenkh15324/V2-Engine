@@ -18,7 +18,7 @@ public:
     CliApp& operator=(CliApp&&) = delete;
 
     int open();
-    int run(const std::string& cmd);
+    int run(int argc, char** argv);
     void close();
 
     static void printLocalHelp();

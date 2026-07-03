@@ -7,6 +7,7 @@
 #include <sstream>
 #include <vector>
 #include <cstdio>
+#include <cstring>
 
 #if V2_PLATFORM_LINUX
     #include <unistd.h>
@@ -41,15 +42,37 @@ int CliApp::open(){
     return Ok;
 }
 
-int CliApp::run(const std::string& cmd){
+int CliApp::run(int argc, char** argv){
 #if V2_PLATFORM_LINUX
     V2_LOG_INFO("%s App Run", name_.c_str());
-    V2_LOG_INFO("%s App: sending command [%s]", name_.c_str(), cmd.c_str());
+    if(argc < 2){ printLocalHelp(); return 0; }
+
+    // 로컬에서 처리할 플래그 (v2 바로 다음에만 유효)
+    if(strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+        printLocalHelp(); return 0;
+    }
+    if(strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0) {
+        printLocalVersion(); return 0;
+    }
+    if(strcmp(argv[1], "-s") == 0 || strcmp(argv[1], "--status") == 0) {
+        printLocalStatus(); return 0;
+    }
+    if(strcmp(argv[1], "-m") == 0 || strcmp(argv[1], "--monitor") == 0) {
+        return launchMonitor(argv);
+    }
+
+    // 그 외 모든 인자는 데몬으로 전달
+    std::string cmd;
+    for (int i = 1; i < argc; ++i) {
+        if (i > 1) cmd += " ";
+        cmd += argv[i];
+    }
 
     if(client_.send(cmd.data(), cmd.size()) != Ok){
         V2_LOG_ERROR("%s App: send failed", name_.c_str());
         return 1;
     }
+    V2_LOG_INFO("%s App: sending command [%s]", name_.c_str(), cmd.c_str());
 
     std::vector<char> buf(cfg_.ipcRecvBufferSize);
     int n = client_.recv(buf.data(), buf.size());
@@ -58,7 +81,7 @@ int CliApp::run(const std::string& cmd){
         printResponse(resp);
         V2_LOG_INFO("%s App: received response [%s]", name_.c_str(), resp.c_str());
     }
-    return 0;
+    return Ok;
 #else
     (void)cmd;
     return 1;
