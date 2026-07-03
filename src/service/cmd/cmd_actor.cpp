@@ -131,6 +131,7 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
     if(!err.empty()) return err;
     if(result.empty()) return "error: no action specified\n";
     return result;
+#endif
 }
 
 std::string CmdActor::handleTest(const std::vector<std::string>& args){
@@ -153,7 +154,6 @@ std::string CmdActor::handleTest(const std::vector<std::string>& args){
         result += "  error: " + parsed;
     }
     return result;
-#endif
 }
 
 std::string CmdActor::parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption){
