@@ -84,10 +84,22 @@ std::string CmdActor::handleInfo(const std::vector<std::string>&){
     return os.str();
 }
 
+namespace{
+
+const char* stateString(ActorState s){
+    switch(s){
+        case Closed: return "Closed";
+        case Closing: return "Closing";
+        case Opening: return "Opening";
+        case Opened: return "Opened";
+        case Inherited: return "Inherited";
+    }
+    return "Unknown";
+}
+
+} // namespace
+
 std::string CmdActor::handleActor(const std::vector<std::string>& args){
-#if 1 // tmp disable
-    return {};
-#else
     auto* reg = actorContext()->actorRegistry();
     if(!reg) return "error: actor registry unavailable\n";
     std::string result;
@@ -100,30 +112,42 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
                 }else if(a->isEssential()){
                     result += "error: '" + val + "' is essential\n";
                 }else{
-                    result += (a->close() == 0) ? "ok: disabled\n" : "error: disable failed\n";
+                    if(a->close() == 0){
+                        result += "ok: '" + val + "' disabled\n";
+                    }else{
+                        result += "error: disable failed\n";
+                    }
                 }
                 break;
             }
             case 'e':{
                 auto* a = reg->findByName(val);
                 if(!a){
-                    result += "error: not found\n";
+                    result += "error: not found '" + val + "'\n";
                 }else{
-                    result += (a->open() == 0) ? "ok: enabled\n" : "error: enable failed\n";
+                    if(a->open() == 0){
+                        result += "ok: '" + val + "' enabled\n";
+                    }else{
+                        result += "error: enable failed\n";
+                    }
                 }
                 break;
             }
             case 'l':{
                 int n = 0;
-                std::string listStr;
+                char buf[256];
+                result += "actor_count: ";
+                reg->forEachActor([&](Actor* a){ ++n; });
+                result += std::to_string(n) + "\n\n";
+                result += "  ID  NAME              STATE      ESSENTIAL\n";
+                result += "  --- ----------------- ---------- ---------\n";
                 reg->forEachActor([&](Actor* a){
-                    ++n;
-                    listStr += "  id:" + std::to_string(a->id())
-                            + " name:" + a->name()
-                            + " state:" + std::to_string(static_cast<int>(a->getState()))
-                            + " essential:" + (a->isEssential() ? "yes" : "no") + "\n";
+                    std::snprintf(buf, sizeof(buf), "  %3lu  %-17s %-10s %s\n",
+                        (unsigned long)a->id(), a->name().c_str(),
+                        stateString(a->getState()),
+                        a->isEssential() ? "yes" : "no");
+                    result += buf;
                 });
-                result = "actor_count: " + std::to_string(n) + "\n" + listStr + result;
                 break;
             }
         }
@@ -131,7 +155,6 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
     if(!err.empty()) return err;
     if(result.empty()) return "error: no action specified\n";
     return result;
-#endif
 }
 
 std::string CmdActor::handleTest(const std::vector<std::string>& args){

@@ -45,10 +45,10 @@ public:
     uint64_t id() const { return id_; }
     ActorState getState() const { return state_; }
     bool isEssential() const { return essential_; }
+    void setEssential(bool v){ essential_ = v; }
 
 protected:
     ActorContext* actorContext() const { return actorCtx_; }
-    void setEssential(bool v){ essential_ = v; }
 
     ActorState state_{Closed};
     std::unordered_set<int> timerIds_;
