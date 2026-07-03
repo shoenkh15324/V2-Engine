@@ -7,6 +7,7 @@ add_library(v2_service STATIC
     ${CMAKE_CURRENT_LIST_DIR}/monitor/monitor_data.cpp
     ${CMAKE_CURRENT_LIST_DIR}/tick/tick_actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device_manager/device_manager_actor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cmd/cmd_actor.cpp
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

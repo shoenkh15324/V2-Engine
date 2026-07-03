@@ -5,6 +5,7 @@
 #include "monitor_messages.hpp"
 #include "dbus_messages.hpp"
 #include "device_manager_messages.hpp"
+#include "cmd_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 
@@ -38,5 +39,8 @@ using Message = std::variant<
     DeviceRegister,
     DeviceUnregister,
     DeviceEnumerate,
-    DeviceList
+    DeviceList,
+    // Cmd
+    CmdRequest,
+    CmdResponse
 >;

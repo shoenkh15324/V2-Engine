@@ -1,4 +1,5 @@
 #include "ipc_server_actor.hpp"
+#include "core/actor_system/messages/cmd_messages.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/common/log/log.hpp"
@@ -56,26 +57,7 @@ void IpcServerActor::unsubscribeAll(){
 
 int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
     V2_LOG_INFO("IpcServerActor: command received (conn=%d) [%s]", conn, cmd.c_str());
-    /*
-     * Response format (key: value lines, parsed by CLI):
-     *   key: value
-     *   error: <message>
-     *   cmd_name: Description    ← for help listing
-     */
-    std::string response;
-    if(cmd == "info"){
-        auto uptimeMs = Time::toMs(Time::now() - startTime_);
-        response += "name: " V2_ENGINE_NAME "\n";
-        response += "version: " V2_ENGINE_VERSION "\n";
-        response += "uptime: " + std::to_string(uptimeMs) + "\n";
-        response += "clients: " + std::to_string(connections_.size());
-    }else{
-        response = "error: unknown command '" + cmd + "'";
-    }
-    server_.send(conn, response.data(), response.size());
-    actorContext()->dispatcher()->unsubscribe(conn);
-    connections_.erase(conn);
-    server_.closeClient(conn);
+    sendMsg("cmd_actor", CmdRequest{conn, cmd});
     return Ok;
 }
 
@@ -88,7 +70,6 @@ int IpcServerActor::open(){
         return Fail;
     }
     ::chmod(socketPath_.c_str(), 0777);
-    startTime_ = Time::now();
     subscribeListener();
     //
     state_ = Opened;
@@ -131,8 +112,14 @@ void IpcServerActor::handle(const Message& msg){
                 V2_LOG_ERROR("IpcServerActor: recv error (conn=%d)", msg.conn);
             }
         },
-        [](const auto&){ // ← catch-all: 관심 없는 메시지는 무시
-        }
+        [this](const CmdResponse& msg){
+            V2_LOG_INFO("IpcServerActor: response received for conn=%d", msg.conn);
+            server_.send(msg.conn, msg.result.data(), msg.result.size());
+            actorContext()->dispatcher()->unsubscribe(msg.conn);
+            connections_.erase(msg.conn);
+            server_.closeClient(msg.conn);
+        },
+        [](const auto&){}
     }, msg);
 }
 

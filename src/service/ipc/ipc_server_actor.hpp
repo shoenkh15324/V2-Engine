@@ -1,7 +1,6 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
-#include "core/common/time/time.hpp"
 #include "infra/transport/uds/uds_server.hpp"
 #include <unordered_set>
 
@@ -28,7 +27,6 @@ private:
     int handleCommand(ConnHandle conn, const std::string& cmd);
 
     UdsServer server_;
-    Time::TimeStamp startTime_{};
     std::string socketPath_;
     std::unordered_set<ConnHandle> connections_;
     int backlog_;
