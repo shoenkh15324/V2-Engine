@@ -23,7 +23,8 @@ int TickActor::close(){
     if(state_ == Closed) return Ok;
     state_ = Closing;
     //
-    for(int id : timerIds_) cancelTimer(id);
+    auto ids = timerIds_;
+    for(int id : ids) cancelTimer(id);
     //
     state_ = Closed;
     return Ok;
