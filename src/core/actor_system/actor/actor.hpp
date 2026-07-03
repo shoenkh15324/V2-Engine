@@ -43,10 +43,13 @@ public:
 
     const std::string& name() const { return name_; }
     uint64_t id() const { return id_; }
+    ActorState getState() const { return state_; }
+    bool isEssential() const { return essential_; }
 
 protected:
     ActorContext* actorContext() const { return actorCtx_; }
-    
+    void setEssential(bool v){ essential_ = v; }
+
     ActorState state_{Closed};
     std::unordered_set<int> timerIds_;
 
@@ -54,4 +57,5 @@ private:
     ActorContext* actorCtx_ = nullptr;
     std::string name_;
     uint64_t id_;
+    bool essential_{false};
 };
