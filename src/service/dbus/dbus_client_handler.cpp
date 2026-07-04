@@ -36,7 +36,7 @@ void DbusClientHandler::handleSubscribeSignal(const DbusSubscribeSignal& msg){
     if(signalSubscriptions_.count(key)) return;
     
     try{
-        auto proxy = sdbus::createProxy(connection_, msg.destination, msg.objectPath);
+        auto proxy = sdbus::createProxy(connection_, sdbus::ServiceName(msg.destination), sdbus::ObjectPath(msg.objectPath));
         std::string subscriber = msg.subscriberActorName;
         std::string dest = msg.destination;
         std::string objPath = msg.objectPath;
@@ -54,7 +54,6 @@ void DbusClientHandler::handleSubscribeSignal(const DbusSubscribeSignal& msg){
             };
             actor_.sendMsg(subscriber, std::move(event));
         });
-        proxy->finishRegistration();
         signalSubscriptions_[key] = {msg.subscriberActorName, std::move(proxy)};
         V2_LOG_INFO("Subscribed to D-Bus signal: {}", key);
     }catch(const sdbus::Error& e){
@@ -76,7 +75,7 @@ sdbus::IProxy* DbusClientHandler::createProxy(const std::string& destination, co
     auto it = proxies_.find(key);
     if(it != proxies_.end()) return it->second.get();
 
-    auto proxy = sdbus::createProxy(connection_, destination, objectPath);
+    auto proxy = sdbus::createProxy(connection_, sdbus::ServiceName(destination), sdbus::ObjectPath(objectPath));
     auto* ptr = proxy.get();
     proxies_[key] = std::move(proxy);
     return ptr;

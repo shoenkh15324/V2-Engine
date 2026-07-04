@@ -18,7 +18,7 @@ int DbusActor::open(){
     state_ = Opening;
     //
     try{
-        connection_ = sdbus::createSystemBusConnection(busName_);
+        connection_ = sdbus::createSystemBusConnection(sdbus::ServiceName(busName_));
         connection_->enterEventLoopAsync();
 
         serverHandler_ = std::make_unique<DbusServerHandler>(*connection_, *this);

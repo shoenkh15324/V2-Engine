@@ -25,38 +25,43 @@ void DbusServerHandler::handleRegisterMethod(const DbusRegisterMethod& msg){
         return;
     }
     try{
-        auto obj = sdbus::createObject(connection_, msg.objectPath);
+        auto obj = sdbus::createObject(connection_, sdbus::ObjectPath(msg.objectPath));
         std::string owner = msg.ownerActorName;
         std::string objPath = msg.objectPath;
         std::string iface = msg.interfaceName;
         std::string method = msg.methodName;
 
-        obj->registerMethod(iface, method, "s", "s", [this, owner, objPath, iface, method](sdbus::MethodCall call){
-            std::string args;
-            try{
-                call >> args;
-            }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to deserialize D-Bus call args: {}", e.what());
-                auto reply = call.createErrorReply(sdbus::Error(e.getName(), e.getMessage()));
-                reply.send();
-                return;
-            }
+        {
+            auto methodItem = sdbus::registerMethod(sdbus::MethodName(method));
+            methodItem.inputSignature = sdbus::Signature("s");
+            methodItem.outputSignature = sdbus::Signature("s");
+            methodItem.callbackHandler = [this, owner, objPath, iface, method](sdbus::MethodCall call){
+                std::string args;
+                try{
+                    call >> args;
+                }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to deserialize D-Bus call args: {}", e.what());
+                    auto reply = call.createErrorReply(sdbus::Error(e.getName(), e.getMessage()));
+                    reply.send();
+                    return;
+                }
 
-            auto callId = nextCallId_.fetch_add(1);
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                pendingMethodCalls_[callId] = std::move(call);
-            }
-            DbusIncomingMethodCall msg = {
-                .callId = callId,
-                .objectPath = objPath,
-                .interfaceName = iface,
-                .methodName = method,
-                .args = std::move(args),
-                .senderActorName = actor_.name(),
+                auto callId = nextCallId_.fetch_add(1);
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    pendingMethodCalls_[callId] = std::move(call);
+                }
+                DbusIncomingMethodCall msg = {
+                    .callId = callId,
+                    .objectPath = objPath,
+                    .interfaceName = iface,
+                    .methodName = method,
+                    .args = std::move(args),
+                    .senderActorName = actor_.name(),
+                };
+                actor_.sendMsg(owner, std::move(msg));
             };
-            actor_.sendMsg(owner, std::move(msg));
-        });
-        obj->finishRegistration();
+            obj->addVTable(std::move(methodItem)).forInterface(sdbus::InterfaceName(iface));
+        }
         methods_[key] = RegisteredMethod{msg.ownerActorName, std::move(obj)};
         V2_LOG_INFO("Registered D-Bus method: {}", key);
     }catch(const sdbus::Error& e){
@@ -86,7 +91,7 @@ void DbusServerHandler::handleMethodCallResult(const DbusMethodCallResult& msg){
     }
     try{
         if(msg.isError){
-            auto reply = call.createErrorReply(sdbus::Error("", msg.result));
+            auto reply = call.createErrorReply(sdbus::Error(sdbus::Error::Name(""), msg.result));
             reply.send();
         }else{
             auto reply = call.createReply();
