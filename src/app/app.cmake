@@ -15,9 +15,7 @@ if(BUILD_MAIN_APP)
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
-    target_compile_definitions(v2_main PRIVATE
-        V2_APP_VERSION="0.4.0"
-    )
+
 endif()
 
 if(BUILD_CLI_APP)
@@ -29,9 +27,7 @@ if(BUILD_CLI_APP)
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
-    target_compile_definitions(v2_cli PRIVATE
-        V2_APP_VERSION="0.0.4"
-    )
+
 endif()
 
 if(BUILD_TUI_APP)
@@ -48,7 +44,5 @@ if(BUILD_TUI_APP)
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
     target_link_libraries(v2_tui PRIVATE v2_service v2_core v2_infra)
-    target_compile_definitions(v2_tui PRIVATE
-        V2_APP_VERSION="0.1.0"
-    )
+
 endif()

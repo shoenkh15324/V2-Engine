@@ -27,7 +27,7 @@ int CliApp::open(){
     setLogAppName(std::move(name_));
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
+    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
     //
 #if V2_PLATFORM_LINUX
     if(client_.connect(cfg_.ipcSocketPath) != Ok){ V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
@@ -118,7 +118,7 @@ void CliApp::printLocalHelp(){
 }
 
 void CliApp::printLocalVersion(){
-    std::cout << CLR("\033[36m\033[1m") << "  V2 Engine " << CLR("\033[0m") << V2_APP_VERSION << "\n";
+    std::cout << CLR("\033[36m\033[1m") << "  V2 Engine " << CLR("\033[0m") << V2_ENGINE_VERSION << "\n";
 }
 
 void CliApp::printLocalStatus(){

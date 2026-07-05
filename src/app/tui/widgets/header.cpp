@@ -12,7 +12,7 @@ ftxui::Element HeaderWidget::OnRender(){
     return hbox({
         text(" ■ V2 Engine TUI ") | bold | color(cCyan()),
         separator(),
-        text(" v" V2_APP_VERSION " ") | color(cDim()),
+        text(" v" V2_ENGINE_VERSION " ") | color(cDim()),
         separator(),
         text(" " + fmtUptime(uptimeMs_) + " ") | color(cDim()),
         filler(),

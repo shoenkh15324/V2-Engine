@@ -28,7 +28,7 @@
             } \
         }while(0)
 #else
-    #define V2_ASSERT(x) ((void)0)
+    #define V2_ASSERT(x, ...) ((void)0)
 #endif
 
 #define V2_PANIC(msg) \

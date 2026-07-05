@@ -4,12 +4,12 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
 
-# ============================================
-# App configurations
-# Format: "service_name:description:binary:dependency"
-# ============================================
+# Format: "name:description:binary:type:deps"
+#   type = "service" -> systemd service; "bin" -> install binary only
 APPS=(
-    "v2_main:V2 Engine Main App:v2_main:"
+    "v2_main:V2 Engine Main App:v2_main:service:"
+    "v2_cli:V2 Engine CLI:v2_cli:bin:"
+    "v2_tui:V2 Engine TUI:v2_tui:bin:"
 )
 
 # ============================================
@@ -20,13 +20,13 @@ usage() {
     echo ""
     echo "Apps:"
     for app in "${APPS[@]}"; do
-        IFS=':' read -r name desc bin _ <<< "$app"
+        IFS=':' read -r name desc _ _ _ <<< "$app"
         printf "  %-12s %s\n" "$name" "$desc"
     done
     echo ""
     echo "Examples:"
     echo "  $0            # Install all apps"
-    echo "  $0 v2-demo    # Install only demo"
+    echo "  $0 v2_main    # Install only main service"
     exit 1
 }
 
@@ -38,14 +38,16 @@ fi
 # Install dependencies
 # ============================================
 install_deps() {
-    if [[ -n "$SKIP_DEPS" ]]; then
-        echo "==> Skipping dependency installation (SKIP_DEPS is set)"
-        return
-    fi
-
     local packages=(
-        "libsdbus-c++-dev"
+        "build-essential"
+        "cmake"
+        "git"
+        "ninja-build"
         "lld"
+        "ccache"
+        "libsystemd-dev"
+        "pkg-config"
+        "linux-libc-dev"
     )
 
     echo "============================================"
@@ -56,8 +58,7 @@ install_deps() {
         echo "    - $pkg"
     done
     echo ""
-    echo "  (set SKIP_DEPS=1 to skip this step)"
-    echo ""
+
 
     if [[ -t 0 ]]; then
         read -p "  Proceed with installation? [y/N] " confirm
@@ -77,8 +78,11 @@ TARGETS=("$@")
 # ============================================
 build() {
     local log_level="${LOG_LEVEL:-3}"
-    echo "==> Building... (log_level=${log_level})"
-    cmake -B "$BUILD_DIR" -Wno-dev -DV2_DEFAULT_LOG_LEVEL="${log_level}" 2>&1 | tail -1
+    local build_type="${BUILD_TYPE:-Release}"
+    echo "==> Building... (build_type=${build_type}, log_level=${log_level})"
+    cmake -B "$BUILD_DIR" -G Ninja -Wno-dev \
+        -DCMAKE_BUILD_TYPE="${build_type}" \
+        -DV2_DEFAULT_LOG_LEVEL="${log_level}" 2>&1 | tail -1
     cmake --build "$BUILD_DIR" -j"$(nproc)" 2>&1 | tail -1
     echo ""
 }
@@ -111,19 +115,20 @@ EOF
 }
 
 # ============================================
-# Install single service
+# Install single app (service or binary)
 # ============================================
-install_service() {
+install_app() {
     local name="$1"
     local desc="$2"
     local bin="$3"
-    local deps="$4"
+    local type="$4"
+    local deps="$5"
 
-    echo "==> Installing $name..."
+    echo "==> Installing $name ($type)..."
 
-    local unit_file="/etc/systemd/system/${name}.service"
-
-    sudo tee "$unit_file" > /dev/null << EOF
+    if [[ "$type" == "service" ]]; then
+        local unit_file="/etc/systemd/system/${name}.service"
+        sudo tee "$unit_file" > /dev/null << EOF
 [Unit]
 Description=${desc}
 $( [[ -n "$deps" ]] && echo "After=${deps}
@@ -138,12 +143,13 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
+        sudo systemctl daemon-reload
+        sudo systemctl enable "$name"
+        sudo systemctl restart "$name" 2>/dev/null || true
+        systemctl is-active --quiet "$name" && echo "  (running)" || echo "  (start failed)"
+    fi
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$name"
-    sudo systemctl restart "$name" 2>/dev/null || true
-    systemctl is-active --quiet "$name" && echo "  (running)" || echo "  (start failed)"
-
+    sudo ln -sf "$BUILD_DIR/$bin" "/usr/local/bin/$name"
     echo ""
 }
 
@@ -156,16 +162,16 @@ install_dbus_policy
 
 if [[ " ${TARGETS[*]} " =~ " all " ]]; then
     for app in "${APPS[@]}"; do
-        IFS=':' read -r name desc bin deps <<< "$app"
-        install_service "$name" "$desc" "$bin" "$deps"
+        IFS=':' read -r name desc bin type deps <<< "$app"
+        install_app "$name" "$desc" "$bin" "$type" "$deps"
     done
 else
     for target in "${TARGETS[@]}"; do
         found=0
         for app in "${APPS[@]}"; do
-            IFS=':' read -r name desc bin deps <<< "$app"
+            IFS=':' read -r name desc bin type deps <<< "$app"
             if [[ "$name" == "$target" ]]; then
-                install_service "$name" "$desc" "$bin" "$deps"
+                install_app "$name" "$desc" "$bin" "$type" "$deps"
                 found=1
                 break
             fi
@@ -176,9 +182,5 @@ else
         fi
     done
 fi
-
-echo "==> Creating symlink..."
-sudo ln -sf "$BUILD_DIR/v2_cli" /usr/local/bin/v2
-sudo ln -sf "$BUILD_DIR/v2_tui" /usr/local/bin/v2_tui
 
 echo "==> Install Complete!"

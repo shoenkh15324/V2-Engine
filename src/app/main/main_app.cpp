@@ -24,7 +24,7 @@ void MainApp::open(){
     setLogAppName(std::move(name_));
     V2_LOG_INFO("%s App Open", name_.c_str());
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_APP_VERSION);
+    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
     //
     auto& sig = SignalHandler::instance();
     sig.listen(SIGINT, [this](int){ requestStop(); });
