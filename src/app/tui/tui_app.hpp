@@ -7,6 +7,7 @@
 #include "widgets/footer.hpp"
 #include "widgets/header.hpp"
 #include "widgets/system_panel.hpp"
+#include "widgets/actor_list/actor_list.hpp"
 #include <string>
 #include <atomic>
 #include <memory>
@@ -52,12 +53,7 @@ private:
     std::shared_ptr<tui::FooterWidget> footerWidget_;
     std::shared_ptr<tui::HeaderWidget> headerWidget_;
     std::shared_ptr<tui::SystemPanelWidget> systemPanelWidget_;
-
-    // 체크박스 Box 저장 (render()에서 채워지고, CatchEvent에서 읽힘)
-    std::vector<ftxui::Box> checkBoxes_;
-    // 현재 렌더링된 actor 리스트 (토글 대상 찾기용)
-    std::vector<std::string> checkboxActorNames_;
-    std::vector<bool> checkboxActorStates_;
+    std::shared_ptr<tui::ActorListWidget> actorListWidget_;
 
     // 마우스 클릭 활성화
     bool mouseEnabled_ = true;

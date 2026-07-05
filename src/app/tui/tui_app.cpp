@@ -19,30 +19,21 @@ TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return rend
         if(screen_) screen_->Exit();
         return true;
     }
-    if(event.is_mouse() && (event.mouse().button == ftxui::Mouse::Left) && (event.mouse().motion == ftxui::Mouse::Pressed)){
-        for(size_t i = 0; i < checkBoxes_.size(); ++i){
-            if(checkBoxes_[i].Contain(event.mouse().x, event.mouse().y)){
-                if(i < checkboxActorNames_.size()){
-                    std::string name = checkboxActorNames_[i];
-                    bool isOn = checkboxActorStates_[i];
-                    setToast("toggling " + name + "...", 2);
-                    std::thread([this, name, isOn](){
-                        std::string cmd = isOn ? ("actor -d " + name) : ("actor -e " + name);
-                        std::string rsp = sendIpcCommand(cmd);
-                        screen_->Post([this, rsp]{
-                            setToast(rsp, 3);
-                        });
-                    }).detach();
-                }
-                return true;
-            }
-        }
-    }
+    if(actorListWidget_ && actorListWidget_->OnEvent(event)) return true;
     return false;
 })){
     footerWidget_ = ftxui::Make<FooterWidget>();
     headerWidget_ = ftxui::Make<HeaderWidget>();
     systemPanelWidget_ = ftxui::Make<SystemPanelWidget>();
+    actorListWidget_ = ftxui::Make<ActorListWidget>();
+    actorListWidget_->setOnToggle([this](const std::string& name, bool wasOn){
+        setToast("toggling " + name + "...", 2);
+        std::thread([this, name, wasOn](){
+            std::string cmd = wasOn ? ("actor -d " + name) : ("actor -e " + name);
+            std::string rsp = sendIpcCommand(cmd);
+            screen_->Post([this, rsp]{ setToast(rsp, 3); });
+        }).detach();
+    });
 }
 
 TuiApp::~TuiApp(){
@@ -149,14 +140,8 @@ ftxui::Element TuiApp::render(){
     auto& r = snap.resources;
     float memPct = (r.memoryTotalKb > 0) ? ((float)r.memoryRssKb / (float)r.memoryTotalKb * 100.0f) : 0.0f;
 
-    {
-        size_t n = 0;
-        for(const auto& a : snap.actors){ if(!a.essential) ++n; }
-        checkBoxes_.resize(n);
-        checkboxActorNames_.resize(n);
-        checkboxActorStates_.resize(n);
-    }
-    auto leftPanel = renderActorList(snap.actors, checkBoxes_, checkboxActorNames_, checkboxActorStates_) | flex;
+    actorListWidget_->setActors(snap.actors);
+    auto leftPanel = actorListWidget_->Render() | flex;
     
     systemPanelWidget_->setResources(r);
     auto rightPanel = systemPanelWidget_->Render() | flex;
