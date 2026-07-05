@@ -6,6 +6,7 @@
 #include "ftxui/component/component.hpp"
 #include "widgets/footer.hpp"
 #include "widgets/header.hpp"
+#include "widgets/system_panel.hpp"
 #include <string>
 #include <atomic>
 #include <memory>
@@ -50,6 +51,7 @@ private:
     ftxui::Component root_;
     std::shared_ptr<tui::FooterWidget> footerWidget_;
     std::shared_ptr<tui::HeaderWidget> headerWidget_;
+    std::shared_ptr<tui::SystemPanelWidget> systemPanelWidget_;
 
     // 체크박스 Box 저장 (render()에서 채워지고, CatchEvent에서 읽힘)
     std::vector<ftxui::Box> checkBoxes_;

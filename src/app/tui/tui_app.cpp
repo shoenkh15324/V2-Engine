@@ -42,6 +42,7 @@ TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return rend
 })){
     footerWidget_ = ftxui::Make<FooterWidget>();
     headerWidget_ = ftxui::Make<HeaderWidget>();
+    systemPanelWidget_ = ftxui::Make<SystemPanelWidget>();
 }
 
 TuiApp::~TuiApp(){
@@ -156,11 +157,9 @@ ftxui::Element TuiApp::render(){
         checkboxActorStates_.resize(n);
     }
     auto leftPanel = renderActorList(snap.actors, checkBoxes_, checkboxActorNames_, checkboxActorStates_) | flex;
-    auto rightPanel = vbox({
-        renderProcessInfo(r),
-        separator(),
-        renderSystemResources(r) | flex,
-    }) | flex;
+    
+    systemPanelWidget_->setResources(r);
+    auto rightPanel = systemPanelWidget_->Render() | flex;
 
     headerWidget_->setConnected(client_.fd() >= 0);
     headerWidget_->setActorCount(snap.actors.size());
