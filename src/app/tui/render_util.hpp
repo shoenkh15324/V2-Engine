@@ -24,7 +24,6 @@ int gaugeCells();
 ftxui::Element cellGauge(float progress, ftxui::Color col, int cells);
 
 // TODO: 아래 render* 함수들은 Step 2~5에서 각 widget으로 이관 후 제거
-ftxui::Element renderHeader(bool connected, int actorCount, int clientCount, uint64_t uptimeMs, float cpuPct, float memPct);
 ftxui::Element renderActorList(const std::vector<ActorInfo>& actors, std::vector<ftxui::Box>& outCheckboxes, std::vector<std::string>& outActorNames, std::vector<bool>& outActorStates);
 ftxui::Element renderSystemResources(const SystemResources& resources);
 ftxui::Element renderProcessInfo(const SystemResources& resources);

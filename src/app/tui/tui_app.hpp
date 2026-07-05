@@ -2,16 +2,16 @@
 #include "core/common/config/platform_config.h"
 #include "core/common/config/runtime_config.h"
 #include "service/monitor/monitor_data.hpp"
+#include "ftxui/component/app.hpp"
+#include "ftxui/component/component.hpp"
+#include "widgets/footer.hpp"
+#include "widgets/header.hpp"
 #include <string>
 #include <atomic>
 #include <memory>
 #include <thread>
 #include <mutex>
 #include <vector>
-
-#include "widgets/footer.hpp"
-#include "ftxui/component/app.hpp"
-#include "ftxui/component/component.hpp"
 
 #if V2_PLATFORM_LINUX
     #include "infra/transport/uds/uds_client.hpp"
@@ -49,6 +49,7 @@ private:
     std::unique_ptr<ftxui::App> screen_;
     ftxui::Component root_;
     std::shared_ptr<tui::FooterWidget> footerWidget_;
+    std::shared_ptr<tui::HeaderWidget> headerWidget_;
 
     // 체크박스 Box 저장 (render()에서 채워지고, CatchEvent에서 읽힘)
     std::vector<ftxui::Box> checkBoxes_;

@@ -61,24 +61,6 @@ ftxui::Element cellGauge(float progress, ftxui::Color col, int cells){
 
 // ─── 임시 유지: Step 2~5에서 각 widget으로 이관 후 제거 ───
 
-ftxui::Element renderHeader(bool connected, int actorCount, int clientCount, uint64_t uptimeMs, float cpuPct, float memPct){
-
-    using namespace ftxui;
-    return hbox({
-        text(" ■ V2 Engine TUI ") | bold | color(cCyan()),
-        separator(),
-        text(" v" V2_APP_VERSION " ") | color(cDim()),
-        separator(),
-        text(" " + fmtUptime(uptimeMs) + " ") | color(cDim()),
-        filler(),
-        text(std::to_string(actorCount) + " actors ") | color(cDim()),
-        separator(),
-        text(std::to_string(clientCount) + " client ") | color(cDim()),
-        separator(),
-        text(connected ? " ● Connected" : " ○ Disconnected") | color(connected ? cGreen() : cRed()),
-    });
-}
-
 ftxui::Element renderActorList(const std::vector<ActorInfo>& actors, std::vector<ftxui::Box>& outCheckboxes, std::vector<std::string>& outActorNames, std::vector<bool>& outActorStates){
 
     using namespace ftxui;

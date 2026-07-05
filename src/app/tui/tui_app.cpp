@@ -41,6 +41,7 @@ TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return rend
     return false;
 })){
     footerWidget_ = ftxui::Make<FooterWidget>();
+    headerWidget_ = ftxui::Make<HeaderWidget>();
 }
 
 TuiApp::~TuiApp(){
@@ -161,9 +162,14 @@ ftxui::Element TuiApp::render(){
         renderSystemResources(r) | flex,
     }) | flex;
 
+    headerWidget_->setConnected(client_.fd() >= 0);
+    headerWidget_->setActorCount(snap.actors.size());
+    headerWidget_->setClientCount(snap.clientCount);
+    headerWidget_->setUptime(r.uptimeMs);
+
     if(screen_) screen_->RequestAnimationFrame();
     return vbox({
-        renderHeader(client_.fd() >= 0, snap.actors.size(), snap.clientCount, r.uptimeMs, r.cpuPercent, memPct) | borderRounded,
+        headerWidget_->Render() | borderRounded,
         separator(),
         hbox({ leftPanel, separator(), rightPanel }) | flex,
         separator(),
