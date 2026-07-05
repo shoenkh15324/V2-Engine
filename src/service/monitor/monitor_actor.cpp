@@ -167,7 +167,7 @@ void MonitorActor::handle(const Message& msg){
 
             collectSystemResources(snap.resources);
 
-            std::string data = serializeSnapshot(snap);
+            std::string data = nlohmann::json(snap).dump() + "\n";
             for(ConnHandle conn : connections_){
                 server_.send(conn, data.data(), data.size());
             }

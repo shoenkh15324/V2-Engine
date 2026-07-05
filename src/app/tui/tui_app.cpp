@@ -114,35 +114,32 @@ void TuiApp::requestStop(){
 
 void TuiApp::recvLoop(){
     std::vector<char> buf(cfg_.monitorRecvBufferSize);
-    pendingSnapshot_ = MonitorSnapshot{};
+    std::string lineBuffer;
     while(isRunning_.load()){
         int n = client_.recv(buf.data(), buf.size());
         if(n > 0){
-            recvBuffer_.append(buf.data(), n);
+            lineBuffer.append(buf.data(), n);
             size_t pos;
-            while((pos = recvBuffer_.find('\n')) != std::string::npos){
-                std::string line = recvBuffer_.substr(0, pos);
-                recvBuffer_.erase(0, pos + 1);
-                if(!line.empty()) handleLine(line);
+            while((pos = lineBuffer.find('\n')) != std::string::npos){
+                std::string line = lineBuffer.substr(0, pos);
+                lineBuffer.erase(0, pos + 1);
+                if(!line.empty()){
+                    try{
+                        MonitorSnapshot snap = nlohmann::json::parse(line);
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        snapshot_ = std::move(snap);
+                    }catch(const nlohmann::json::exception& e){
+                        V2_LOG_ERROR("TuiApp: failed to parse snapshot: %s", e.what());
+                    }
+                }
             }
-            if(recvBuffer_.size() > 65536) recvBuffer_.clear();
-            if(screen_) screen_->Post([]{}); // wake loop for redraw
+            if(lineBuffer.size() > 65536) lineBuffer.clear();
+            if(screen_) screen_->Post([]{});
         }else if(n == 0){
             break;
         }else{
             std::this_thread::sleep_for(std::chrono::milliseconds(cfg_.monitorPollIntervalMs));
         }
-    }
-}
-
-void TuiApp::handleLine(const std::string& line){
-    if(isSnapshotBegin(line)){
-        pendingSnapshot_ = MonitorSnapshot{};
-    }else if(isSnapshotEnd(line)){
-        std::lock_guard<std::mutex> lock(mutex_);
-        snapshot_ = pendingSnapshot_;
-    }else{
-        parseSnapshotLine(line, pendingSnapshot_);
     }
 }
 

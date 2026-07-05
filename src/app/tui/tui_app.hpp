@@ -37,15 +37,13 @@ public:
 private:
     void requestStop();
     void recvLoop();
-    void handleLine(const std::string& line);
     ftxui::Element render();
     std::string sendIpcCommand(const std::string& cmd);
     void setToast(const std::string& msg, int durationSec);
 
     RuntimeConfig cfg_;
-    MonitorSnapshot snapshot_, pendingSnapshot_;
+    MonitorSnapshot snapshot_;
     mutable std::mutex mutex_;
-    std::string recvBuffer_;
     std::thread recvThread_;
     std::string name_ = "Tui";
     std::atomic<bool> isRunning_{false};

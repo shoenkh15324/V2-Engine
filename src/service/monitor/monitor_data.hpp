@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <nlohmann/json.hpp>
 
 struct ActorInfo{
     std::string name;
@@ -11,6 +12,15 @@ struct ActorInfo{
     int state = 0;
     bool essential = false;
 };
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ActorInfo,
+    name,
+    id,
+    mailboxCount,
+    mailboxCapacity,
+    state,
+    essential
+)
 
 struct SystemResources{
     uint64_t memoryRssKb = 0;
@@ -28,6 +38,22 @@ struct SystemResources{
     uint64_t sysMemAvailKb = 0;
 };
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(SystemResources,
+    memoryRssKb,
+    memoryTotalKb,
+    cpuPercent,
+    uptimeMs,
+    threadCount,
+    vmPeakKb,
+    vmHwmKb,
+    vmSwapKb,
+    loadAvg1, 
+    loadAvg5,
+    loadAvg15,
+    sysMemTotalKb,
+    sysMemAvailKb
+)
+
 struct MonitorSnapshot{
     uint64_t timestampMs = 0;
     int clientCount = 0;
@@ -35,7 +61,9 @@ struct MonitorSnapshot{
     SystemResources resources;
 };
 
-std::string serializeSnapshot(const MonitorSnapshot& snap);
-bool parseSnapshotLine(const std::string& line, MonitorSnapshot& snap);
-bool isSnapshotBegin(const std::string& line);
-bool isSnapshotEnd(const std::string& line);
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(MonitorSnapshot,
+    timestampMs,
+    clientCount,
+    actors,
+    resources
+)
