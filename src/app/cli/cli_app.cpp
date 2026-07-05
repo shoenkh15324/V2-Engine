@@ -48,16 +48,16 @@ int CliApp::run(int argc, char** argv){
     if(argc < 2){ printLocalHelp(); return 0; }
 
     // 로컬에서 처리할 플래그 (v2 바로 다음에만 유효)
-    if(strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+    if(strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
         printLocalHelp(); return 0;
     }
-    if(strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0) {
+    if(strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "version") == 0) {
         printLocalVersion(); return 0;
     }
-    if(strcmp(argv[1], "-s") == 0 || strcmp(argv[1], "--status") == 0) {
+    if(strcmp(argv[1], "-s") == 0 || strcmp(argv[1], "--status") == 0 || strcmp(argv[1], "status") == 0) {
         printLocalStatus(); return 0;
     }
-    if(strcmp(argv[1], "-m") == 0 || strcmp(argv[1], "--monitor") == 0) {
+    if(strcmp(argv[1], "-m") == 0 || strcmp(argv[1], "--monitor") == 0 || strcmp(argv[1], "monitor") == 0) {
         return launchMonitor(argv);
     }
 
@@ -107,14 +107,24 @@ bool CliApp::shouldColor(){
 void CliApp::printLocalHelp(){
     std::cout
         << CLR("\033[1m\033[36m") << "  V2 Engine \342\200\224 Control Interface" << CLR("\033[0m") << "\n"
-        << CLR("\033[33m") << "  Usage:" << CLR("\033[0m") << " v2 <command>\n"
+        << CLR("\033[33m") << "  Usage:" << CLR("\033[0m") << " v2 <command> [options]\n"
         << "\n"
-        << CLR("\033[33m") << "  Commands:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "help" << CLR("\033[0m") << "      Show this help message\n"
-        << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "      Show system information\n"
-        << "    " << CLR("\033[32m") << "version" << CLR("\033[0m") << "   Show version information\n"
-        << "    " << CLR("\033[32m") << "status" << CLR("\033[0m") << "    Show daemon status\n"
-        << "    " << CLR("\033[32m") << "monitor" << CLR("\033[0m") << "   Open TUI monitor\n";
+        << CLR("\033[33m") << "  Information:" << CLR("\033[0m") << "\n"
+        << "    " << CLR("\033[32m") << "help, -h, --help" << CLR("\033[0m") << "           Show this help message\n"
+        << "    " << CLR("\033[32m") << "version, -v, --version" << CLR("\033[0m") << "     Show version\n"
+        << "    " << CLR("\033[32m") << "status, -s, --status" << CLR("\033[0m") << "       Show daemon status\n"
+        << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "                       Show system information\n"
+        << "\n"
+        << CLR("\033[33m") << "  Actor Control:" << CLR("\033[0m") << "\n"
+        << "    " << CLR("\033[32m") << "actor -l" << CLR("\033[0m") << "                   List actors\n"
+        << "    " << CLR("\033[32m") << "actor -d <name>" << CLR("\033[0m") << "            Disable actor\n"
+        << "    " << CLR("\033[32m") << "actor -e <name>" << CLR("\033[0m") << "            Enable actor\n"
+        << "\n"
+        << CLR("\033[33m") << "  Monitoring:" << CLR("\033[0m") << "\n"
+        << "    " << CLR("\033[32m") << "monitor, -m, --monitor" << CLR("\033[0m") << "     Open TUI monitor\n"
+        << "\n"
+        << CLR("\033[33m") << "  Development:" << CLR("\033[0m") << "\n"
+        << "    " << CLR("\033[32m") << "test [options]" << CLR("\033[0m") << "             Test command parsing\n";
 }
 
 void CliApp::printLocalVersion(){
