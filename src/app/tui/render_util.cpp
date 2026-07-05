@@ -234,24 +234,4 @@ ftxui::Element renderProcessInfo(const SystemResources& res){
     );
 }
 
-ftxui::Element renderFooter(const std::string& toastMsg, std::chrono::steady_clock::time_point toastExpiry){
-
-    using namespace ftxui;
-
-    Elements elems;
-    elems.push_back(text(" " + Time::nowDateString() + " ") | color(cDim()));
-    elems.push_back(filler());
-
-    if(!toastMsg.empty()){
-        auto now = std::chrono::steady_clock::now();
-        if(now < toastExpiry){
-            elems.push_back(text(" " + toastMsg + " ") | color(cYellow()));
-            elems.push_back(separator());
-        }
-    }
-
-    elems.push_back(text(" [q] quit  [h] help ") | color(cDim()));
-    return hbox(std::move(elems));
-}
-
 } // namespace tui

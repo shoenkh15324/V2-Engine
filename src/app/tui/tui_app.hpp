@@ -9,7 +9,7 @@
 #include <mutex>
 #include <vector>
 
-
+#include "widgets/footer.hpp"
 #include "ftxui/component/app.hpp"
 #include "ftxui/component/component.hpp"
 
@@ -48,16 +48,13 @@ private:
     std::atomic<bool> isRunning_{false};
     std::unique_ptr<ftxui::App> screen_;
     ftxui::Component root_;
+    std::shared_ptr<tui::FooterWidget> footerWidget_;
 
     // 체크박스 Box 저장 (render()에서 채워지고, CatchEvent에서 읽힘)
     std::vector<ftxui::Box> checkBoxes_;
     // 현재 렌더링된 actor 리스트 (토글 대상 찾기용)
     std::vector<std::string> checkboxActorNames_;
     std::vector<bool> checkboxActorStates_;
-
-    // Toast 메시지
-    std::string toastMsg_;
-    std::chrono::steady_clock::time_point toastExpiry_;
 
     // 마우스 클릭 활성화
     bool mouseEnabled_ = true;

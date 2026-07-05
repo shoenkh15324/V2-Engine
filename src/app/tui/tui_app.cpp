@@ -4,9 +4,8 @@
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
 #include "core/common/os/signal_handler.hpp"
+#include "app/tui/render_util.hpp"
 #include <csignal>
-
-#include "render_util.hpp"
 #include <ftxui/dom/elements.hpp>
 
 #if V2_PLATFORM_LINUX
@@ -41,7 +40,7 @@ TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return rend
     }
     return false;
 })){
-    //
+    footerWidget_ = ftxui::Make<FooterWidget>();
 }
 
 TuiApp::~TuiApp(){
@@ -168,7 +167,7 @@ ftxui::Element TuiApp::render(){
         separator(),
         hbox({ leftPanel, separator(), rightPanel }) | flex,
         separator(),
-        renderFooter(toastMsg_, toastExpiry_) | borderRounded
+        footerWidget_->Render() | borderRounded
     });
 }
 
@@ -194,8 +193,7 @@ std::string TuiApp::sendIpcCommand(const std::string& cmd){
 
 void TuiApp::setToast(const std::string& msg, int durationSec){
     auto pos = msg.find('\n');
-    toastMsg_ = (pos != std::string::npos) ? msg.substr(0, pos) : msg;
-    if(!toastMsg_.empty() && (toastMsg_.back() == '\n')) toastMsg_.pop_back();
-    toastExpiry_ = std::chrono::steady_clock::now() + std::chrono::seconds(durationSec);
+    std::string m = (pos != std::string::npos) ? msg.substr(0, pos) : msg;
+    footerWidget_->setToast(m, Time::now() + std::chrono::seconds(durationSec));
     if(screen_) screen_->Post([]{});
 }

@@ -28,6 +28,5 @@ ftxui::Element renderHeader(bool connected, int actorCount, int clientCount, uin
 ftxui::Element renderActorList(const std::vector<ActorInfo>& actors, std::vector<ftxui::Box>& outCheckboxes, std::vector<std::string>& outActorNames, std::vector<bool>& outActorStates);
 ftxui::Element renderSystemResources(const SystemResources& resources);
 ftxui::Element renderProcessInfo(const SystemResources& resources);
-ftxui::Element renderFooter(const std::string& toastMsg = "", std::chrono::steady_clock::time_point toastExpiry = {});
 
 } // namespace tui
