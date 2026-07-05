@@ -14,26 +14,41 @@
 
 using namespace tui;
 
-TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return render(); }), [this](ftxui::Event event){
-    if(event == ftxui::Event::Character('q') || event == ftxui::Event::Character('Q')){
-        if(screen_) screen_->Exit();
-        return true;
-    }
-    if(actorListWidget_ && actorListWidget_->OnEvent(event)) return true;
-    return false;
-})){
+TuiApp::TuiApp(){
     footerWidget_ = ftxui::Make<FooterWidget>();
     headerWidget_ = ftxui::Make<HeaderWidget>();
     systemPanelWidget_ = ftxui::Make<SystemPanelWidget>();
     actorListWidget_ = ftxui::Make<ActorListWidget>();
+
     actorListWidget_->setOnToggle([this](const std::string& name, bool wasOn){
         setToast("toggling " + name + "...", 2);
         std::thread([this, name, wasOn](){
             std::string cmd = wasOn ? ("actor -d " + name) : ("actor -e " + name);
             std::string rsp = sendIpcCommand(cmd);
-            screen_->Post([this, rsp]{ setToast(rsp, 3); });
+            screen_->Post([this, rsp]() { setToast(rsp, 3); });
         }).detach();
     });
+
+    auto mainContent = ftxui::Container::Horizontal({
+        actorListWidget_,
+        systemPanelWidget_,
+    });
+    auto vertical = ftxui::Container::Vertical({
+        headerWidget_,
+        mainContent,
+        footerWidget_,
+    });
+
+    root_ = ftxui::CatchEvent(
+        ftxui::Renderer(std::move(vertical), [this](){ return render(); }),
+        [this](ftxui::Event event){
+            if((event == ftxui::Event::Character('q')) || (event == ftxui::Event::Character('Q'))){
+                if(screen_) screen_->Exit();
+                return true;
+            }
+            return false;
+        }
+    );
 }
 
 TuiApp::~TuiApp(){

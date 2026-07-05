@@ -23,7 +23,4 @@ ftxui::Color gaugeColor(float f);
 int gaugeCells();
 ftxui::Element cellGauge(float progress, ftxui::Color col, int cells);
 
-// TODO: 아래 render* 함수들은 각 widget으로 이관 후 제거
-ftxui::Element renderHeader(bool connected, int actorCount, int clientCount, uint64_t uptimeMs, float cpuPct, float memPct);
-
 } // namespace tui
