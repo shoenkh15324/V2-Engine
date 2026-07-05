@@ -150,6 +150,9 @@ EOF
     fi
 
     sudo ln -sf "$BUILD_DIR/$bin" "/usr/local/bin/$name"
+    if [[ "$name" == "v2_cli" ]]; then
+        sudo ln -sf "/usr/local/bin/$name" "/usr/local/bin/v2"
+    fi
     echo ""
 }
 
