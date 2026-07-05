@@ -6,15 +6,16 @@
 
 namespace tui{
 
-SystemPanelWidget::SystemPanelWidget() = default;
+SystemPanelWidget::SystemPanelWidget(){
+    splitSize_ = ftxui::Terminal::Size().dimy / 2;
+    processInfo_ = ftxui::Renderer([this](){ return renderProcessInfo(); });
+    systemResourceInfo_ = ftxui::Renderer([this](){ return renderSystemResources(); });
+    resizableContent_ = ftxui::ResizableSplitTop(processInfo_, systemResourceInfo_, &splitSize_);
+    Add(resizableContent_);
+}
 
 ftxui::Element SystemPanelWidget::OnRender(){
-    using namespace ftxui;
-    return vbox(Elements{
-        renderProcessInfo(),
-        separator(),
-        renderSystemResources() | flex,
-    });
+    return resizableContent_->Render();
 }
 
 void SystemPanelWidget::setResources(const SystemResources& res){
@@ -43,7 +44,7 @@ ftxui::Element SystemPanelWidget::renderProcessInfo(){
             row("Peak", fmtPercent(peakMb) + " MB"),
             row("HWM", fmtPercent(hwmMb) + " MB"),
             row("Swap", fmtPercent(swapMb) + " MB"),
-        }) | flex
+        })
     );
 }
 

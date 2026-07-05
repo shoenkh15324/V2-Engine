@@ -16,7 +16,10 @@ private:
     ftxui::Element renderSystemResources();
 
     SystemResources res_;
-
+    ftxui::Component processInfo_;
+    ftxui::Component systemResourceInfo_;
+    ftxui::Component resizableContent_;
+    int splitSize_ = 9;
 };
 
 } // namespace tui

@@ -15,6 +15,7 @@
 using namespace tui;
 
 TuiApp::TuiApp(){
+    splitSize_ = ftxui::Terminal::Size().dimx / 2;
     footerWidget_ = ftxui::Make<FooterWidget>();
     headerWidget_ = ftxui::Make<HeaderWidget>();
     systemPanelWidget_ = ftxui::Make<SystemPanelWidget>();
@@ -29,18 +30,19 @@ TuiApp::TuiApp(){
         }).detach();
     });
 
-    auto mainContent = ftxui::Container::Horizontal({
+    mainContent_ = ftxui::ResizableSplitLeft(
         actorListWidget_,
         systemPanelWidget_,
-    });
-    auto vertical = ftxui::Container::Vertical({
+        &splitSize_
+    );
+    auto scene = ftxui::Container::Vertical({
         headerWidget_,
-        mainContent,
+        mainContent_,
         footerWidget_,
     });
 
     root_ = ftxui::CatchEvent(
-        ftxui::Renderer(std::move(vertical), [this](){ return render(); }),
+        ftxui::Renderer(std::move(scene), [this](){ return render(); }),
         [this](ftxui::Event event){
             if((event == ftxui::Event::Character('q')) || (event == ftxui::Event::Character('Q'))){
                 if(screen_) screen_->Exit();
@@ -156,10 +158,7 @@ ftxui::Element TuiApp::render(){
     float memPct = (r.memoryTotalKb > 0) ? ((float)r.memoryRssKb / (float)r.memoryTotalKb * 100.0f) : 0.0f;
 
     actorListWidget_->setActors(snap.actors);
-    auto leftPanel = actorListWidget_->Render() | flex;
-    
     systemPanelWidget_->setResources(r);
-    auto rightPanel = systemPanelWidget_->Render() | flex;
 
     headerWidget_->setConnected(client_.fd() >= 0);
     headerWidget_->setActorCount(snap.actors.size());
@@ -170,7 +169,7 @@ ftxui::Element TuiApp::render(){
     return vbox({
         headerWidget_->Render() | borderRounded,
         separator(),
-        hbox({ leftPanel, separator(), rightPanel }) | flex,
+        mainContent_->Render() | flex,
         separator(),
         footerWidget_->Render() | borderRounded
     });
