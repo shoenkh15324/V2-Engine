@@ -13,6 +13,8 @@
     #include <unistd.h>
 #endif
 
+using namespace tui;
+
 TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return render(); }), [this](ftxui::Event event){
     if(event == ftxui::Event::Character('q') || event == ftxui::Event::Character('Q')){
         if(screen_) screen_->Exit();
