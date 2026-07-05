@@ -8,6 +8,8 @@ struct ActorInfo{
     uint64_t id;
     size_t mailboxCount;
     size_t mailboxCapacity;
+    int state = 0;
+    bool essential = false;
 };
 
 struct SystemResources{

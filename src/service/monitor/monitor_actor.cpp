@@ -160,6 +160,8 @@ void MonitorActor::handle(const Message& msg){
                 actorInfo.id = actor->id();
                 actorInfo.mailboxCount = actor->mailboxCount();
                 actorInfo.mailboxCapacity = actor->mailboxCapacity();
+                actorInfo.state = static_cast<int>(actor->getState());
+                actorInfo.essential = actor->isEssential();
                 snap.actors.push_back(std::move(actorInfo));
             });
 

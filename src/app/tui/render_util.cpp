@@ -94,11 +94,12 @@ ftxui::Element renderHeader(bool connected, int actorCount, int clientCount, uin
     });
 }
 
-ftxui::Element renderActorList(const std::vector<ActorInfo>& actors){
+ftxui::Element renderActorList(const std::vector<ActorInfo>& actors, std::vector<ftxui::Box>& outCheckboxes, std::vector<std::string>& outActorNames, std::vector<bool>& outActorStates){
     using namespace ftxui;
     initColors();
     int cells = gaugeCells();
     Elements actorRows;
+    size_t idx = 0;
     for(const auto& a : actors){
         float progress = (a.mailboxCapacity > 0) ? ((float)a.mailboxCount / (float)a.mailboxCapacity) : 0.0f;
 
@@ -114,26 +115,45 @@ ftxui::Element renderActorList(const std::vector<ActorInfo>& actors){
         auto statusIcon = (a.mailboxCount > 0) ? " ● " : " ○ ";
         auto statusLabel = (a.mailboxCount > 0) ? "Active" : "Idle";
 
-        actorRows.push_back(
-            hbox({
-                text("  " + std::to_string(a.id) + "  ") | color(cBlue),
-                separator(),
-                text(" " + a.name + " ") | color(cWhite) | size(WIDTH, GREATER_THAN, 30),
-                separator(),
-                bar | flex,
-                separator(),
-                mailboxText,
-                separator(),
-                text(statusIcon) | color(statusColor),
-                text(statusLabel) | color(statusColor) | size(WIDTH, GREATER_THAN, 6),
-            })
-        );
+        // --- 체크박스 컬럼 ---
+        Elements rowParts;
+
+        if(a.essential){
+            // Essential: [ESS] 라벨만, 체크 불가
+            rowParts.push_back(text(" [ESS] ") | color(cDim) | size(WIDTH, GREATER_THAN, 6));
+        }else{
+            // Non-essential: 체크박스
+            bool isOn = (a.state >= 3); // Opened
+            auto& cbBox = outCheckboxes[idx]; // pre-allocated stable reference
+            rowParts.push_back(
+                text(isOn ? " ■ " : " □ ")
+                    | color(isOn ? cGreen : cDim)
+                    | size(WIDTH, GREATER_THAN, 5)
+                    | reflect(cbBox)
+            );
+
+            // 체크박스 정보 저장 (미리 할당된 슬롯 사용)
+            outActorNames[idx] = a.name;
+            outActorStates[idx] = isOn;
+            ++idx;
+        }
+
+        rowParts.push_back(text(" " + std::to_string(a.id) + "  ") | color(cBlue));
+        rowParts.push_back(separator());
+        rowParts.push_back(text(" " + a.name + " ") | color(cWhite) | size(WIDTH, GREATER_THAN, 30));
+        rowParts.push_back(separator());
+        rowParts.push_back(bar | flex);
+        rowParts.push_back(separator());
+        rowParts.push_back(mailboxText);
+        rowParts.push_back(separator());
+        rowParts.push_back(text(statusIcon) | color(statusColor));
+        rowParts.push_back(text(statusLabel) | color(statusColor) | size(WIDTH, GREATER_THAN, 6));
+
+        actorRows.push_back(hbox(std::move(rowParts)));
     }
 
     if(actorRows.empty()){
-        actorRows.push_back(
-            text(" No actors connected") | color(cDim) | hcenter
-        );
+        actorRows.push_back(text(" No actors connected") | color(cDim) | hcenter);
     }
 
     return window(
@@ -233,13 +253,23 @@ ftxui::Element renderProcessInfo(const SystemResources& res){
     );
 }
 
-ftxui::Element renderFooter(){
+ftxui::Element renderFooter(const std::string& toastMsg, std::chrono::steady_clock::time_point toastExpiry){
     using namespace ftxui;
     initColors();
-    return hbox({
-        text(" " + Time::nowDateString() + " ") | color(cDim),
-        filler(),
-        separator(),
-        text(" [q] quit  [h] help ") | color(cDim),
-    });
+
+    Elements elems;
+    elems.push_back(text(" " + Time::nowDateString() + " ") | color(cDim));
+    elems.push_back(filler());
+
+    // 토스트 메시지 (만료 전이면 표시)
+    if(!toastMsg.empty()){
+        auto now = std::chrono::steady_clock::now();
+        if(now < toastExpiry){
+            elems.push_back(text(" " + toastMsg + " ") | color(cYellow));
+            elems.push_back(separator());
+        }
+    }
+
+    elems.push_back(text(" [q] quit  [h] help ") | color(cDim));
+    return hbox(std::move(elems));
 }

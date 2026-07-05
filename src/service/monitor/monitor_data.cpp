@@ -14,7 +14,9 @@ std::string serializeSnapshot(const MonitorSnapshot& snap){
         data += "actor id:" + std::to_string(actor.id) +
                 " name:" + actor.name +
                 " mb_used:" + std::to_string(actor.mailboxCount) +
-                " mb_cap:" + std::to_string(actor.mailboxCapacity) + "\n";
+                " mb_cap:" + std::to_string(actor.mailboxCapacity) + 
+                " state:" + std::to_string(actor.state) + 
+                " essential:" + (actor.essential ? "yes" : "no") + "\n";
     }
     auto& r = snap.resources;
     data += "mem_rss_kb:" + std::to_string(r.memoryRssKb) + "\n";
@@ -63,6 +65,8 @@ bool parseSnapshotLine(const std::string& line, MonitorSnapshot& snap){
             else if(key == "name") info.name = val;
             else if(key == "mb_used") info.mailboxCount = std::stoul(val);
             else if(key == "mb_cap") info.mailboxCapacity = std::stoul(val);
+            else if(key == "state") info.state = std::stoi(val);
+            else if(key == "essential") info.essential = (val == "yes");
         }
         snap.actors.push_back(std::move(info));
     }else{

@@ -18,6 +18,25 @@ TuiApp::TuiApp() : root_(ftxui::CatchEvent(ftxui::Renderer([this](){ return rend
         if(screen_) screen_->Exit();
         return true;
     }
+    if(event.is_mouse() && (event.mouse().button == ftxui::Mouse::Left) && (event.mouse().motion == ftxui::Mouse::Pressed)){
+        for(size_t i = 0; i < checkBoxes_.size(); ++i){
+            if(checkBoxes_[i].Contain(event.mouse().x, event.mouse().y)){
+                if(i < checkboxActorNames_.size()){
+                    std::string name = checkboxActorNames_[i];
+                    bool isOn = checkboxActorStates_[i];
+                    setToast("toggling " + name + "...", 2);
+                    std::thread([this, name, isOn](){
+                        std::string cmd = isOn ? ("actor -d " + name) : ("actor -e " + name);
+                        std::string rsp = sendIpcCommand(cmd);
+                        screen_->Post([this, rsp]{
+                            setToast(rsp, 3);
+                        });
+                    }).detach();
+                }
+                return true;
+            }
+        }
+    }
     return false;
 })){
     //
@@ -48,6 +67,7 @@ int TuiApp::open(){
     return Fail;
 #endif
     screen_ = std::make_unique<ftxui::App>(ftxui::App::Fullscreen());
+    screen_->TrackMouse(true);
     isRunning_.store(true);
     recvThread_ = std::thread(&TuiApp::recvLoop, this);
     //
@@ -124,10 +144,16 @@ ftxui::Element TuiApp::render(){
     }
 
     auto& r = snap.resources;
-    float memPct = (r.memoryTotalKb > 0)
-        ? ((float)r.memoryRssKb / (float)r.memoryTotalKb * 100.0f) : 0.0f;
+    float memPct = (r.memoryTotalKb > 0) ? ((float)r.memoryRssKb / (float)r.memoryTotalKb * 100.0f) : 0.0f;
 
-    auto leftPanel = renderActorList(snap.actors) | flex;
+    {
+        size_t n = 0;
+        for(const auto& a : snap.actors){ if(!a.essential) ++n; }
+        checkBoxes_.resize(n);
+        checkboxActorNames_.resize(n);
+        checkboxActorStates_.resize(n);
+    }
+    auto leftPanel = renderActorList(snap.actors, checkBoxes_, checkboxActorNames_, checkboxActorStates_) | flex;
     auto rightPanel = vbox({
         renderProcessInfo(r),
         separator(),
@@ -140,6 +166,34 @@ ftxui::Element TuiApp::render(){
         separator(),
         hbox({ leftPanel, separator(), rightPanel }) | flex,
         separator(),
-        renderFooter() | borderRounded,
+        renderFooter(toastMsg_, toastExpiry_) | borderRounded
     });
+}
+
+std::string TuiApp::sendIpcCommand(const std::string& cmd){
+#if V2_PLATFORM_LINUX
+    UdsClient ipcClient;
+    if(ipcClient.connect(cfg_.ipcSocketPath) != Ok){
+        return "error: connect failed";
+    }
+    ipcClient.send(cmd.data(), cmd.size());
+    std::vector<char> buf(cfg_.ipcRecvBufferSize);
+    int n = ipcClient.recv(buf.data(), buf.size());
+    ipcClient.shutdown();
+    if(n > 0){
+        return std::string(buf.data(), n);
+    }
+    return "error: no response";
+#else
+    (void)cmd;
+    return "error: not supported";
+#endif
+}
+
+void TuiApp::setToast(const std::string& msg, int durationSec){
+    auto pos = msg.find('\n');
+    toastMsg_ = (pos != std::string::npos) ? msg.substr(0, pos) : msg;
+    if(!toastMsg_.empty() && (toastMsg_.back() == '\n')) toastMsg_.pop_back();
+    toastExpiry_ = std::chrono::steady_clock::now() + std::chrono::seconds(durationSec);
+    if(screen_) screen_->Post([]{});
 }
