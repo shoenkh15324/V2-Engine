@@ -22,7 +22,7 @@ ftxui::Element FooterWidget::OnRender(){
         }
     }
 
-    elems.push_back(text(" [q] quit   [h] help ") | color(cDim()));
+    elems.push_back(text(" [q] quit ") | color(cDim()));
     return hbox(std::move(elems));
 }
 

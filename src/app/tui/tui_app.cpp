@@ -20,6 +20,7 @@ TuiApp::TuiApp(){
     headerWidget_ = ftxui::Make<HeaderWidget>();
     systemPanelWidget_ = ftxui::Make<SystemPanelWidget>();
     actorListWidget_ = ftxui::Make<ActorListWidget>();
+    pmuPanelWidget_ = ftxui::Make<PmuPanelWidget>();
 
     actorListWidget_->setOnToggle([this](const std::string& name, bool wasOn){
         setToast("toggling " + name + "...", 2);
@@ -30,8 +31,15 @@ TuiApp::TuiApp(){
         }).detach();
     });
 
-    mainContent_ = ftxui::ResizableSplitLeft(
+    pmuSplitSize_ = ftxui::Terminal::Size().dimy / 2;
+    leftContent_ = ftxui::ResizableSplitTop(
         actorListWidget_,
+        pmuPanelWidget_,
+        &pmuSplitSize_
+    );
+
+    mainContent_ = ftxui::ResizableSplitLeft(
+        leftContent_,
         systemPanelWidget_,
         &splitSize_
     );
@@ -156,6 +164,7 @@ ftxui::Element TuiApp::render(){
 
     actorListWidget_->setActors(snap.actors);
     systemPanelWidget_->setResources(r);
+    pmuPanelWidget_->setPmuData(snap.pmu);
 
     headerWidget_->setConnected(client_.fd() >= 0);
     headerWidget_->setActorCount(snap.actors.size());

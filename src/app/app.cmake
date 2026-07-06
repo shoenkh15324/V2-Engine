@@ -38,6 +38,7 @@ if(BUILD_TUI_APP)
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/header.cpp
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/footer.cpp
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/system_panel.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/pmu_panel.cpp
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/actor_list/actor_list.cpp
     )
     target_include_directories(v2_tui PRIVATE

@@ -8,6 +8,7 @@
 #include "widgets/footer.hpp"
 #include "widgets/header.hpp"
 #include "widgets/system_panel.hpp"
+#include "widgets/pmu_panel.hpp"
 #include "widgets/actor_list/actor_list.hpp"
 #include <string>
 #include <atomic>
@@ -50,13 +51,16 @@ private:
     std::unique_ptr<ftxui::App> screen_;
     ftxui::Component root_;
     ftxui::Component mainContent_;
+    ftxui::Component leftContent_;
     std::shared_ptr<tui::FooterWidget> footerWidget_;
     std::shared_ptr<tui::HeaderWidget> headerWidget_;
     std::shared_ptr<tui::SystemPanelWidget> systemPanelWidget_;
+    std::shared_ptr<tui::PmuPanelWidget> pmuPanelWidget_;
     std::shared_ptr<tui::ActorListWidget> actorListWidget_;
 
     bool mouseEnabled_ = true;
     int splitSize_ = 35;
+    int pmuSplitSize_ = 12;
 #if V2_PLATFORM_LINUX
     UdsClient client_;
 #endif

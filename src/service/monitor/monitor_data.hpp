@@ -90,5 +90,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(MonitorSnapshot,
     timestampMs,
     clientCount,
     actors,
-    resources
+    resources,
+    pmu
 )
