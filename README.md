@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.6.4-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.7.0-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
@@ -64,7 +64,7 @@ sys.run();
 $ v2 info
 
   ▶ V2 Engine
-    version: 0.6.4
+    version: 0.7.0
     uptime:  0d 00h 14m 32s
 ```
 
@@ -187,7 +187,7 @@ v2 -m
 |------|------|
 | **CmdActor** | 메시지 기반 명령 라우팅 (`info`, `actor -l/d/e`, `test`) |
 | **IpcServerActor** | UDS 멀티클라이언트 IPC 서버 (명령 수신/응답) |
-| **MonitorActor** | 시스템 리소스 수집 (CPU/RSS/memory/load avg), 스냅샷 전송 |
+| **MonitorActor** | 시스템 리소스 수집 (CPU/RSS/memory/load avg) + PMU 데이터 (clock/temp/voltage), 스냅샷 전송 |
 | **TickActor** | 주기적 틱 메시지 생성 |
 | **DbusActor** | D-Bus 게이트웨이 (`com.v2.engine`), 메서드 등록/호출/시그널 |
 | **DeviceManagerActor** | 하드웨어 디바이스 등록/해제/열거 |
@@ -203,6 +203,7 @@ Commands:
   actor -l          액터 목록
   actor -d <name>   액터 비활성화
   actor -e <name>   액터 활성화
+  pmu -s            PMU 상태 (clock/temp/voltage/throttled)
   test              테스트 명령어
   version / -v      버전 정보
   status  / -s      데몬 상태 확인
@@ -212,6 +213,7 @@ Commands:
 ### TUI 모니터
 
 - **실시간 시스템 모니터링** — CPU, 메모리, uptime, 클라이언트 수
+- **PMU 상태 패널** — 클럭(ARM/Core/V3D), 온도, 전압, 전류, throttled 상태 표시
 - **분할 레이아웃** — 좌측 액터 목록 / 우측 시스템 패널 (`ResizableSplit`)
 - **액터 ON/OFF 토글** — 체크박스로 런타임 액터 제어 (IPC 연동)
 - **토스트 알림** — 액터 토글 결과 피드백
@@ -223,6 +225,8 @@ Commands:
 |------|------|
 | **UDS Server/Client** | Unix Domain Socket 멀티클라이언트 IPC |
 | **I2C HAL** | Linux `/dev/i2c-N` + `ioctl(I2C_RDWR)` 드라이버 |
+| **PMU HAL** | Raspberry Pi vcgencmd 기반 clock/temp/voltage/throttled 수집 (`IPmu`) |
+| **ISys HAL** | procfs 기반 시스템 리소스 수집 추상화 (`ISys`) |
 | **Dummy HAL** | 테스트용 빈 HAL 구현 |
 | **D-Bus Bridge** | system bus 기반 메서드 호출, 시그널 발행/구독 |
 
@@ -245,7 +249,7 @@ src/
 │   ├── main/                 #   v2_main — 데몬 (ActorSystem 구동)
 │   ├── cli/                  #   v2_cli — CLI 클라이언트 (UDS IPC)
 │   └── tui/                  #   v2_tui — TUI 모니터 (FTXui)
-│       └── widgets/          #     Header, Footer, SystemPanel, ActorList
+│       └── widgets/          #     Header, Footer, SystemPanel, ActorList, PmuPanel
 ├── service/                  # 비즈니스 액터
 │   ├── cmd/                  #   명령 라우팅 (CmdActor)
 │   ├── dbus/                 #   D-Bus 서버/클라이언트 핸들러
@@ -267,7 +271,7 @@ src/
 │       └── util/             #     Debug, Return
 └── infra/                    # 전송 계층 + HAL
     ├── transport/            #   UDS Server/Client
-    └── hal/                  #   I2C (Linux), Dummy (테스트)
+    └── hal/                  #   I2C (Linux), PMU (RPi vcgencmd), ISys (procfs), Dummy (테스트)
 
 의존성 방향: infra ← core ← service ← app (단방향)
 ```
