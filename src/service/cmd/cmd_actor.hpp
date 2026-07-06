@@ -27,6 +27,7 @@ private:
     std::string dispatch(const std::string& cmd);
     std::string handleInfo(const std::vector<std::string>&);
     std::string handleActor(const std::vector<std::string>& args);
+    std::string handlePmu(const std::vector<std::string>& args);
     std::string handleTest(const std::vector<std::string>& args);
     std::string parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption);
 

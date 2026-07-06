@@ -38,6 +38,7 @@ private:
 
     UdsServer server_;
     Time::TimeStamp startTime_;
+    PmuData pmuData_;
     std::string socketPath_;
     std::unordered_set<ConnHandle> connections_;
     std::deque<CpuSample> cpuHistory_;

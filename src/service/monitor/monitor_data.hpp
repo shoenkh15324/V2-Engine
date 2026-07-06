@@ -54,20 +54,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(SystemResources,
     sysMemAvailKb
 )
 
-struct MonitorSnapshot{
-    uint64_t timestampMs = 0;
-    int clientCount = 0;
-    std::vector<ActorInfo> actors;
-    SystemResources resources;
-};
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(MonitorSnapshot,
-    timestampMs,
-    clientCount,
-    actors,
-    resources
-)
-
 struct PmuData{
     uint64_t clockArmHz = 0; // vcgencmd measure_clock arm (Hz)
     uint64_t clockCoreHz = 0; // vcgencmd measure_clock core (Hz)
@@ -79,6 +65,7 @@ struct PmuData{
     float voltCore = 0.0f; // vcgencmd measure_volts core (V)
     float currentVddCoreA = 0.0f; // vcgencmd pmic_read_adc VDD_CORE_A (A)
 };
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PmuData,
     clockArmHz,
     clockCoreHz,
@@ -89,4 +76,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PmuData,
     tempCelsius,
     voltCore,
     currentVddCoreA
+)
+
+struct MonitorSnapshot{
+    uint64_t timestampMs = 0;
+    int clientCount = 0;
+    std::vector<ActorInfo> actors;
+    SystemResources resources;
+    PmuData pmu;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(MonitorSnapshot,
+    timestampMs,
+    clientCount,
+    actors,
+    resources
 )

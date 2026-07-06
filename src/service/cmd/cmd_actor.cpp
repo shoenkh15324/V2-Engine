@@ -5,6 +5,9 @@
 #include "core/common/time/time.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
+#include "infra/hal/pmu/pmu_rsp5.hpp"
+#include "infra/hal/pmu/pmu_mock.hpp"
+#include "service/monitor/monitor_data.hpp"
 #include <sstream>
 
 CmdActor::CmdActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
@@ -22,6 +25,7 @@ int CmdActor::open(){
     startTimeMs_ = Time::nowMs();
     handlers_["info"]  = [this](const auto& a) { return handleInfo(a); };
     handlers_["actor"] = [this](const auto& a) { return handleActor(a); };
+    handlers_["pmu"] = [this](const auto& a) { return handlePmu(a); };
     handlers_["test"]  = [this](const auto& a) { return handleTest(a); };
     //
     state_ = Opened;
@@ -155,6 +159,40 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
     if(!err.empty()) return err;
     if(result.empty()) return "error: no action specified\n";
     return result;
+}
+
+std::string CmdActor::handlePmu(const std::vector<std::string>& args){
+    bool json = false;
+    parseOptions(args, "s", [&](char opt, const std::string& val){
+        if(opt == 's') json = true;
+    });
+#if V2_PLATFORM_LINUX && defined(__aarch64__)
+    PmuRsp5 pmu;
+#else
+    PmuMock pmu;
+#endif
+    pmu.open();
+    PmuData d;
+    pmu.readPmuData(d);
+    pmu.close();
+
+    if(json){
+        return nlohmann::json(d).dump() + "\n";
+    }
+    std::ostringstream os;
+    os << "ARM   : " << (d.clockArmHz / 1000000) << " MHz\n"
+       << "Core  : " << (d.clockCoreHz / 1000000) << " MHz\n"
+       << "V3D   : " << (d.clockV3dHz / 1000000) << " MHz\n"
+       << "Temp  : " << d.tempCelsius << " °C\n"
+       << "Vcore : " << d.voltCore << " V\n"
+       << "Icore : " << d.currentVddCoreA << " A\n"
+       << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n";
+    if(d.throttled){
+        os << "THROTTLED: 0x" << std::hex << d.throttled << std::dec << "\n";
+    }else{
+        os << "Throttle: 0x0 (OK)\n";
+    }
+    return os.str();
 }
 
 std::string CmdActor::handleTest(const std::vector<std::string>& args){

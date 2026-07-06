@@ -3,6 +3,7 @@
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
+#include "core/actor_system/messages/pmu_messages.hpp"
 #include <vector>
 #include <fstream>
 #include <ctime>
@@ -166,6 +167,7 @@ void MonitorActor::handle(const Message& msg){
             });
 
             collectSystemResources(snap.resources);
+            snap.pmu = pmuData_;
 
             std::string data = nlohmann::json(snap).dump() + "\n";
             for(ConnHandle conn : connections_){
@@ -183,6 +185,9 @@ void MonitorActor::handle(const Message& msg){
             server_.closeClient(msg.conn);
             connections_.erase(msg.conn);
             V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", msg.conn);
+        },
+        [this](const SendPmuData& msg){
+            pmuData_ = msg.data;
         },
         [](const auto&){}
     }, msg);
