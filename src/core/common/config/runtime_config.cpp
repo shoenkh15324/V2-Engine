@@ -30,6 +30,10 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("monitor_recv_buffer_size")) cfg.monitorRecvBufferSize = j["monitor_recv_buffer_size"];
         if(j.contains("monitor_backlog")) cfg.monitorBacklog = j["monitor_backlog"];
 
+        // Pmu
+        if(j.contains("enable_pmu")) cfg.enablePmu = j["enable_pmu"];
+        if(j.contains("pmu_poll_interval_ms")) cfg.pmuPollIntervalMs = j["pmu_poll_interval_ms"];
+
 #if V2_PLATFORM_LINUX
 
         // Epoll

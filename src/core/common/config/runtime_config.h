@@ -22,6 +22,10 @@ struct RuntimeConfig{
     int monitorRecvBufferSize = 4096;
     int monitorBacklog = 5;
 
+    // Pmu
+    bool enablePmu = false;
+    int pmuPollIntervalMs = 100;
+
 #if V2_PLATFORM_LINUX
     // Epoll
     int epollMaxEvents = 64;
