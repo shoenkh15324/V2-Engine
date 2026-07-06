@@ -28,6 +28,15 @@ int CmdActor::open(){
     handlers_["pmu"] = [this](const auto& a) { return handlePmu(a); };
     handlers_["test"]  = [this](const auto& a) { return handleTest(a); };
     //
+    pmu_ = []() -> std::unique_ptr<IPmu> {
+#if V2_PLATFORM_LINUX && defined(__aarch64__)
+        return std::make_unique<PmuRsp5>();
+#else
+        return std::make_unique<PmuMock>();
+#endif
+    }();
+    if(pmu_) pmu_->open();
+    //
     state_ = Opened;
     return 0;
 }
@@ -36,6 +45,7 @@ int CmdActor::close(){
     if(state_ == Closed) return 0;
     state_ = Closing;
     //
+    if(pmu_){ pmu_->close(); pmu_.reset(); }
     //
     state_ = Closed;
     return 0;
@@ -81,78 +91,65 @@ std::string CmdActor::handleInfo(const std::vector<std::string>&){
     uint64_t uptimeMs = 0;
     if(nowMs >= startTimeMs_) uptimeMs = static_cast<uint64_t>(nowMs - startTimeMs_);
 
+    int s = static_cast<int>(uptimeMs / 1000);
+    int m = s / 60; s %= 60;
+    int h = m / 60; m %= 60;
+    int d = h / 24; h %= 24;
+
     std::ostringstream os;
     os << "name: " << V2_ENGINE_NAME << "\n"
        << "version: " << V2_ENGINE_VERSION << "\n"
-       << "uptime: " << uptimeMs << "\n";
+       << "uptime: " << d << "d "
+       << (h < 10 ? "0" : "") << h << "h "
+       << (m < 10 ? "0" : "") << m << "m "
+       << (s < 10 ? "0" : "") << s << "s\n";
     return os.str();
 }
 
-namespace{
-
-const char* stateString(ActorState s){
-    switch(s){
-        case Closed: return "Closed";
-        case Closing: return "Closing";
-        case Opening: return "Opening";
-        case Opened: return "Opened";
-        case Inherited: return "Inherited";
-    }
-    return "Unknown";
-}
-
-} // namespace
-
 std::string CmdActor::handleActor(const std::vector<std::string>& args){
-    auto* reg = actorContext()->actorRegistry();
-    if(!reg) return "error: actor registry unavailable\n";
     std::string result;
     auto err = parseOptions(args, "d:e:l", [&](char opt, const std::string& val){
         switch(opt){
-            case 'd':{
-                auto* a = reg->findByName(val);
-                if(!a){
+            case 'd': case 'e':{
+                auto* reg = actorContext()->actorRegistry();
+                if(!reg){ result += "error: actor registry unavailable\n"; return; }
+                int ret = (opt == 'e') ? reg->enableActor(val) : reg->disableActor(val);
+                if(ret == 0){
+                    result += "ok: '" + val + "' " + (opt == 'e' ? "enabled" : "disabled") + "\n";
+                }else if(ret == -1){
                     result += "error: not found '" + val + "'\n";
-                }else if(a->isEssential()){
+                }else if(ret == -2){
                     result += "error: '" + val + "' is essential\n";
                 }else{
-                    if(a->close() == 0){
-                        result += "ok: '" + val + "' disabled\n";
-                    }else{
-                        result += "error: disable failed\n";
-                    }
+                    result += "error: " + std::string(opt == 'e' ? "enable" : "disable") + " failed\n";
                 }
-                break;
-            }
-            case 'e':{
-                auto* a = reg->findByName(val);
-                if(!a){
-                    result += "error: not found '" + val + "'\n";
-                }else{
-                    if(a->open() == 0){
-                        result += "ok: '" + val + "' enabled\n";
-                    }else{
-                        result += "error: enable failed\n";
-                    }
-                }
-                break;
+                return;
             }
             case 'l':{
+                auto* reg = actorContext()->actorRegistry();
+                if(!reg){ result += "error: actor registry unavailable\n"; return; }
                 int n = 0;
+                reg->forEachActor([&](Actor*){ ++n; });
                 char buf[256];
-                result += "actor_count: ";
-                reg->forEachActor([&](Actor* a){ ++n; });
-                result += std::to_string(n) + "\n\n";
-                result += "  ID  NAME              STATE      ESSENTIAL\n";
-                result += "  --- ----------------- ---------- ---------\n";
+                result += "actor_count: " + std::to_string(n) + "\n\n"
+                          "  ID  NAME              STATE      ESSENTIAL\n"
+                          "  --- ----------------- ---------- ---------\n";
                 reg->forEachActor([&](Actor* a){
+                    const char* st = "Unknown";
+                    switch(a->getState()){
+                        case Closed: st = "Closed"; break;
+                        case Closing: st = "Closing"; break;
+                        case Opening: st = "Opening"; break;
+                        case Opened: st = "Opened"; break;
+                        case Inherited: st = "Inherited"; break;
+                    }
                     std::snprintf(buf, sizeof(buf), "  %3lu  %-17s %-10s %s\n",
                         (unsigned long)a->id(), a->name().c_str(),
-                        stateString(a->getState()),
+                        st,
                         a->isEssential() ? "yes" : "no");
                     result += buf;
                 });
-                break;
+                return;
             }
         }
     });
@@ -162,23 +159,10 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
 }
 
 std::string CmdActor::handlePmu(const std::vector<std::string>& args){
-    bool json = false;
-    parseOptions(args, "s", [&](char opt, const std::string& val){
-        if(opt == 's') json = true;
-    });
-#if V2_PLATFORM_LINUX && defined(__aarch64__)
-    PmuRsp5 pmu;
-#else
-    PmuMock pmu;
-#endif
-    pmu.open();
+    if(!pmu_) return "error: pmu unavailable\n";
     PmuData d;
-    pmu.readPmuData(d);
-    pmu.close();
+    pmu_->readPmuData(d);
 
-    if(json){
-        return nlohmann::json(d).dump() + "\n";
-    }
     std::ostringstream os;
     os << "ARM   : " << (d.clockArmHz / 1000000) << " MHz\n"
        << "Core  : " << (d.clockCoreHz / 1000000) << " MHz\n"
@@ -186,18 +170,15 @@ std::string CmdActor::handlePmu(const std::vector<std::string>& args){
        << "Temp  : " << d.tempCelsius << " °C\n"
        << "Vcore : " << d.voltCore << " V\n"
        << "Icore : " << d.currentVddCoreA << " A\n"
-       << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n";
-    if(d.throttled){
-        os << "THROTTLED: 0x" << std::hex << d.throttled << std::dec << "\n";
-    }else{
-        os << "Throttle: 0x0 (OK)\n";
-    }
+       << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
+       << (d.throttled ? "THROTTLED" : "Throttle")
+       << ": 0x" << std::hex << d.throttled << std::dec
+       << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
     return os.str();
 }
 
 std::string CmdActor::handleTest(const std::vector<std::string>& args){
     std::string result;
-
     result += "args: [";
     for(size_t i = 0; i < args.size(); ++i){
         if(i > 0) result += ", ";
@@ -218,7 +199,6 @@ std::string CmdActor::handleTest(const std::vector<std::string>& args){
 }
 
 std::string CmdActor::parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption){
-
     for(size_t i = 0; i < args.size(); ++i){
         const auto& arg = args[i];
         if(arg.size() < 2 || arg[0] != '-'){

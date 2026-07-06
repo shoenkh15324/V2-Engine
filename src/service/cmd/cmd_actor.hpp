@@ -3,8 +3,11 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <memory>
 #include <string_view>
 #include <unordered_map>
+
+#include "infra/hal/pmu/i_pmu.hpp"
 
 class CmdActor : public Actor{
 public:
@@ -32,5 +35,6 @@ private:
     std::string parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption);
 
     std::unordered_map<std::string, Handler> handlers_;
+    std::unique_ptr<IPmu> pmu_;
     int64_t startTimeMs_ = 0;
 };

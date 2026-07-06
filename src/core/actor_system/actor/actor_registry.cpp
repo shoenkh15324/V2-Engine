@@ -37,3 +37,18 @@ void ActorRegistry::forEachActor(const std::function<void(Actor*)>& callback) co
         callback(actor);
     }
 }
+
+int ActorRegistry::enableActor(const std::string& name){
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = byName_.find(name);
+    if(it == byName_.end()) return -1;
+    return it->second->open() == 0 ? 0 : -3;
+}
+
+int ActorRegistry::disableActor(const std::string& name){
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = byName_.find(name);
+    if(it == byName_.end()) return -1;
+    if(it->second->isEssential()) return -2;
+    return it->second->close() == 0 ? 0 : -3;
+}

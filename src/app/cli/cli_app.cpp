@@ -4,7 +4,6 @@
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
 #include <iostream>
-#include <sstream>
 #include <vector>
 #include <cstdio>
 #include <cstring>
@@ -48,37 +47,31 @@ int CliApp::run(int argc, char** argv){
     if(argc < 2){ printLocalHelp(); return 0; }
 
     // 로컬에서 처리할 플래그 (v2 바로 다음에만 유효)
-    if(strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
-        printLocalHelp(); return 0;
-    }
-    if(strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "version") == 0) {
-        printLocalVersion(); return 0;
-    }
-    if(strcmp(argv[1], "-s") == 0 || strcmp(argv[1], "--status") == 0 || strcmp(argv[1], "status") == 0) {
-        printLocalStatus(); return 0;
-    }
-    if(strcmp(argv[1], "-m") == 0 || strcmp(argv[1], "--monitor") == 0 || strcmp(argv[1], "monitor") == 0) {
-        return launchMonitor(argv);
-    }
+    if(strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0){ printLocalHelp(); return 0; }
+    if(strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "version") == 0){ printLocalVersion(); return 0; }
+    if(strcmp(argv[1], "-s") == 0 || strcmp(argv[1], "--status") == 0 || strcmp(argv[1], "status") == 0){ printLocalStatus(); return 0; }
+    if(strcmp(argv[1], "-m") == 0 || strcmp(argv[1], "--monitor") == 0 || strcmp(argv[1], "monitor") == 0){ return launchMonitor(argv); }
 
     // 그 외 모든 인자는 데몬으로 전달
     std::string cmd;
-    for (int i = 1; i < argc; ++i) {
+    for(int i = 1; i < argc; ++i){
         if (i > 1) cmd += " ";
         cmd += argv[i];
     }
 
+    // 명령어 전송 (UDS)
     if(client_.send(cmd.data(), cmd.size()) != Ok){
         V2_LOG_ERROR("%s App: send failed", name_.c_str());
         return 1;
     }
     V2_LOG_INFO("%s App: sending command [%s]", name_.c_str(), cmd.c_str());
 
+    // 응답 수신
     std::vector<char> buf(cfg_.ipcRecvBufferSize);
     int n = client_.recv(buf.data(), buf.size());
     if(n > 0){
         std::string resp(buf.data(), n);
-        printResponse(resp);
+        std::cout << resp << std::flush;
         V2_LOG_INFO("%s App: received response [%s]", name_.c_str(), resp.c_str());
     }
     return Ok;
@@ -106,7 +99,6 @@ bool CliApp::shouldColor(){
 
 void CliApp::printLocalHelp(){
     std::cout
-        << CLR("\033[1m\033[36m") << "  V2 Engine \342\200\224 Control Interface" << CLR("\033[0m") << "\n"
         << CLR("\033[33m") << "  Usage:" << CLR("\033[0m") << " v2 <command> [options]\n"
         << "\n"
         << CLR("\033[33m") << "  Information:" << CLR("\033[0m") << "\n"
@@ -115,58 +107,51 @@ void CliApp::printLocalHelp(){
         << "    " << CLR("\033[32m") << "status, -s, --status" << CLR("\033[0m") << "       Show daemon status\n"
         << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "                       Show system information\n"
         << "\n"
+        << CLR("\033[33m") << "  Monitoring:" << CLR("\033[0m") << "\n"
+        << "    " << CLR("\033[32m") << "monitor, -m, --monitor" << CLR("\033[0m") << "     Open TUI monitor\n"
+        << "\n"
         << CLR("\033[33m") << "  Actor Control:" << CLR("\033[0m") << "\n"
         << "    " << CLR("\033[32m") << "actor -l" << CLR("\033[0m") << "                   List actors\n"
         << "    " << CLR("\033[32m") << "actor -d <name>" << CLR("\033[0m") << "            Disable actor\n"
         << "    " << CLR("\033[32m") << "actor -e <name>" << CLR("\033[0m") << "            Enable actor\n"
         << "\n"
-        << CLR("\033[33m") << "  Monitoring:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "monitor, -m, --monitor" << CLR("\033[0m") << "     Open TUI monitor\n"
+        << CLR("\033[33m") << "  Pmu:" << CLR("\033[0m") << "\n"
+        << "    " << CLR("\033[32m") << "pmu -s" << CLR("\033[0m") << "                     Show Pmu Status\n"
         << "\n"
         << CLR("\033[33m") << "  Development:" << CLR("\033[0m") << "\n"
         << "    " << CLR("\033[32m") << "test [options]" << CLR("\033[0m") << "             Test command parsing\n";
 }
 
 void CliApp::printLocalVersion(){
-    std::cout << CLR("\033[36m\033[1m") << "  V2 Engine " << CLR("\033[0m") << V2_ENGINE_VERSION << "\n";
+    std::cout << "V2 Engine:  v" << V2_ENGINE_VERSION << "\n";
 }
 
 void CliApp::printLocalStatus(){
 #if V2_PLATFORM_LINUX
     std::string socketPath = RuntimeConfig{}.ipcSocketPath;
     bool sockExists = (access(socketPath.c_str(), F_OK) == 0);
-
-    std::cout << CLR("\033[36m\033[1m") << "  V2 Engine \342\200\224 Status" << CLR("\033[0m") << "\n";
-
     if(!sockExists){
-        std::cout << "    Daemon: " << CLR("\033[31m") << "stopped" << CLR("\033[0m") << "\n"
-                  << "    Socket: " << socketPath << " (not found)\n";
+        std::cout << "Daemon: " << CLR("\033[31m") << "stopped" << CLR("\033[0m") << "\n" << "    Socket: " << socketPath << " (not found)\n";
         return;
     }
 
     UdsClient probe;
     bool alive = (probe.connect(socketPath) == Ok);
     probe.shutdown();
-
     if(alive){
-        std::cout << "    Daemon: " << CLR("\033[32m") << "running" << CLR("\033[0m") << "\n";
+        std::cout << "Daemon: " << CLR("\033[32m") << "running" << CLR("\033[0m") << "\n";
     }else{
-        std::cout << "    Daemon: " << CLR("\033[31m") << "dead (stale socket)" << CLR("\033[0m") << "\n";
+        std::cout << "Daemon: " << CLR("\033[31m") << "dead (stale socket)" << CLR("\033[0m") << "\n";
     }
-
-    std::cout << "    Socket: " << socketPath << "\n";
-
+    std::cout << "Socket: " << socketPath << "\n";
     FILE* fp = ::popen("pidof v2_main 2>/dev/null", "r");
     if(fp){
         char buf[16] = {};
-        if(std::fgets(buf, sizeof(buf), fp)){
-            std::cout << "    PID:    " << buf;
-        }
+        if(std::fgets(buf, sizeof(buf), fp)) std::cout << "PID: " << buf;
         ::pclose(fp);
     }
 #else
-    std::cout << "  V2 Engine \342\200\224 Status\n"
-              << "    Daemon: not supported on Windows yet\n";
+    std::cout << "  V2 Engine \342\200\224 Status\n" << "    Daemon: not supported on Windows yet\n";
 #endif
 }
 
@@ -183,47 +168,6 @@ int CliApp::launchMonitor(char** argv){
     V2_LOG_ERROR("Cli App: failed to launch v2_tui");
     std::cerr << "Error: failed to launch v2_tui (is it installed?)\n";
     return Ok;
-}
-
-void CliApp::printResponse(const std::string& resp){
-    std::istringstream stream(resp);
-    std::string line;
-    bool first = true;
-
-    while(std::getline(stream, line)){
-        if(line.empty()) continue;
-
-        auto colon = line.find(':');
-        if(colon == std::string::npos){
-            std::cout << "  " << line << CLR("\033[0m") << "\n";
-            continue;
-        }
-
-        std::string key = line.substr(0, colon);
-        std::string value = line.substr(colon + 1);
-        if(!value.empty() && value[0] == ' ') value.erase(0, 1);
-
-        if(key == "uptime"){
-            auto ms = std::stoll(value);
-            int s = static_cast<int>(ms / 1000);
-            int m = s / 60; s %= 60;
-            int h = m / 60; m %= 60;
-            int d = h / 24; h %= 24;
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "%dd %02dh %02dm %02ds", d, h, m, s);
-            value = buf;
-        }
-
-        if(key == "error"){
-            std::cout << CLR("\033[31m") << "  Error: " << CLR("\033[0m") << value << "\n";
-        }else if(first){
-            std::cout << CLR("\033[36m\033[1m") << "  \342\226\272 " << value << CLR("\033[0m") << "\n";
-            first = false;
-        }else{
-            std::cout << "    " << CLR("\033[33m") << key << CLR("\033[0m") << ": " << value << "\n";
-        }
-    }
-    std::cout << std::flush;
 }
 
 #undef CLR

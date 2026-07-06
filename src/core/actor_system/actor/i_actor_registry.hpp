@@ -12,4 +12,8 @@ public:
     virtual Actor* findById(uint64_t id) const = 0;
     virtual void forEachActor(const std::function<void(Actor*)>& callback) const = 0;
     virtual void remove(Actor* actor) = 0;
+
+    // Returns 0 on success, negative on error
+    virtual int enableActor(const std::string& name) = 0;
+    virtual int disableActor(const std::string& name) = 0;
 };

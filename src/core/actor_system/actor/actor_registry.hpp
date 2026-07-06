@@ -23,6 +23,8 @@ public:
     Actor* findByName(const std::string& name) const override;
     Actor* findById(uint64_t id) const override;
     void forEachActor(const std::function<void(Actor*)>& callback) const override;
+    int enableActor(const std::string& name) override;
+    int disableActor(const std::string& name) override;
 
 private:
     mutable std::mutex mutex_;
