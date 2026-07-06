@@ -1,18 +1,20 @@
 #include "sys_linux.hpp"
-#include "core/common/util/return.hpp"
 #include "core/common/time/time.hpp"
 #include <fstream>
+#include <ctime>
 
 int SysLinux::open(){
-    return Ok;
+    return 0;
 }
 
 int SysLinux::close(){
-    return Ok;
+    cpuHistory_.clear();
+    return 0;
 }
 
 int SysLinux::collect(SystemResources& data){
     data = {};
+
     std::ifstream status("/proc/self/status");
     std::string line;
     while(std::getline(status, line)){
@@ -64,5 +66,6 @@ int SysLinux::collect(SystemResources& data){
             if(data.cpuPercent > 100.0f) data.cpuPercent = 100.0f;
         }
     }
-    return Ok;
+
+    return 0;
 }

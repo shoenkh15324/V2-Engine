@@ -6,7 +6,6 @@
 #include "dbus_messages.hpp"
 #include "device_manager_messages.hpp"
 #include "cmd_messages.hpp"
-#include "pmu_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 
@@ -43,8 +42,5 @@ using Message = std::variant<
     DeviceList,
     // Cmd
     CmdRequest,
-    CmdResponse,
-    // Pmu
-    PmuPoll,
-    SendPmuData
+    CmdResponse
 >;

@@ -1,11 +1,17 @@
 #pragma once
 #include "i_sys.hpp"
 #include <deque>
+#include <cstdint>
 
 class SysLinux : public ISys{
 public:
     SysLinux() = default;
-    ~SysLinux() override;
+    ~SysLinux() override = default;
+
+    SysLinux(const SysLinux&) = delete;
+    SysLinux& operator=(const SysLinux&) = delete;
+    SysLinux(SysLinux&&) = delete;
+    SysLinux& operator=(SysLinux&&) = delete;
 
     int open() override;
     int close() override;

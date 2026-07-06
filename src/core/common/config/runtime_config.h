@@ -18,13 +18,9 @@ struct RuntimeConfig{
     // Monitor
     bool enableMonitor = false;
     std::string monitorSocketPath = "/tmp/v2_monitor.sock";
-    int monitorPollIntervalMs = 100;
+    int monitorPollIntervalMs = 500;
     int monitorRecvBufferSize = 4096;
     int monitorBacklog = 5;
-
-    // Pmu
-    bool enablePmu = false;
-    int pmuPollIntervalMs = 100;
 
 #if V2_PLATFORM_LINUX
     // Epoll

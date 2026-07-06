@@ -13,6 +13,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         ${CMAKE_CURRENT_LIST_DIR}/hal/i2c/i2c_linux.cpp
         ${CMAKE_CURRENT_LIST_DIR}/hal/pmu/pmu_rsp5.cpp
         ${CMAKE_CURRENT_LIST_DIR}/hal/sys/sys_linux.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/hal/sys/sys_linux.cpp
         ${CMAKE_CURRENT_LIST_DIR}/transport/uds/uds_server.cpp
         ${CMAKE_CURRENT_LIST_DIR}/transport/uds/uds_client.cpp
     )
