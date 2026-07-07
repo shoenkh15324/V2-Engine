@@ -8,7 +8,7 @@ Actor::Actor(std::string name, uint64_t id) : name_(name), id_(id){
 }
 
 Actor::~Actor(){
-    if(!actorCtx_->scheduler()) return;
+    if(!actorCtx_ || !actorCtx_->scheduler()) return;
     for(int id : timerIds_){
         actorCtx_->scheduler()->cancel(id);
     }

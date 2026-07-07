@@ -8,3 +8,4 @@ endfunction()
 
 add_v2_test(test_ring_buffer test_ring_buffer.cpp)
 add_v2_test(test_mailbox test_mailbox.cpp)
+add_v2_test(test_actor_registry test_actor_registry.cpp)
