@@ -25,6 +25,7 @@
       "workbench.editor.enablePreview": false,
       "markdown.extension.preview.autoShowPreviewToSide": true,
       "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+      "C_Cpp.formatting": "disabled"
     },
     "tasks": {
         "version": "2.0.0",
