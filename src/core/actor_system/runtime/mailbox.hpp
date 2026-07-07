@@ -8,17 +8,21 @@ class Mailbox{
 public:
     explicit Mailbox(size_t size) : buffer_(size), capacity_(size), count_(0), head_(0), tail_(0){}
 
+    Mailbox(const Mailbox&) = delete;
+    Mailbox& operator=(const Mailbox&) = delete;
+    Mailbox(Mailbox&&) = delete;
+    Mailbox& operator=(Mailbox&&) = delete;
+
     template <typename U>
     bool push(U&& msg){
         std::lock_guard<std::mutex> lock(mutex_);
         if(count_ == capacity_){
             return false;
         }
-        bool wasEmpty = (count_ == 0);
         buffer_[tail_] = std::forward<U>(msg);
         tail_ = (tail_ + 1) % capacity_;
         ++count_;
-        return wasEmpty;
+        return true;
     }
 
     bool pop(T& out){

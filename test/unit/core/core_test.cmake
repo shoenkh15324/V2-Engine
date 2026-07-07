@@ -7,3 +7,4 @@ function(add_v2_test name source)
 endfunction()
 
 add_v2_test(test_ring_buffer test_ring_buffer.cpp)
+add_v2_test(test_mailbox test_mailbox.cpp)

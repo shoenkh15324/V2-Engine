@@ -17,8 +17,7 @@ ActorContext::~ActorContext(){
 }
 
 void ActorContext::enqueue(Message msg){
-    bool wasEmpty = mailbox_.push(std::move(msg));
-    if(!wasEmpty) return;
+    if(!mailbox_.push(std::move(msg))) return;
     if(dispatcher_ && !scheduled_.exchange(true)){
         dispatcher_->dispatch(this);
     }
