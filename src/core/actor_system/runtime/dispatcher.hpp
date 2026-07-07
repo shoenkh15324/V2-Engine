@@ -7,7 +7,7 @@
 #include <functional>
 #include <vector>
 #include "core/common/config/platform_config.h"
-#include "core/common/os/semaphore.hpp"
+#include <semaphore>
 
 #if V2_PLATFORM_LINUX
 #include "core/common/os/epoll.hpp"
@@ -44,7 +44,7 @@ private:
     int workerCount_ = 0;
     int epollMaxEvents_ = 64;
     int epollWaitTimeoutMs_ = 1000;
-    Semaphore sema_{0};
+    std::counting_semaphore<> sema_{0};
     std::mutex mutex_;
     std::atomic<bool> running_{false};
     std::deque<ActorContext*> readyQueue_;

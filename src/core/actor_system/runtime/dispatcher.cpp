@@ -1,5 +1,6 @@
 #include "dispatcher.hpp"
 #include "core/common/log/log.hpp"
+#include "core/common/util/debug.hpp"
 #include "core/common/util/return.hpp"
 #include <cerrno>
 #include <cstdint>
@@ -48,11 +49,11 @@ void Dispatcher::dispatch(ActorContext* actorCtx){
         readyQueue_.push_back(actorCtx);
         inQueue_.insert(actorCtx);
     }
-    sema_.post();
+    sema_.release();
 }
 
 ActorContext* Dispatcher::acquire(){
-    sema_.wait();
+    sema_.acquire();
     std::lock_guard<std::mutex> lock(mutex_);
     if(readyQueue_.empty()){
         return nullptr;
@@ -69,7 +70,7 @@ void Dispatcher::stop(){
     uint64_t one = 1;
     ::write(stopFd_, &one, sizeof(one));
 #endif
-    sema_.post(workerCount_ > 0 ? workerCount_ : 1);
+    sema_.release(workerCount_ > 0 ? workerCount_ : 1);
 }
 
 void Dispatcher::run(){
