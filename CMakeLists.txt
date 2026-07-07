@@ -32,15 +32,15 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
+FetchContent_Declare(sdbuscpp
+    GIT_REPOSITORY https://github.com/Kistler-Group/sdbus-cpp.git
+    GIT_TAG v2.3.1
+)
 set(SDBUSCPP_BUILD_CODEGEN OFF)
 set(SDBUSCPP_BUILD_EXAMPLES OFF)
 set(SDBUSCPP_BUILD_TESTS OFF)
 set(SDBUSCPP_BUILD_DOCS OFF)
 set(SDBUSCPP_INSTALL OFF)
-FetchContent_Declare(sdbuscpp
-    GIT_REPOSITORY https://github.com/Kistler-Group/sdbus-cpp.git
-    GIT_TAG v2.3.1
-)
 FetchContent_MakeAvailable(sdbuscpp)
 if(NOT TARGET SDBusCpp::sdbus-c++)
     add_library(SDBusCpp::sdbus-c++ ALIAS sdbus-c++)
@@ -81,10 +81,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 # ── Testing ────────────────────────────────────────────────
-include(CTest)
-enable_testing()
+option(BUILD_TESTING "Build Tests" ON)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(test)
+endif()
 
 # ── Packaging ──────────────────────────────────────────────
-set(CPACK_PROJECT_NAME ${PROJECT_NAME})
-set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
-include(CPack)
+#set(CPACK_PROJECT_NAME ${PROJECT_NAME})
+#set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+#include(CPack)
