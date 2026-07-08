@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "core/common/time/timer.hpp"
+#include "core/common/config/platform_config.h"
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -15,7 +16,7 @@ TEST(Timer, Create){
 #endif
 }
 
-TEST(Timer, CreateAndDestroy){
+TEST(Timer, CreateDestroy){
     Timer t;
     t.start();
     t.stop();
