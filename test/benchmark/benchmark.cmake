@@ -1,0 +1,11 @@
+function(add_v2_benchmark name source)
+    add_executable(${name} ${CMAKE_CURRENT_LIST_DIR}/${source})
+    target_link_libraries(${name} PRIVATE v2_core benchmark::benchmark_main)
+    target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+endfunction()
+
+add_v2_benchmark(benchmark_ring_buffer core/ring_buffer_bench.cpp)
+add_v2_benchmark(benchmark_mailbox core/mailbox_bench.cpp)
+add_v2_benchmark(benchmark_timer core/timer_bench.cpp)
+add_v2_benchmark(benchmark_dispatcher core/dispatcher_bench.cpp)
+add_v2_benchmark(benchmark_actor_system core/actor_system_bench.cpp)
