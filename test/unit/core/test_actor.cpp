@@ -15,7 +15,7 @@ public:
 
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }
-    void handle(const Message& msg) override { handled = true; }
+    void handle(const Message&) override { handled = true; }
 
     bool handled = false;
     size_t timerCount() const { return timerIds_.size(); }
@@ -24,7 +24,7 @@ public:
 struct TestScheduler : IScheduler{
     TestScheduler() = default;
 
-    int addTimer(Actor* target, Message message, uint64_t delayMs, bool repeating) override{
+    int addTimer(Actor* target, Message, uint64_t delayMs, bool repeating) override{
         lastTarget = target;
         lastDelayMs = delayMs;
         lastRepeating = repeating;

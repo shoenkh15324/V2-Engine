@@ -43,7 +43,7 @@ install_deps() {
         "cmake"
         "git"
         "ninja-build"
-        "lld"
+        "binutils-gold"
         "ccache"
         "libsystemd-dev"
         "pkg-config"

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld" CACHE STRING "" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=gold" CACHE STRING "" FORCE)
 endif()
 
 find_program(CCACHE_PROGRAM ccache)
@@ -54,7 +54,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
 
 # ── Build type ─────────────────────────────────────────────
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 
 # ── Global compile options ─────────────────────────────────
