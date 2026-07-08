@@ -6,3 +6,4 @@ function(add_v2_test name source)
 endfunction()
 
 add_v2_test(test_actor_system_integration core/test_actor_system_integration.cpp)
+add_v2_test(test_timer_pipeline core/test_timer_pipeline.cpp)
