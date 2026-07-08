@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.7.1-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.7.2-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
@@ -20,6 +20,7 @@
 - [데모](#-데모)
 - [빠른 시작](#-빠른-시작)
 - [기능](#-기능)
+- [성능 벤치마크](#-성능-벤치마크)
 - [프로젝트 구조](#-프로젝트-구조)
 - [설정](#-설정)
 - [개발 환경](#-개발-환경)
@@ -64,7 +65,7 @@ sys.run();
 $ v2 info
 
   ▶ V2 Engine
-    version: 0.7.1
+    version: 0.7.2
     uptime:  0d 00h 14m 32s
 ```
 
@@ -120,7 +121,7 @@ $ v2 -m
 ### 1. 직접 빌드
 
 ```bash
-# 요구사항: GCC 11+, CMake 3.14+, Ninja, lld
+# 요구사항: GCC 11+, CMake 3.14+, Ninja, gold
 cmake -B build -G Ninja
 cmake --build build
 
@@ -152,7 +153,7 @@ v2 -m
 ```
 
 > 설치 스크립트는 자동으로:
-> - 시스템 패키지 설치 (`build-essential`, `cmake`, `ninja-build`, `lld`, `libsystemd-dev` 등)
+> - 시스템 패키지 설치 (`build-essential`, `cmake`, `ninja-build`, `binutils-gold`, `libsystemd-dev` 등)
 > - Ninja 빌드 (Release 모드)
 > - systemd 서비스 등록 (`v2_main`)
 > - D-Bus 정책 파일 설치 (`com.v2.engine`)
@@ -239,6 +240,61 @@ Commands:
 - **FetchContent** 외부 라이브러리 자동 다운로드 (FTXUI, nlohmann/json, sdbus-c++)
 - **CTest** + **CPack** 지원
 - **Google Test** (v1.17.0) 단위 테스트 — RingBuffer, Mailbox, ActorRegistry
+- **Google Benchmark** (v1.9.2) 기반 성능 측정 — [벤치마크 상세](#-성능-벤치마크)
+
+---
+
+## ⚡ 성능 벤치마크
+
+Google Benchmark (v1.9.2) 기반, Release 빌드 (LTO 활성화)
+
+### RingBuffer (구현 완료)
+
+| 벤치마크 | Time (ns) | 처리량 | 비고 |
+|---------|-----------|-------|------|
+| **Push** (64B chunk) | 3.06 | ~19.7 GiB/s | 소형 메시지 대량 전송 |
+| **Push** (full buffer) | 576 | ~102.7 GiB/s | 대형 chunk 단일 push |
+| **Pop** (64B chunk) | 5.39 | ~11.1 GiB/s | 소형 메시지 소비 |
+| **Pop** (64KB chunk) | 1179 | ~53.0 GiB/s | 대형 chunk pop |
+| **PingPong** (1KB chunk) | 16.95 | ~108.5 GiB/s | push+pop 왕복 처리량 |
+| **WrapStress** (4B chunk) | 5.13 | ~1.5 GiB/s | wrap 발생 worst-case |
+| **Reset** (65536 Buf) | 2.82 | — | 초경량 초기화 |
+
+> 측정 환경: 8-core Intel @ 4.7 GHz, L1d 48KB / L2 1MB / L3 96MB
+
+```bash
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target benchmark_ring_buffer
+./build/test/benchmark_ring_buffer
+```
+
+### Mailbox (미구현)
+
+```bash
+cmake --build build --target benchmark_mailbox
+./build/test/benchmark_mailbox
+```
+
+### Timer (미구현)
+
+```bash
+cmake --build build --target benchmark_timer
+./build/test/benchmark_timer
+```
+
+### Dispatcher (미구현)
+
+```bash
+cmake --build build --target benchmark_dispatcher
+./build/test/benchmark_dispatcher
+```
+
+### ActorSystem (미구현)
+
+```bash
+cmake --build build --target benchmark_actor_system
+./build/test/benchmark_actor_system
+```
 
 ---
 
@@ -343,7 +399,7 @@ src/
 - **C++20** 지원 컴파일러 (GCC 11+ / Clang 14+)
 - **CMake 3.14 이상**
 - **Linux** 환경 (epoll, timerfd, eventfd, UDS)
-- **lld** 링커
+- **gold** 링커
 - **Ninja** 빌드 시스템
 - **libsystemd-dev** (sdbus-c++ 의존성)
 
