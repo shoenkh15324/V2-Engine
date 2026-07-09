@@ -6,6 +6,7 @@ endfunction()
 
 add_v2_benchmark(benchmark_ring_buffer core/ring_buffer_bench.cpp)
 add_v2_benchmark(benchmark_mailbox core/mailbox_bench.cpp)
+add_v2_benchmark(benchmark_mailbox_multithread core/mailbox_multithread_bench.cpp)
 add_v2_benchmark(benchmark_timer core/timer_bench.cpp)
 add_v2_benchmark(benchmark_dispatcher core/dispatcher_bench.cpp)
 add_v2_benchmark(benchmark_actor_system core/actor_system_bench.cpp)
