@@ -2,7 +2,6 @@
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
-#include "core/common/time/time.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
 #include "infra/hal/pmu/pmu_rsp5.hpp"
@@ -23,12 +22,10 @@ int CmdActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    startTimeMs_ = Time::nowMs();
-    handlers_["info"]  = [this](const auto& a){ return handleInfo(a); };
-    handlers_["actor"] = [this](const auto& a){ return handleActor(a); };
-    handlers_["pmu"] = [this](const auto& a){ return handlePmu(a); };
-    handlers_["wifi"] = [this](const auto& a){ return handleWifi(a); };
-    handlers_["test"]  = [this](const auto& a){ return handleTest(a); };
+    handlers_["actor"]  = [this](const auto& a){ return handleActor(a); };
+    handlers_["pmu"]    = [this](const auto& a){ return handlePmu(a); };
+    handlers_["wifi"]   = [this](const auto& a){ return handleWifi(a); };
+    handlers_["test"]   = [this](const auto& a){ return handleTest(a); };
     //
     pmu_ = []() -> std::unique_ptr<IPmu> {
 #if V2_PLATFORM_LINUX && defined(__aarch64__)
@@ -90,71 +87,25 @@ std::string CmdActor::dispatch(const std::string& cmd){
     return it->second(args);
 }
 
-std::string CmdActor::handleInfo(const std::vector<std::string>&){
-    auto nowMs = Time::nowMs();
-    uint64_t uptimeMs = 0;
-    if(nowMs >= startTimeMs_) uptimeMs = static_cast<uint64_t>(nowMs - startTimeMs_);
-
-    int s = static_cast<int>(uptimeMs / 1000);
-    int m = s / 60; s %= 60;
-    int h = m / 60; m %= 60;
-    int d = h / 24; h %= 24;
-
-    std::ostringstream oss;
-    oss << "name: " << V2_ENGINE_NAME << "\n"
-       << "version: " << V2_ENGINE_VERSION << "\n"
-       << "uptime: " << d << "d "
-       << (h < 10 ? "0" : "") << h << "h "
-       << (m < 10 ? "0" : "") << m << "m "
-       << (s < 10 ? "0" : "") << s << "s\n";
-    return oss.str();
-}
-
 std::string CmdActor::handleActor(const std::vector<std::string>& args){
+    // subcommand mode: actor list / actor enable <name> / actor disable <name>
+    if(!args.empty() && args[0][0] != '-'){
+        if(args[0] == "list"){
+            return doActorList();
+        }else if(args[0] == "enable" && args.size() >= 2){
+            return doActorEnableDisable(true, args[1]);
+        }else if(args[0] == "disable" && args.size() >= 2){
+            return doActorEnableDisable(false, args[1]);
+        }else{
+            return "error: unknown actor subcommand '" + args[0] + "'\n";
+        }
+    }
     std::string result;
     auto err = parseOptions(args, "d:e:l", [&](char opt, const std::string& val){
         switch(opt){
-            case 'd': case 'e':{
-                auto* reg = actorContext()->actorRegistry();
-                if(!reg){ result += "error: actor registry unavailable\n"; return; }
-                int ret = (opt == 'e') ? reg->enableActor(val) : reg->disableActor(val);
-                if(ret == 0){
-                    result += "ok: '" + val + "' " + (opt == 'e' ? "enabled" : "disabled") + "\n";
-                }else if(ret == -1){
-                    result += "error: not found '" + val + "'\n";
-                }else if(ret == -2){
-                    result += "error: '" + val + "' is essential\n";
-                }else{
-                    result += "error: " + std::string(opt == 'e' ? "enable" : "disable") + " failed\n";
-                }
-                return;
-            }
-            case 'l':{
-                auto* reg = actorContext()->actorRegistry();
-                if(!reg){ result += "error: actor registry unavailable\n"; return; }
-                int n = 0;
-                reg->forEachActor([&](Actor*){ ++n; });
-                char buf[256];
-                result += "actor_count: " + std::to_string(n) + "\n\n"
-                          "  ID  NAME              STATE      ESSENTIAL\n"
-                          "  --- ----------------- ---------- ---------\n";
-                reg->forEachActor([&](Actor* a){
-                    const char* st = "Unknown";
-                    switch(a->getState()){
-                        case Closed: st = "Closed"; break;
-                        case Closing: st = "Closing"; break;
-                        case Opening: st = "Opening"; break;
-                        case Opened: st = "Opened"; break;
-                        case Inherited: st = "Inherited"; break;
-                    }
-                    std::snprintf(buf, sizeof(buf), "  %3lu  %-17s %-10s %s\n",
-                        (unsigned long)a->id(), a->name().c_str(),
-                        st,
-                        a->isEssential() ? "yes" : "no");
-                    result += buf;
-                });
-                return;
-            }
+            case 'd': result += doActorEnableDisable(false, val); return;
+            case 'e': result += doActorEnableDisable(true, val);  return;
+            case 'l': result += doActorList();                    return;
         }
     });
     if(!err.empty()) return err;
@@ -162,22 +113,63 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
     return result;
 }
 
+std::string CmdActor::doActorList(){
+    auto* reg = actorContext()->actorRegistry();
+    if(!reg) return "error: actor registry unavailable\n";
+    int n = 0;
+    reg->forEachActor([&](Actor*){ ++n; });
+    char buf[256];
+    std::string result = "actor_count: " + std::to_string(n) + "\n\n"
+                         "  ID  NAME              STATE      ESSENTIAL\n"
+                         "  --- ----------------- ---------- ---------\n";
+    reg->forEachActor([&](Actor* a){
+        const char* st = "Unknown";
+        switch(a->getState()){
+            case Closed: st = "Closed"; break;
+            case Closing: st = "Closing"; break;
+            case Opening: st = "Opening"; break;
+            case Opened: st = "Opened"; break;
+            case Inherited: st = "Inherited"; break;
+        }
+        std::snprintf(buf, sizeof(buf), "  %3lu  %-17s %-10s %s\n",
+            (unsigned long)a->id(), a->name().c_str(),
+            st,
+            a->isEssential() ? "yes" : "no");
+        result += buf;
+    });
+    return result;
+}
+
+std::string CmdActor::doActorEnableDisable(bool enable, const std::string& name){
+    auto* reg = actorContext()->actorRegistry();
+    if(!reg) return "error: actor registry unavailable\n";
+    int ret = enable ? reg->enableActor(name) : reg->disableActor(name);
+    if(ret == 0) return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
+    if(ret == -1) return "error: not found '" + name + "'\n";
+    if(ret == -2) return "error: '" + name + "' is essential\n";
+    return "error: " + std::string(enable ? "enable" : "disable") + " failed\n";
+}
+
 std::string CmdActor::handlePmu(const std::vector<std::string>& args){
+    if(!args.empty() && args[0][0] != '-'){
+        if(args[0] == "status") { /* fall through to default */ }
+        else return "error: unknown pmu subcommand '" + args[0] + "'\n";
+    }
     if(!pmu_) return "error: pmu unavailable\n";
     PmuData d;
     pmu_->readPmuData(d);
 
     std::ostringstream oss;
-    oss << "ARM   : " << (d.clockArmHz / 1000000) << " MHz\n"
-       << "Core  : " << (d.clockCoreHz / 1000000) << " MHz\n"
-       << "V3D   : " << (d.clockV3dHz / 1000000) << " MHz\n"
-       << "Temp  : " << d.tempCelsius << " °C\n"
-       << "Vcore : " << d.voltCore << " V\n"
-       << "Icore : " << d.currentVddCoreA << " A\n"
-       << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
-       << (d.throttled ? "THROTTLED" : "Throttle")
-       << ": 0x" << std::hex << d.throttled << std::dec
-       << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
+    oss << "ARM   : " << (d.clockArmHz / 1000000)          << " MHz\n"
+        << "Core  : " << (d.clockCoreHz / 1000000)         << " MHz\n"
+        << "V3D   : " << (d.clockV3dHz / 1000000)          << " MHz\n"
+        << "Temp  : " << d.tempCelsius                     << " °C\n"
+        << "Vcore : " << d.voltCore                        << " V\n"
+        << "Icore : " << d.currentVddCoreA                 << " A\n"
+        << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
+        << (d.throttled ? "THROTTLED" : "Throttle")
+        << ": 0x" << std::hex << d.throttled << std::dec
+        << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
     return oss.str();
 }
 
@@ -237,18 +229,18 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
 std::string CmdActor::formatApList(){
     std::ostringstream oss;
     oss << std::left << std::setw(25) << "SSID"
-       << std::setw(18) << "BSSID"
-       << std::setw(6) << "SEC"
-       << std::setw(5) << "SIG"
-       << std::setw(8) << "FREQ"
-       << "\n" << std::string(62, '-') << "\n";
+        << std::setw(18) << "BSSID"
+        << std::setw(6) << "SEC"
+        << std::setw(5) << "SIG"
+        << std::setw(8) << "FREQ"
+        << "\n" << std::string(62, '-') << "\n";
     for(auto& ap : lastScan_.accessPoints){
         oss << std::setw(25) << ap.ssid
-           << std::setw(18) << ap.bssid
-           << std::setw(6) << ap.security
-           << std::setw(5) << ap.signalStrength
-           << std::setw(8) << ap.frequency
-           << "\n";
+            << std::setw(18) << ap.bssid
+            << std::setw(6) << ap.security
+            << std::setw(5) << ap.signalStrength
+            << std::setw(8) << ap.frequency
+            << "\n";
     }
     return oss.str();
 }

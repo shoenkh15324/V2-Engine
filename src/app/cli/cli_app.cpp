@@ -4,6 +4,7 @@
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <cstdio>
 #include <cstring>
@@ -98,35 +99,37 @@ bool CliApp::shouldColor(){
 }
 
 void CliApp::printLocalHelp(){
-    std::cout
-        << CLR("\033[33m") << "  Usage:" << CLR("\033[0m") << " v2 <command> [options]\n"
-        << "\n"
-        << CLR("\033[33m") << "  Information:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "help, -h, --help" << CLR("\033[0m") << "                   Show this help message\n"
-        << "    " << CLR("\033[32m") << "version, -v, --version" << CLR("\033[0m") << "             Show version\n"
-        << "    " << CLR("\033[32m") << "status, -s, --status" << CLR("\033[0m") << "               Show daemon status\n"
-        << "    " << CLR("\033[32m") << "info" << CLR("\033[0m") << "                               Show system information\n"
-        << "\n"
-        << CLR("\033[33m") << "  Monitoring:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "monitor, -m, --monitor" << CLR("\033[0m") << "             Open TUI monitor\n"
-        << "\n"
-        << CLR("\033[33m") << "  Actor Control:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "actor -l" << CLR("\033[0m") << "                           List actors\n"
-        << "    " << CLR("\033[32m") << "actor -d <name>" << CLR("\033[0m") << "                    Disable actor\n"
-        << "    " << CLR("\033[32m") << "actor -e <name>" << CLR("\033[0m") << "                    Enable actor\n"
-        << "\n"
-        << CLR("\033[33m") << "  Pmu:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "pmu -s" << CLR("\033[0m") << "                             Show Pmu Status\n"
-        << "\n"
-        << CLR("\033[33m") << "  Wifi:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "wifi scan" << CLR("\033[0m") << "                          Scan for access points\n"
-        << "    " << CLR("\033[32m") << "wifi list, -l" << CLR("\033[0m") << "                      List scanned access points\n"
-        << "    " << CLR("\033[32m") << "wifi connect <ssid> [pw], -c <ssid> [pw]" << CLR("\033[0m") << "  Connect to a network\n"
-        << "    " << CLR("\033[32m") << "wifi disconnect, -d" << CLR("\033[0m") << "                  Disconnect current network\n"
-        << "    " << CLR("\033[32m") << "wifi status, -s" << CLR("\033[0m") << "                     Show connection status\n"
-        << "\n"
-        << CLR("\033[33m") << "  Development:" << CLR("\033[0m") << "\n"
-        << "    " << CLR("\033[32m") << "test [options]" << CLR("\033[0m") << "                     Test command parsing\n";
+    auto& os = std::cout;
+    auto cmd = [&](const std::string& c, const std::string& d){
+        os << "    " << CLR("\033[32m") << std::left << std::setw(45) << c << CLR("\033[0m") << d << "\n";
+    };
+    os << CLR("\033[33m") << "  Usage:" << CLR("\033[0m") << " v2 <command> [options]\n"
+       << "\n"
+       << CLR("\033[33m") << "  Information:" << CLR("\033[0m") << "\n";
+    cmd("help, -h, --help",                  "Show this help message");
+    cmd("version, -v, --version",            "Show version");
+    cmd("status, -s, --status",              "Show daemon status");
+    os << "\n"
+       << CLR("\033[33m") << "  Monitoring:" << CLR("\033[0m") << "\n";
+    cmd("monitor, -m, --monitor",            "Open TUI monitor");
+    os << "\n"
+       << CLR("\033[33m") << "  Actor Control:" << CLR("\033[0m") << "\n";
+    cmd("actor list, -l",                    "List actors");
+    cmd("actor enable <name>, -e  <name>",   "Enable actor");
+    cmd("actor disable <name>, -d <name>",   "Disable actor");
+    os << "\n"
+       << CLR("\033[33m") << "  Pmu:" << CLR("\033[0m") << "\n";
+    cmd("pmu status, -s",                    "Show Pmu Status");
+    os << "\n"
+       << CLR("\033[33m") << "  Wifi:" << CLR("\033[0m") << "\n";
+    cmd("wifi scan",                         "Scan for access points");
+    cmd("wifi list, -l",                     "List scanned access points");
+    cmd("wifi connect <ssid> [pw], -c <ssid> [pw]", "Connect to a network");
+    cmd("wifi disconnect, -d",               "Disconnect current network");
+    cmd("wifi status, -s",                   "Show connection status");
+    os << "\n"
+       << CLR("\033[33m") << "  Development:" << CLR("\033[0m") << "\n";
+    cmd("test [options]",                    "Test command parsing");
 }
 
 void CliApp::printLocalVersion(){
