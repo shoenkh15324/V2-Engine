@@ -9,6 +9,7 @@
 #include "infra/hal/pmu/pmu_mock.hpp"
 #include "service/monitor/monitor_data.hpp"
 #include <sstream>
+#include <iomanip>
 
 CmdActor::CmdActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
     //
@@ -23,10 +24,11 @@ int CmdActor::open(){
     state_ = Opening;
     //
     startTimeMs_ = Time::nowMs();
-    handlers_["info"]  = [this](const auto& a) { return handleInfo(a); };
-    handlers_["actor"] = [this](const auto& a) { return handleActor(a); };
-    handlers_["pmu"] = [this](const auto& a) { return handlePmu(a); };
-    handlers_["test"]  = [this](const auto& a) { return handleTest(a); };
+    handlers_["info"]  = [this](const auto& a){ return handleInfo(a); };
+    handlers_["actor"] = [this](const auto& a){ return handleActor(a); };
+    handlers_["pmu"] = [this](const auto& a){ return handlePmu(a); };
+    handlers_["wifi"] = [this](const auto& a){ return handleWifi(a); };
+    handlers_["test"]  = [this](const auto& a){ return handleTest(a); };
     //
     pmu_ = []() -> std::unique_ptr<IPmu> {
 #if V2_PLATFORM_LINUX && defined(__aarch64__)
@@ -58,6 +60,8 @@ void CmdActor::handle(const Message& msg){
             auto response = dispatch(msg.cmd);
             sendMsg("ipc_server", CmdResponse{msg.conn, std::move(response)});
         },
+        [this](const NetScanResult& msg){ lastScan_ = msg; },
+        [this](const NetStatusResult& msg){ lastStatus_ = msg; },
         [](const auto&){}
     }, msg);
 }
@@ -96,14 +100,14 @@ std::string CmdActor::handleInfo(const std::vector<std::string>&){
     int h = m / 60; m %= 60;
     int d = h / 24; h %= 24;
 
-    std::ostringstream os;
-    os << "name: " << V2_ENGINE_NAME << "\n"
+    std::ostringstream oss;
+    oss << "name: " << V2_ENGINE_NAME << "\n"
        << "version: " << V2_ENGINE_VERSION << "\n"
        << "uptime: " << d << "d "
        << (h < 10 ? "0" : "") << h << "h "
        << (m < 10 ? "0" : "") << m << "m "
        << (s < 10 ? "0" : "") << s << "s\n";
-    return os.str();
+    return oss.str();
 }
 
 std::string CmdActor::handleActor(const std::vector<std::string>& args){
@@ -163,8 +167,8 @@ std::string CmdActor::handlePmu(const std::vector<std::string>& args){
     PmuData d;
     pmu_->readPmuData(d);
 
-    std::ostringstream os;
-    os << "ARM   : " << (d.clockArmHz / 1000000) << " MHz\n"
+    std::ostringstream oss;
+    oss << "ARM   : " << (d.clockArmHz / 1000000) << " MHz\n"
        << "Core  : " << (d.clockCoreHz / 1000000) << " MHz\n"
        << "V3D   : " << (d.clockV3dHz / 1000000) << " MHz\n"
        << "Temp  : " << d.tempCelsius << " °C\n"
@@ -174,7 +178,89 @@ std::string CmdActor::handlePmu(const std::vector<std::string>& args){
        << (d.throttled ? "THROTTLED" : "Throttle")
        << ": 0x" << std::hex << d.throttled << std::dec
        << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
-    return os.str();
+    return oss.str();
+}
+
+std::string CmdActor::handleWifi(const std::vector<std::string>& args){
+    if(args.empty()) return "error: missing subcommand\n";
+
+    // flag-based subcommand
+    if(args[0].size() == 2 && args[0][0] == '-'){
+        char opt = args[0][1];
+        switch(opt){
+            case 'c':
+                if(args.size() < 2) return "error: wifi -c <ssid> [password]\n";
+                sendMsg("network_manager", NetConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
+                return "Connecting to '" + args[1] + "'...\n";
+            case 'l':
+                if(lastScan_.accessPoints.empty()) return "No scan results. Try 'wifi scan' first.\n";
+                return formatApList();
+            case 's':
+                sendMsg("network_manager", NetStatusRequest{});
+                if(!lastStatus_.connected) return "Disconnected\n";
+                return formatStatus();
+            case 'd':
+                sendMsg("network_manager", NetDisconnectRequest{});
+                return "Disconnecting...\n";
+            default:
+                return "error: unknown wifi option '-" + std::string(1, opt) + "'\n";
+        }
+    }
+
+    // subcommand-based
+    auto& cmd = args[0];
+    if(cmd == "scan"){
+        sendMsg("network_manager", NetScanRequest{});
+        return "Scanning...\n";
+    }
+    if(cmd == "list"){
+        if(lastScan_.accessPoints.empty()) return "No scan results. Try 'wifi scan' first.\n";
+        return formatApList();
+    }
+    if(cmd == "connect"){
+        if(args.size() < 2) return "error: wifi connect <ssid> [password]\n";
+        sendMsg("network_manager", NetConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
+        return "Connecting to '" + args[1] + "'...\n";
+    }
+    if(cmd == "disconnect"){
+        sendMsg("network_manager", NetDisconnectRequest{});
+        return "Disconnecting...\n";
+    }
+    if(cmd == "status"){
+        sendMsg("network_manager", NetStatusRequest{});
+        if(!lastStatus_.connected) return "Disconnected\n";
+        return formatStatus();
+    }
+    return "error: unknown wifi subcommand '" + cmd + "'\n";
+}
+
+std::string CmdActor::formatApList(){
+    std::ostringstream oss;
+    oss << std::left << std::setw(25) << "SSID"
+       << std::setw(18) << "BSSID"
+       << std::setw(6) << "SEC"
+       << std::setw(5) << "SIG"
+       << std::setw(8) << "FREQ"
+       << "\n" << std::string(62, '-') << "\n";
+    for(auto& ap : lastScan_.accessPoints){
+        oss << std::setw(25) << ap.ssid
+           << std::setw(18) << ap.bssid
+           << std::setw(6) << ap.security
+           << std::setw(5) << ap.signalStrength
+           << std::setw(8) << ap.frequency
+           << "\n";
+    }
+    return oss.str();
+}
+
+std::string CmdActor::formatStatus(){
+    std::ostringstream oss;
+    oss << "SSID: " << lastStatus_.ssid << "\n"
+        << "IP: " << lastStatus_.ipAddress << "\n"
+        << "Signal: " << lastStatus_.signalStrength << "\n"
+        << "State: " << lastStatus_.state << "\n"
+        << "Interface: " << lastStatus_.interfaceName << "\n";
+    return oss.str();
 }
 
 std::string CmdActor::handleTest(const std::vector<std::string>& args){

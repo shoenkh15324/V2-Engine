@@ -1,13 +1,13 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
+#include "infra/hal/pmu/i_pmu.hpp"
+#include "core/actor_system/messages/network_manager.hpp"
 #include <string>
 #include <vector>
 #include <functional>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
-
-#include "infra/hal/pmu/i_pmu.hpp"
 
 class CmdActor : public Actor{
 public:
@@ -31,10 +31,17 @@ private:
     std::string handleInfo(const std::vector<std::string>&);
     std::string handleActor(const std::vector<std::string>& args);
     std::string handlePmu(const std::vector<std::string>& args);
+    std::string handleWifi(const std::vector<std::string>& args);
     std::string handleTest(const std::vector<std::string>& args);
     std::string parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption);
 
+    // Wifi helpers
+    std::string formatApList();
+    std::string formatStatus();
+
     std::unordered_map<std::string, Handler> handlers_;
     std::unique_ptr<IPmu> pmu_;
+    NetScanResult lastScan_;
+    NetStatusResult lastStatus_;
     int64_t startTimeMs_ = 0;
 };

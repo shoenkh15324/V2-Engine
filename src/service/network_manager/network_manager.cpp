@@ -84,7 +84,22 @@ void NetmanagerActor::handle(const Message& msg){
             disconnectDevice();
         },
         [this](const NetStatusRequest&){
-            // TODO
+            NetStatusResult r;
+            auto state = getDeviceState();
+            r.connected = (state == 100); // NM_DEVICE_STATE_ACTIVATED
+            r.state = deviceStateToString(state);
+            if(!devicePath_.empty()){
+                auto* dev = deviceProxy();
+                if(dev){
+                    sdbus::Variant v;
+                    dev->callMethod("Get")
+                        .onInterface("org.freedesktop.DBus.Properties")
+                        .withArguments("org.freedesktop.NetworkManager.Device", "Interface")
+                        .storeResultsTo(v);
+                    r.interfaceName = v.get<std::string>();
+                }
+            }
+            sendMsg("cmd_actor", r);
         },
         [](const auto&){}
     }, msg);
@@ -319,8 +334,27 @@ void NetmanagerActor::refreshAps(){
             results.push_back(readApInfo(apPath));
         }
         lastScanResults_ = std::move(results);
+        sendMsg("cmd_actor", NetScanResult{lastScanResults_});
     }catch(const sdbus::Error& e){
         V2_LOG_ERROR("refreshAps failed: {}", e.what());
+    }
+}
+
+const char* NetmanagerActor::deviceStateToString(uint32_t s){
+    switch(s){
+        case 10: return "unmanaged";
+        case 20: return "unavailable";
+        case 30: return "disconnected";
+        case 40: return "prepare";
+        case 50: return "config";
+        case 60: return "need-auth";
+        case 70: return "ip-config";
+        case 80: return "ip-check";
+        case 90: return "secondaries";
+        case 100: return "connected";
+        case 110: return "deactivating";
+        case 120: return "failed";
+        default: return "unknown";
     }
 }
 

@@ -45,6 +45,7 @@ private:
     std::string flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags);
     bool findWirelessDevice();
     void refreshAps();
+    const char* deviceStateToString(uint32_t s);
 
     sdbus::IConnection* connection_{nullptr};
     std::unique_ptr<sdbus::IProxy> nmProxy_;
