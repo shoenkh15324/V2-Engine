@@ -52,7 +52,7 @@ private:
     };
 
     void excuteExpiredTimers();
-    void scheduleNextTimer();
+    void scheduleNextTimer(const Clock::time_point& now);
 
     std::priority_queue<TimerPtr, std::vector<TimerPtr>, Compare> heap_;
     std::unordered_map<int, TimerPtr> timers_;

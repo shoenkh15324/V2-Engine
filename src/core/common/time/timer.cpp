@@ -27,16 +27,18 @@ Timer::~Timer(){
 
 int Timer::add(uint64_t delayMs, bool repeating, Callback cb){
     auto timerNode = std::make_shared<TimerNode>();
+    auto now = Clock::now();
     timerNode->id = nextId_++;
-    timerNode->expiry = Clock::now() + std::chrono::milliseconds(delayMs);
+    timerNode->expiry = now + std::chrono::milliseconds(delayMs);
     timerNode->interval = std::chrono::milliseconds(delayMs);
     timerNode->repeating = repeating;
     timerNode->cb = std::move(cb);
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        bool needReschedule = heap_.empty() || (timerNode->expiry < heap_.top()->expiry);
         heap_.push(timerNode);
         timers_[timerNode->id] = timerNode;
-        scheduleNextTimer();
+        if(needReschedule) scheduleNextTimer(now);
     }
     return timerNode->id;
 }
@@ -47,13 +49,16 @@ void Timer::cancel(int id){
     if(it == timers_.end()) return;
     it->second->alive = false;
     timers_.erase(it);
+    while(!heap_.empty() && !heap_.top()->alive){
+        heap_.pop();
+    }
 }
 
 void Timer::clear(){
     std::lock_guard<std::mutex> lock(mutex_);
     heap_ = {};
     timers_.clear();
-    scheduleNextTimer();
+    scheduleNextTimer(Clock::now());
 }
 
 void Timer::start(){
@@ -128,9 +133,9 @@ void Timer::handleTimerEvent(){
 
 void Timer::excuteExpiredTimers(){
     std::vector<TimerPtr> ready;
+    auto now = Clock::now();
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto now = Clock::now();
         while(!heap_.empty() && (heap_.top()->expiry <= now)){
             auto timerNode = heap_.top();
             heap_.pop();
@@ -138,9 +143,7 @@ void Timer::excuteExpiredTimers(){
             ready.push_back(timerNode);
         }
     }
-    for(auto& timerNode : ready){
-        timerNode->cb(timerNode->id);
-    }
+    for(auto& timerNode : ready){ timerNode->cb(timerNode->id); }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         for(auto& timerNode : ready){
@@ -151,11 +154,11 @@ void Timer::excuteExpiredTimers(){
                 timers_.erase(timerNode->id);
             }
         }
-        scheduleNextTimer();
+        scheduleNextTimer(now);
     }
 }
 
-void Timer::scheduleNextTimer(){
+void Timer::scheduleNextTimer(const Clock::time_point& now){
 #if V2_PLATFORM_LINUX
     if(timerFd_ < 0) return;
     itimerspec spec{};
@@ -164,7 +167,7 @@ void Timer::scheduleNextTimer(){
             heap_.pop();
         }
         if(!heap_.empty()){
-            auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(heap_.top()->expiry - Clock::now()).count();
+            auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(heap_.top()->expiry - now).count();
             if(ns < 0){
                 spec.it_value.tv_sec = 0;
                 spec.it_value.tv_nsec = 1;

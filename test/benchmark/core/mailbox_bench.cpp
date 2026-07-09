@@ -102,7 +102,7 @@ static void MailboxFullCycle(benchmark::State& state){
             mb.pop(out);
         }
     }
-    state.SetBytesProcessed(state.iterations() * state.range(0) * 2); 
+    state.SetItemsProcessed(state.iterations() * state.range(0) * 2); 
 }
 BENCHMARK(MailboxFullCycle)
     ->Arg(1)
