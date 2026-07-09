@@ -48,6 +48,9 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("dbus_object_path")) cfg.dbusObjectPath = j["dbus_object_path"];
         if (j.contains("dbus_interface_name")) cfg.dbusInterfaceName = j["dbus_interface_name"];
 
+        // Network Manager
+        if(j.contains("enable_network_manager")) cfg.enableNetworkManager = j["enable_network_manager"];
+
 #endif
     }catch(...){}
     return cfg;

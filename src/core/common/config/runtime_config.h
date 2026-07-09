@@ -38,6 +38,9 @@ struct RuntimeConfig{
     std::string dbusBusName = "com.v2.engine";
     std::string dbusObjectPath = "/com/v2/engine";
     std::string dbusInterfaceName = "com.v2.engine";
+
+    // Network Manager
+    bool enableNetworkManager = false;
 #endif
 
     static RuntimeConfig loadFromFile(const std::string& path);
