@@ -1,6 +1,8 @@
 #include "network_manager.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
+#include "core/actor_system/actor/actor_context.hpp"
+#include "service/dbus/dbus_actor.hpp"
 
 #if V2_PLATFORM_LINUX
 
@@ -16,24 +18,18 @@ int NetmanagerActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    try{
-        connection_ = sdbus::createSystemBusConnection();
-        connection_->enterEventLoopAsync();
-    }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to open Network Manager connection: {}", e.what());
+    auto* dbus = dynamic_cast<DbusActor*>(actorContext()->actorRegistry()->findByName("dbus_actor"));
+    if(!dbus){ V2_LOG_ERROR("dbus_actor not found");
         state_ = Closed;
         return Fail;
     }
+    connection_ = &dbus->connection();
     if(!findWirelessDevice()){
         V2_LOG_WARN("No wireless device found");
     }else{
-        // Subscribe to device signals
-        auto subsribeDeviceSignal = [&](const auto&... lambdas){
-            // dummy
-        };
         try{
             auto dev = deviceProxy();
             if(dev){
-                std::string subscriber = name();
                 dev->uponSignal("AccessPointAdded")
                     .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
                     .call([this](const sdbus::ObjectPath&){ V2_LOG_INFO("AP added, refreshing");
@@ -70,11 +66,6 @@ int NetmanagerActor::close(){
     proxies_.clear();
     deviceProxy_.reset();
     nmProxy_.reset();
-
-    if(connection_){
-        connection_->leaveEventLoop();
-        connection_.reset();
-    }
     //
     state_ = Closed;
     return Ok;
@@ -84,7 +75,7 @@ void NetmanagerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
     std::visit(overloaded{
         [this](const NetScanRequest&){
-            lastScanResults_ = requestScanAndGetAps();
+            requestScan();
         },
         [this](const NetConnectRequest& msg){
             addAndActivateConnection(msg.ssid, msg.password);
@@ -93,7 +84,7 @@ void NetmanagerActor::handle(const Message& msg){
             disconnectDevice();
         },
         [this](const NetStatusRequest&){
-            requestScanAndGetAps();
+            // TODO
         },
         [](const auto&){}
     }, msg);
@@ -126,38 +117,21 @@ sdbus::IProxy* NetmanagerActor::proxyFor(const std::string& destination, const s
     return ptr;
 }
 
-std::vector<ApInfo> NetmanagerActor::requestScanAndGetAps(){
-    if(devicePath_.empty()) return {};
+void NetmanagerActor::requestScan(){
+    if(devicePath_.empty()) return;
     auto* dev = deviceProxy();
-    if(!dev) return {};
+    if(!dev) return;
 
-    // 1. Request Scan
     try{
         std::map<std::string, sdbus::Variant> options;
         dev->callMethod("RequestScan")
             .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
             .withArguments(options);
-    }catch(const sdbus::Error& e){ V2_LOG_ERROR("RequestScan failed: {}", e.what());
-        return {};
+        V2_LOG_INFO("Scan requested");
+    }catch(const sdbus::Error& e){
+        V2_LOG_ERROR("RequestScan failed: {}", e.what());
     }
 
-    // 2. Read AccessPoints property (wait briefly for scan to populate)
-    std::vector<sdbus::ObjectPath> apPaths;
-    try{
-        sdbus::Variant aps;
-        dev->callMethod("Get")
-            .onInterface("org.freedesktop.DBus.Properties")
-            .withArguments("org.freedesktop.NetworkManager.Device.Wireless", "AccessPoints")
-            .storeResultsTo(aps);
-        apPaths = aps.get<std::vector<sdbus::ObjectPath>>();
-    }catch(const sdbus::Error& e){ V2_LOG_ERROR("Get AccessPoints failed: {}", e.what());
-        return {};
-    }
-    std::vector<ApInfo> results;
-    for(const auto& apPath : apPaths){
-        results.push_back(readApInfo(apPath));
-    }
-    return results;
 }
 
 std::string NetmanagerActor::addAndActivateConnection(const std::string& ssid, const std::string& password){
@@ -274,8 +248,7 @@ ApInfo NetmanagerActor::readApInfo(const std::string& apPath){
     try{ info.frequency = static_cast<uint16_t>(readProp("Frequency").get<uint32_t>()); }catch(...){}
     try{ info.maxBitrate = readProp("MaxBitrate").get<uint32_t>(); }catch(...){}
     try{ info.signalStrength = readProp("Strength").get<uint8_t>() * 100 / 255 - 100; }catch(...){}
-    // Strength is 0-100% → convert to approximate dBm: 0% = 0dBm, 100% = -100dBm? Actually NM Strength is percentage 0-100
-    // Better: map 0-100 → -100 to 0 dBm approximately
+    // NM Strength 0-100 → approximate dBm
     try{ info.mode = readProp("Mode").get<uint32_t>() == 0 ? "infrastructure" : "adhoc"; }catch(...){}
     // Security from WpaFlags / RsnFlags
     try{

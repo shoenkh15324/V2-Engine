@@ -2,6 +2,7 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
 #include "core/actor_system/messages/network_manager.hpp"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,7 +33,7 @@ private:
     sdbus::IProxy* proxyFor(const std::string& destination, const std::string& objectPath);
 
     // NM D-Bus calls
-    std::vector<ApInfo> requestScanAndGetAps();
+    void requestScan();
     std::string addAndActivateConnection(const std::string& ssid, const std::string& password);
     void disconnectDevice();
     uint32_t getDeviceState();
@@ -45,7 +46,7 @@ private:
     bool findWirelessDevice();
     void refreshAps();
 
-    std::unique_ptr<sdbus::IConnection> connection_;
+    sdbus::IConnection* connection_{nullptr};
     std::unique_ptr<sdbus::IProxy> nmProxy_;
     std::unique_ptr<sdbus::IProxy> deviceProxy_;
     std::map<std::string, std::unique_ptr<sdbus::IProxy>> proxies_;

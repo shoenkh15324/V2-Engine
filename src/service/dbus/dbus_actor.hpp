@@ -26,6 +26,8 @@ public:
     int close() override;
     void handle(const Message& msg) override;
 
+    sdbus::IConnection& connection(){ return *connection_; }
+
 private:
     std::string busName_;
     std::string objectPath_;
