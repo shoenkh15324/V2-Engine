@@ -170,7 +170,8 @@ TEST(Dispatcher, RunFiresHandler){
 
     std::thread t([&](){ d.run(); });
 
-    ::write(fds[1], "x", 1);
+    auto _ = ::write(fds[1], "x", 1);
+    (void)_;
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_TRUE(fired);
 

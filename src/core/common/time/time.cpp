@@ -43,7 +43,7 @@ Time::Date Time::nowDate(){
 
 std::string Time::nowDateString(){
     auto d = nowDate();
-    char buf[32] = {0};
+    char buf[64] = {0};
     std::snprintf(buf, sizeof(buf),
         "%04d-%02d-%02d %02d:%02d:%02d",
         d.year, d.month, d.day,

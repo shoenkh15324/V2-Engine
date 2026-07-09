@@ -68,7 +68,7 @@ void Dispatcher::stop(){
     running_ = false;
 #if V2_PLATFORM_LINUX
     uint64_t one = 1;
-    ::write(stopFd_, &one, sizeof(one));
+    auto _ = ::write(stopFd_, &one, sizeof(one));
 #endif
     sema_.release(workerCount_ > 0 ? workerCount_ : 1);
 }
