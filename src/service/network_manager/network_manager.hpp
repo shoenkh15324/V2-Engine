@@ -1,7 +1,7 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
-#include "core/actor_system/messages/network_manager.hpp"
+#include "core/actor_system/messages/network_messages.hpp"
 
 #include <memory>
 #include <string>
@@ -40,8 +40,14 @@ private:
     std::string getActiveApPath();
     ApInfo readApInfo(const std::string& apPath);
 
+    // Message handlers
+    void handleStatus();
+
     // Helpers
+    std::string readInterfaceName();
+    std::string readIp4Address();
     std::string ssidBytesToString(const std::vector<uint8_t>& ssid);
+    std::string bssidBytesToString(const std::vector<uint8_t>& bssid);
     std::string flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags);
     bool findWirelessDevice();
     void refreshAps();

@@ -4,6 +4,7 @@
 #include <vector>
 
 struct ApInfo{
+    bool connected{false};
     uint16_t frequency{0};
     uint32_t maxBitrate{0};
     int32_t signalStrength{0};

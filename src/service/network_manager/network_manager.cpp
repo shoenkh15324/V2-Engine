@@ -84,22 +84,7 @@ void NetmanagerActor::handle(const Message& msg){
             disconnectDevice();
         },
         [this](const NetStatusRequest&){
-            NetStatusResult r;
-            auto state = getDeviceState();
-            r.connected = (state == 100); // NM_DEVICE_STATE_ACTIVATED
-            r.state = deviceStateToString(state);
-            if(!devicePath_.empty()){
-                auto* dev = deviceProxy();
-                if(dev){
-                    sdbus::Variant v;
-                    dev->callMethod("Get")
-                        .onInterface("org.freedesktop.DBus.Properties")
-                        .withArguments("org.freedesktop.NetworkManager.Device", "Interface")
-                        .storeResultsTo(v);
-                    r.interfaceName = v.get<std::string>();
-                }
-            }
-            sendMsg("cmd_actor", r);
+            handleStatus();
         },
         [](const auto&){}
     }, msg);
@@ -254,12 +239,14 @@ ApInfo NetmanagerActor::readApInfo(const std::string& apPath){
             return {};
         }
     };
-
     try{
         auto ssidBytes = readProp("Ssid").get<std::vector<uint8_t>>();
         info.ssid = ssidBytesToString(ssidBytes);
     }catch(...){}
-    try{ info.bssid = readProp("Bssid").get<std::string>(); }catch(...){}
+    try{ 
+        auto bssidBytes = readProp("Bssid").get<std::vector<uint8_t>>();
+        info.bssid = bssidBytesToString(bssidBytes);
+    }catch(...){}
     try{ info.frequency = static_cast<uint16_t>(readProp("Frequency").get<uint32_t>()); }catch(...){}
     try{ info.maxBitrate = readProp("MaxBitrate").get<uint32_t>(); }catch(...){}
     try{ info.signalStrength = readProp("Strength").get<uint8_t>() * 100 / 255 - 100; }catch(...){}
@@ -274,8 +261,79 @@ ApInfo NetmanagerActor::readApInfo(const std::string& apPath){
     return info;
 }
 
+void NetmanagerActor::handleStatus(){
+    NetStatusResult r;
+    auto state = getDeviceState();
+    r.connected = (state == 100); // NM_DEVICE_STATE_ACTIVATED
+    r.state = deviceStateToString(state);
+    if(devicePath_.empty()){
+        sendMsg("cmd_actor", r);
+        return;
+    }
+    r.interfaceName = readInterfaceName();
+    if(!r.connected){
+        sendMsg("cmd_actor", r);
+        return;
+    }
+    auto apPath = getActiveApPath();
+    if(!apPath.empty()){
+        auto apInfo = readApInfo(apPath);
+        r.ssid = apInfo.ssid;
+        r.signalStrength = apInfo.signalStrength;
+    }
+    r.ipAddress = readIp4Address();
+    sendMsg("cmd_actor", r);
+}
+
+std::string NetmanagerActor::readInterfaceName(){
+    auto* dev = deviceProxy();
+    if(!dev) return {};
+    try{
+        sdbus::Variant v;
+        dev->callMethod("Get")
+            .onInterface("org.freedesktop.DBus.Properties")
+            .withArguments("org.freedesktop.NetworkManager.Device", "Interface")
+            .storeResultsTo(v);
+        return v.get<std::string>();
+    }catch(...){
+        return {};
+    }
+}
+
+std::string NetmanagerActor::readIp4Address(){
+    auto* dev = deviceProxy();
+    if(!dev) return {};
+    try{
+        sdbus::Variant ipVar;
+        dev->callMethod("Get")
+            .onInterface("org.freedesktop.DBus.Properties")
+            .withArguments("org.freedesktop.NetworkManager.Device", "Ip4Config")
+            .storeResultsTo(ipVar);
+        std::string ip4Path = ipVar.get<std::string>();
+        if(ip4Path.empty() || ip4Path == "/") return {};
+        auto* ipProxy = proxyFor("org.freedesktop.NetworkManager", ip4Path);
+        sdbus::Variant addrVar;
+        ipProxy->callMethod("Get")
+            .onInterface("org.freedesktop.DBus.Properties")
+            .withArguments("org.freedesktop.NetworkManager.IP4Config", "AddressData")
+            .storeResultsTo(addrVar);
+        auto addrs = addrVar.get<std::vector<std::map<std::string, sdbus::Variant>>>();
+        if(addrs.empty()) return {};
+        return addrs[0].at("address").get<std::string>();
+    }catch(...){
+        return {};
+    }
+}
+
 std::string NetmanagerActor::ssidBytesToString(const std::vector<uint8_t>& ssid){
     return std::string(ssid.begin(), ssid.end());
+}
+
+std::string NetmanagerActor::bssidBytesToString(const std::vector<uint8_t>& bssid){
+    if(bssid.size() != 6) return {};
+    char buf[18];
+    std::snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+    return buf;
 }
 
 std::string NetmanagerActor::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags){
@@ -327,11 +385,17 @@ void NetmanagerActor::refreshAps(){
             .onInterface("org.freedesktop.DBus.Properties")
             .withArguments("org.freedesktop.NetworkManager.Device.Wireless", "AccessPoints")
             .storeResultsTo(aps);
-        auto apPaths = aps.get<std::vector<sdbus::ObjectPath>>();
 
+        auto apPaths = aps.get<std::vector<sdbus::ObjectPath>>();
+        auto activeApPath = getActiveApPath();
         std::vector<ApInfo> results;
+
         for(const auto& apPath : apPaths){
-            results.push_back(readApInfo(apPath));
+            auto info = readApInfo(apPath);
+            if(apPath == activeApPath){
+                info.connected = true;
+            }
+            results.push_back(std::move(info));
         }
         lastScanResults_ = std::move(results);
         sendMsg("cmd_actor", NetScanResult{lastScanResults_});

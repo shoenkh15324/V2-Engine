@@ -6,7 +6,7 @@
 #include "dbus_messages.hpp"
 #include "device_manager_messages.hpp"
 #include "cmd_messages.hpp"
-#include "network_manager.hpp"
+#include "network_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 

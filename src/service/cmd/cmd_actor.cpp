@@ -188,7 +188,10 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
                 if(lastScan_.accessPoints.empty()) return "No scan results. Try 'wifi scan' first.\n";
                 return formatApList();
             case 's':
-                sendMsg("network_manager", NetStatusRequest{});
+                if(lastStatus_.state.empty()){
+                    sendMsg("network_manager", NetStatusRequest{});
+                    return "Requesting status...\n";
+                }
                 if(!lastStatus_.connected) return "Disconnected\n";
                 return formatStatus();
             case 'd':
@@ -219,7 +222,10 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
         return "Disconnecting...\n";
     }
     if(cmd == "status"){
-        sendMsg("network_manager", NetStatusRequest{});
+        if(lastStatus_.state.empty()){
+            sendMsg("network_manager", NetStatusRequest{});
+            return "Requesting status...\n";
+        }
         if(!lastStatus_.connected) return "Disconnected\n";
         return formatStatus();
     }
@@ -228,14 +234,18 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
 
 std::string CmdActor::formatApList(){
     std::ostringstream oss;
-    oss << std::left << std::setw(25) << "SSID"
+    oss << std::left << std::setw(40) << "SSID"
         << std::setw(18) << "BSSID"
         << std::setw(6) << "SEC"
         << std::setw(5) << "SIG"
         << std::setw(8) << "FREQ"
         << "\n" << std::string(62, '-') << "\n";
     for(auto& ap : lastScan_.accessPoints){
-        oss << std::setw(25) << ap.ssid
+        std::string ssidDisplay = ap.ssid;
+        if(ap.connected) ssidDisplay += " (connected)";
+        if(ssidDisplay.empty()) ssidDisplay = "[Unknown]";
+
+        oss << std::setw(40) << ssidDisplay
             << std::setw(18) << ap.bssid
             << std::setw(6) << ap.security
             << std::setw(5) << ap.signalStrength
