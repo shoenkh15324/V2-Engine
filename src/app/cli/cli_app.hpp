@@ -25,6 +25,7 @@ public:
 private:
     struct SubDef{
         std::string name;
+        std::string usage;
         std::string desc;
         std::vector<SubDef> children;
     };
@@ -39,7 +40,7 @@ private:
 
     RuntimeConfig cfg_;
     std::string appName_ = "Cli";
-    std::vector<SubDef> subs_;
+    std::vector<SubDef> subCmds_;
 
 #if V2_PLATFORM_LINUX
     UdsClient client_;

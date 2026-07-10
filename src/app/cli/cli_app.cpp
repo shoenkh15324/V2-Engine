@@ -16,23 +16,23 @@
 #endif
 
 CliApp::CliApp()
-    : subs_{
-        {"actor", "Actor management", {
-            {"list", "List actors"},
-            {"enable", "Enable actor"},
-            {"disable", "Disable actor"},
+    : subCmds_{ // name, usage, description
+        {"actor", {}, "Actor management", {
+            {"list", "", "List actors"},
+            {"enable", "<name>", "Enable actor"},
+            {"disable", "<name>", "Disable actor"},
         }},
-        {"wifi", "Wi-Fi management", {
-            {"scan", "Scan access points"},
-            {"list", "List scanned APs"},
-            {"connect", "Connect to a network"},
-            {"disconnect", "Disconnect current network"},
-            {"status", "Show connection status"},
+        {"wifi", {}, "Wi-Fi management", {
+            {"scan", "", "Scan access points"},
+            {"list", "", "List scanned APs"},
+            {"connect", "<ssid> [password]", "Connect to a network"},
+            {"disconnect", "", "Disconnect current network"},
+            {"status", "", "Show connection status"},
         }},
-        {"pmu", "PMU operations", {
-            {"status", "Show PMU status"},
+        {"pmu", {}, "PMU operations", {
+            {"status", "", "Show PMU status"},
         }},
-        {"test", "Test command parsing"},
+        {"test", {}, "Test command parsing"},
     }
 {}
 
@@ -147,7 +147,7 @@ std::string CliApp::helpText(const SubDef* sub) const {
     out << "Usage: v2";
     if(sub) out << " " << sub->name;
     out << " [OPTIONS]";
-    if((sub && !sub->children.empty()) || (!sub && !subs_.empty())) out << " [SUBCOMMANDS]";
+    if((sub && !sub->children.empty()) || (!sub && !subCmds_.empty())) out << " [SUBCOMMANDS]";
     out << "\n";
     out << "\nOPTIONS:\n";
 
@@ -162,11 +162,21 @@ std::string CliApp::helpText(const SubDef* sub) const {
         optLine("-m, --monitor", "Open TUI monitor application");
     }
 
-    const auto& items = sub ? sub->children : subs_;
+    const auto& items = sub ? sub->children : subCmds_;
     if(!items.empty()){
+        int maxCmdWidth = 0;
+        for(auto& item : items) {
+            int cmdWidth = item.name.size();
+            if(!item.usage.empty()) cmdWidth += 1 + item.usage.size();
+            maxCmdWidth = std::max(maxCmdWidth, cmdWidth);
+        }
+        int descCol = std::max(cw, maxCmdWidth + 4);
+
         out << "\nSubcommands:\n";
         for(auto& item : items) {
-            out << "  " << std::left << std::setw(cw) << item.name << "  " << item.desc << "\n";
+            std::string cmd = item.name;
+            if(!item.usage.empty()) cmd += " " + item.usage;
+            out << "  " << std::left << std::setw(descCol) << cmd << "  " << item.desc << "\n";
         }
     }
     return out.str();
@@ -177,7 +187,7 @@ void CliApp::printHelp(const std::string& sub) const {
         std::cout << helpText();
         return;
     }
-    for(auto& s : subs_){
+    for(auto& s : subCmds_){
         if(s.name == sub){
             std::cout << helpText(&s);
             return;
