@@ -15,7 +15,6 @@ if(BUILD_MAIN_APP)
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
     target_link_libraries(v2_main PRIVATE v2_service v2_core v2_infra)
-
 endif()
 
 if(BUILD_CLI_APP)
@@ -27,7 +26,6 @@ if(BUILD_CLI_APP)
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
     target_link_libraries(v2_cli PRIVATE v2_service v2_core v2_infra)
-
 endif()
 
 if(BUILD_TUI_APP)
@@ -45,5 +43,4 @@ if(BUILD_TUI_APP)
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
     target_link_libraries(v2_tui PRIVATE v2_service v2_core v2_infra)
-
 endif()

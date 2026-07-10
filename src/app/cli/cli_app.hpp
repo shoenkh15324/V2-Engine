@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 #include "core/common/config/platform_config.h"
 #include "core/common/config/runtime_config.h"
 
@@ -18,22 +19,29 @@ public:
     CliApp& operator=(CliApp&&) = delete;
 
     int open();
+    int close();
     int run(int argc, char** argv);
-    void close();
-
-    static void printLocalHelp();
-    static void printLocalVersion();
-    static void printLocalStatus();
-    static int launchMonitor(char** argv);
 
 private:
-    void printResponse(const std::string& response);
-    static bool shouldColor();
+    struct SubDef{
+        std::string name;
+        std::string desc;
+        std::vector<SubDef> children;
+    };
+
+    void printHelp(const std::string& sub = {}) const;
+    std::string helpText(const SubDef* sub = nullptr) const;
+    static void printVersion();
+    static void printStatus();
+    static int launchTui(char** argv);
+    void sendToDaemon(const std::string& cmd);
+    static int terminalWidth();
 
     RuntimeConfig cfg_;
-    std::string name_ = "Cli";
+    std::string appName_ = "Cli";
+    std::vector<SubDef> subs_;
 
 #if V2_PLATFORM_LINUX
     UdsClient client_;
-#endif    
+#endif
 };
