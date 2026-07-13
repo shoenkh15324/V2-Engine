@@ -188,8 +188,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
                 if(lastScan_.accessPoints.empty()) return "No scan results. Try 'wifi scan' first.\n";
                 return formatApList();
             case 's':
-                sendMsg("network_manager", NmStatusRequest{});
-                return "Requesting status...\n";
+                return formatStatus();
             case 'd':
                 sendMsg("network_manager", WifiDisconnectRequest{});
                 return "Disconnecting...\n";
@@ -218,8 +217,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
         return "Disconnecting...\n";
     }
     if(cmd == "status"){
-        sendMsg("network_manager", NmStatusRequest{});
-        return "Requesting status...\n";
+        return formatStatus();
     }
     return "error: unknown wifi subcommand '" + cmd + "'\n";
 }
@@ -257,11 +255,12 @@ std::string CmdActor::formatStatus(){
         case WifiState::Disconnecting: stateStr = "disconnecting"; break;
         case WifiState::Error:         stateStr = "error"; break;
     }
+    bool connected = (lastStatus_.state == WifiState::Connected);
     std::ostringstream oss;
-    oss << "SSID: " << lastStatus_.ssid << "\n"
-        << "IP: " << lastStatus_.ipAddress << "\n"
-        << "Signal: " << lastStatus_.signalStrength << "\n"
-        << "State: " << stateStr << "\n"
+    oss << "State: " << stateStr << "\n"
+        << "SSID: " << (connected ? lastStatus_.ssid : "N/A") << "\n"
+        << "IP: " << (connected ? lastStatus_.ipAddress : "N/A") << "\n"
+        << "Signal: " << (connected ? std::to_string(lastStatus_.signalStrength) : "N/A") << "\n"
         << "Interface: " << lastStatus_.interfaceName << "\n";
     return oss.str();
 }
