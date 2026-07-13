@@ -196,7 +196,7 @@ std::string WifiHandler::getActiveApPath(){
             .onInterface("org.freedesktop.DBus.Properties")
             .withArguments("org.freedesktop.NetworkManager.Device.Wireless", "ActiveAccessPoint")
             .storeResultsTo(v);
-        return v.get<std::string>();
+        return std::string(v.get<sdbus::ObjectPath>());
     }catch(...){
         return {};
     }
@@ -224,8 +224,7 @@ WifiApInfo WifiHandler::readApInfo(const std::string& apPath){
         info.ssid = ssidBytesToString(ssidBytes);
     }catch(...){}
     try{ 
-        auto bssidBytes = readProp("Bssid").get<std::vector<uint8_t>>();
-        info.bssid = bssidBytesToString(bssidBytes);
+        info.bssid = readProp("HwAddress").get<std::string>();
     }catch(...){}
     try{ info.frequency = static_cast<uint16_t>(readProp("Frequency").get<uint32_t>()); }catch(...){}
     try{ info.maxBitrate = readProp("MaxBitrate").get<uint32_t>(); }catch(...){}
@@ -263,7 +262,7 @@ std::string WifiHandler::readIp4Address(){
             .onInterface("org.freedesktop.DBus.Properties")
             .withArguments("org.freedesktop.NetworkManager.Device", "Ip4Config")
             .storeResultsTo(ipVar);
-        std::string ip4Path = ipVar.get<std::string>();
+        std::string ip4Path = std::string(ipVar.get<sdbus::ObjectPath>());
         if(ip4Path.empty() || ip4Path == "/") return {};
         auto ipProxy = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(ip4Path));
         sdbus::Variant addrVar;
