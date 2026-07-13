@@ -67,6 +67,7 @@ void WifiHandler::requestScan(){
         dev->callMethod("RequestScan")
             .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
             .withArguments(options);
+        wifiState_ = WifiState::Scanning;
         V2_LOG_INFO("Scan requested");
     }catch(const sdbus::Error& e){
         V2_LOG_ERROR("RequestScan failed: {}", e.what());
@@ -331,7 +332,6 @@ std::string WifiHandler::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags){
 void WifiHandler::syncDeviceState(){
     uint32_t nmState = getDeviceState();
     wifiState_ = mapDeviceState(nmState);
-
 }
 
 WifiState WifiHandler::mapDeviceState(uint32_t nmState){
