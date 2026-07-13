@@ -40,7 +40,7 @@ void MainApp::open(){
 #if V2_PLATFORM_LINUX
     if(cfg_.enableIpcServer) actorSystem_->createActor<IpcServerActor>("ipc_server", cfg_.mailboxSize, cfg_.ipcSocketPath, cfg_.udsBacklog, cfg_.ipcRecvBufferSize)->setEssential(true);
     if(cfg_.enableDbus) actorSystem_->createActor<DbusActor>("dbus_actor", cfg_.mailboxSize, cfg_.dbusBusName, cfg_.dbusObjectPath, cfg_.dbusInterfaceName)->setEssential(true);
-    if(cfg_.enableDbus && cfg_.enableNetworkManager) actorSystem_->createActor<NetmanagerActor>("network_manager", cfg_.mailboxSize)->setEssential(false);
+    if(cfg_.enableDbus && cfg_.enableNetworkManager) actorSystem_->createActor<NetworkManagerActor>("network_manager", cfg_.mailboxSize)->setEssential(false);
 #endif
     //
     actorSystem_->start();

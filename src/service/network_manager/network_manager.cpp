@@ -6,15 +6,15 @@
 
 #if V2_PLATFORM_LINUX
 
-NetmanagerActor::NetmanagerActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
+NetworkManagerActor::NetworkManagerActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
     //
 }
 
-NetmanagerActor::~NetmanagerActor(){
+NetworkManagerActor::~NetworkManagerActor(){
     close();
 }
 
-int NetmanagerActor::open(){
+int NetworkManagerActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
@@ -33,20 +33,18 @@ int NetmanagerActor::open(){
                 dev->uponSignal("AccessPointAdded")
                     .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
                     .call([this](const sdbus::ObjectPath&){ V2_LOG_INFO("AP added, refreshing");
-                        refreshAps();
+                        scanRefreshPending_.store(true);
                     });
                 dev->uponSignal("AccessPointRemoved")
                     .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
                     .call([this](const sdbus::ObjectPath&){
-                        refreshAps();
+                        scanRefreshPending_.store(true);
                     });
                 dev->uponSignal("PropertiesChanged")
                     .onInterface("org.freedesktop.DBus.Properties")
                     .call([this](const std::string& interfaceName, const std::map<std::string, sdbus::Variant>& changedProps, const std::vector<std::string>&){
                         if(interfaceName == "org.freedesktop.NetworkManager.Device.Wireless"){
-                            if(changedProps.count("LastScan")){ V2_LOG_INFO("Scan completed");
-                                refreshAps();
-                            }
+                            scanRefreshPending_.store(true);
                         }
                     });
             }
@@ -55,11 +53,12 @@ int NetmanagerActor::open(){
         }
     }
     //
+    
     state_ = Opened;
     return Ok;
 }
 
-int NetmanagerActor::close(){
+int NetworkManagerActor::close(){
     if(state_ == Closed) return Ok;
     state_ = Closing;
     //
@@ -71,26 +70,26 @@ int NetmanagerActor::close(){
     return Ok;
 }
 
-void NetmanagerActor::handle(const Message& msg){
+void NetworkManagerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
     std::visit(overloaded{
-        [this](const NetScanRequest&){
+        [this](const WifiScanRequest&){
             requestScan();
         },
-        [this](const NetConnectRequest& msg){
+        [this](const WifiConnectRequest& msg){
             addAndActivateConnection(msg.ssid, msg.password);
         },
-        [this](const NetDisconnectRequest&){
+        [this](const WifiDisconnectRequest&){
             disconnectDevice();
         },
-        [this](const NetStatusRequest&){
-            handleStatus();
+        [this](const NmStatusRequest&){
+            //
         },
         [](const auto&){}
     }, msg);
 }
 
-sdbus::IProxy* NetmanagerActor::nmProxy(){
+sdbus::IProxy* NetworkManagerActor::nmProxy(){
     if(!nmProxy_){
         nmProxy_ = sdbus::createProxy(
             *connection_,
@@ -101,12 +100,12 @@ sdbus::IProxy* NetmanagerActor::nmProxy(){
     return nmProxy_.get();
 }
 
-sdbus::IProxy* NetmanagerActor::deviceProxy(){
+sdbus::IProxy* NetworkManagerActor::deviceProxy(){
     if(devicePath_.empty()) return nullptr;
     return proxyFor("org.freedesktop.NetworkManager", devicePath_);
 }
 
-sdbus::IProxy* NetmanagerActor::proxyFor(const std::string& destination, const std::string& objectPath){
+sdbus::IProxy* NetworkManagerActor::proxyFor(const std::string& destination, const std::string& objectPath){
     auto key = destination + ":" + objectPath;
     auto it = proxies_.find(key);
     if(it != proxies_.end()) return it->second.get();
@@ -117,7 +116,7 @@ sdbus::IProxy* NetmanagerActor::proxyFor(const std::string& destination, const s
     return ptr;
 }
 
-void NetmanagerActor::requestScan(){
+void NetworkManagerActor::requestScan(){
     if(devicePath_.empty()) return;
     auto* dev = deviceProxy();
     if(!dev) return;
@@ -134,8 +133,8 @@ void NetmanagerActor::requestScan(){
 
 }
 
-std::string NetmanagerActor::addAndActivateConnection(const std::string& ssid, const std::string& password){
-    if(devicePath_.empty()) return {};
+void NetworkManagerActor::addAndActivateConnection(const std::string& ssid, const std::string& password){
+    if(devicePath_.empty()) return;
     // Build a{sa{sv}} structure
     // connection section
     std::map<std::string, sdbus::Variant> connSection;
@@ -173,13 +172,13 @@ std::string NetmanagerActor::addAndActivateConnection(const std::string& ssid, c
             .storeResultsTo(connPath, activeConnPath);
         activeConnectionPath_ = activeConnPath;
         V2_LOG_INFO("Connected to '{}', active conn: {}", ssid, activeConnectionPath_);
-        return activeConnectionPath_;
+        return;
     }catch(const sdbus::Error& e){ V2_LOG_ERROR("AddAndActivateConnection failed: {}", e.what());
-        return {};
+        return;
     }
 }
 
-void NetmanagerActor::disconnectDevice(){
+void NetworkManagerActor::disconnectDevice(){
     auto* dev = deviceProxy();
     if(!dev) return;
     try{
@@ -191,7 +190,7 @@ void NetmanagerActor::disconnectDevice(){
     }
 }
 
-uint32_t NetmanagerActor::getDeviceState(){
+uint32_t NetworkManagerActor::getDeviceState(){
     auto* dev = deviceProxy();
     if(!dev) return 0;
     try{
@@ -206,7 +205,7 @@ uint32_t NetmanagerActor::getDeviceState(){
     }
 }
 
-std::string NetmanagerActor::getActiveApPath(){
+std::string NetworkManagerActor::getActiveApPath(){
     auto* dev = deviceProxy();
     if(!dev) return {};
     try{
@@ -221,8 +220,8 @@ std::string NetmanagerActor::getActiveApPath(){
     }
 }
 
-ApInfo NetmanagerActor::readApInfo(const std::string& apPath){
-    ApInfo info;
+WifiApInfo NetworkManagerActor::readApInfo(const std::string& apPath){
+    WifiApInfo info;
     info.objectPath = apPath;
     auto* proxy = proxyFor("org.freedesktop.NetworkManager", apPath);
     if(!proxy) return info;
@@ -249,7 +248,7 @@ ApInfo NetmanagerActor::readApInfo(const std::string& apPath){
     }catch(...){}
     try{ info.frequency = static_cast<uint16_t>(readProp("Frequency").get<uint32_t>()); }catch(...){}
     try{ info.maxBitrate = readProp("MaxBitrate").get<uint32_t>(); }catch(...){}
-    try{ info.signalStrength = readProp("Strength").get<uint8_t>() * 100 / 255 - 100; }catch(...){}
+    try{ info.signalStrength = static_cast<int32_t>(readProp("Strength").get<uint8_t>()) - 100; }catch(...){}
     // NM Strength 0-100 → approximate dBm
     try{ info.mode = readProp("Mode").get<uint32_t>() == 0 ? "infrastructure" : "adhoc"; }catch(...){}
     // Security from WpaFlags / RsnFlags
@@ -261,31 +260,7 @@ ApInfo NetmanagerActor::readApInfo(const std::string& apPath){
     return info;
 }
 
-void NetmanagerActor::handleStatus(){
-    NetStatusResult r;
-    auto state = getDeviceState();
-    r.connected = (state == 100); // NM_DEVICE_STATE_ACTIVATED
-    r.state = deviceStateToString(state);
-    if(devicePath_.empty()){
-        sendMsg("cmd_actor", r);
-        return;
-    }
-    r.interfaceName = readInterfaceName();
-    if(!r.connected){
-        sendMsg("cmd_actor", r);
-        return;
-    }
-    auto apPath = getActiveApPath();
-    if(!apPath.empty()){
-        auto apInfo = readApInfo(apPath);
-        r.ssid = apInfo.ssid;
-        r.signalStrength = apInfo.signalStrength;
-    }
-    r.ipAddress = readIp4Address();
-    sendMsg("cmd_actor", r);
-}
-
-std::string NetmanagerActor::readInterfaceName(){
+std::string NetworkManagerActor::readInterfaceName(){
     auto* dev = deviceProxy();
     if(!dev) return {};
     try{
@@ -300,7 +275,7 @@ std::string NetmanagerActor::readInterfaceName(){
     }
 }
 
-std::string NetmanagerActor::readIp4Address(){
+std::string NetworkManagerActor::readIp4Address(){
     auto* dev = deviceProxy();
     if(!dev) return {};
     try{
@@ -325,18 +300,18 @@ std::string NetmanagerActor::readIp4Address(){
     }
 }
 
-std::string NetmanagerActor::ssidBytesToString(const std::vector<uint8_t>& ssid){
+std::string NetworkManagerActor::ssidBytesToString(const std::vector<uint8_t>& ssid){
     return std::string(ssid.begin(), ssid.end());
 }
 
-std::string NetmanagerActor::bssidBytesToString(const std::vector<uint8_t>& bssid){
+std::string NetworkManagerActor::bssidBytesToString(const std::vector<uint8_t>& bssid){
     if(bssid.size() != 6) return {};
     char buf[18];
     std::snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
     return buf;
 }
 
-std::string NetmanagerActor::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags){
+std::string NetworkManagerActor::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags){
     bool hasWpa = (wpaFlags & 0x10) != 0; // NM_WIFI_DEVICE_CAP_WPA
     bool hasRsn = (rsnFlags & 0x20) != 0; // NM_WIFI_DEVICE_CAP_RSN
     bool hasSae = (rsnFlags & 0x20000000) != 0; // NM_802_11_AP_SEC_FLAGS_KEY_MGMT_SAE
@@ -348,7 +323,7 @@ std::string NetmanagerActor::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlag
     return "OPEN";
 }
 
-bool NetmanagerActor::findWirelessDevice(){
+bool NetworkManagerActor::findWirelessDevice(){
     try{
         std::vector<sdbus::ObjectPath> devices;
         nmProxy()->callMethod("GetAllDevices")
@@ -374,7 +349,7 @@ bool NetmanagerActor::findWirelessDevice(){
     return false;
 }
 
-void NetmanagerActor::refreshAps(){
+void NetworkManagerActor::refreshAps(){
     if(devicePath_.empty()) return;
     auto* dev = deviceProxy();
     if(!dev) return;
@@ -388,7 +363,7 @@ void NetmanagerActor::refreshAps(){
 
         auto apPaths = aps.get<std::vector<sdbus::ObjectPath>>();
         auto activeApPath = getActiveApPath();
-        std::vector<ApInfo> results;
+        std::vector<WifiApInfo> results;
 
         for(const auto& apPath : apPaths){
             auto info = readApInfo(apPath);
@@ -398,13 +373,13 @@ void NetmanagerActor::refreshAps(){
             results.push_back(std::move(info));
         }
         lastScanResults_ = std::move(results);
-        sendMsg("cmd_actor", NetScanResult{lastScanResults_});
+        sendMsg("cmd_actor", WifiScanResult{lastScanResults_});
     }catch(const sdbus::Error& e){
         V2_LOG_ERROR("refreshAps failed: {}", e.what());
     }
 }
 
-const char* NetmanagerActor::deviceStateToString(uint32_t s){
+const char* NetworkManagerActor::deviceStateToString(uint32_t s){
     switch(s){
         case 10: return "unmanaged";
         case 20: return "unavailable";

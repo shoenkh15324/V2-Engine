@@ -1,26 +1,26 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
-#include "core/actor_system/messages/network_messages.hpp"
-
+#include "core/actor_system/messages/network_manager/wifi_messages.hpp"
 #include <memory>
 #include <string>
 #include <vector>
 #include <map>
 #include <cstdint>
+#include <atomic>
 
 #if V2_PLATFORM_LINUX
 #include <sdbus-c++/sdbus-c++.h>
 
-class NetmanagerActor : public Actor{
+class NetworkManagerActor : public Actor{
 public:
-    NetmanagerActor(const std::string& name, uint64_t id);
-    ~NetmanagerActor() override;
+    NetworkManagerActor(const std::string& name, uint64_t id);
+    ~NetworkManagerActor() override;
 
-    NetmanagerActor(const NetmanagerActor&) = delete;
-    NetmanagerActor& operator=(const NetmanagerActor&) = delete;
-    NetmanagerActor(NetmanagerActor&&) = delete;
-    NetmanagerActor& operator=(NetmanagerActor&&) = delete;
+    NetworkManagerActor(const NetworkManagerActor&) = delete;
+    NetworkManagerActor& operator=(const NetworkManagerActor&) = delete;
+    NetworkManagerActor(NetworkManagerActor&&) = delete;
+    NetworkManagerActor& operator=(NetworkManagerActor&&) = delete;
 
     int open() override;
     int close() override;
@@ -34,14 +34,14 @@ private:
 
     // NM D-Bus calls
     void requestScan();
-    std::string addAndActivateConnection(const std::string& ssid, const std::string& password);
+    void addAndActivateConnection(const std::string& ssid, const std::string& password);
     void disconnectDevice();
     uint32_t getDeviceState();
     std::string getActiveApPath();
-    ApInfo readApInfo(const std::string& apPath);
+    WifiApInfo readApInfo(const std::string& apPath);
 
-    // Message handlers
-    void handleStatus();
+    void syncDeviceState();
+    NmStatusRequest buildStatusRequest();
 
     // Helpers
     std::string readInterfaceName();
@@ -59,8 +59,11 @@ private:
     std::map<std::string, std::unique_ptr<sdbus::IProxy>> proxies_;
     std::string devicePath_;
     std::string activeConnectionPath_;
-    std::vector<ApInfo> lastScanResults_;
+    std::vector<WifiApInfo> lastScanResults_;
+    std::atomic<bool> scanRefreshPending_{false};
+    bool connectPending_{false};
     uint32_t nmDeviceState_{0};
+    int wifiSyncIntervalMs_{3000};
 };
 
 #endif // V2_PLATFORM_LINUX

@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-struct ApInfo{
+struct WifiApInfo{
     bool connected{false};
     uint16_t frequency{0};
     uint32_t maxBitrate{0};
@@ -15,45 +15,37 @@ struct ApInfo{
     std::string objectPath;
 };
 
-struct NetScanRequest{
+struct WifiScanRequest{
     //
 };
 
-struct NetScanResult{
-    std::vector<ApInfo> accessPoints;
+struct WifiScanResult{
+    std::vector<WifiApInfo> accessPoints;
 };
 
-struct NetConnectRequest{
+struct WifiConnectRequest{
     std::string ssid;
     std::string password;
 };
 
-struct NetConnectResult{
+struct WifiConnectResult{
     bool result{false};
     std::string errorMsg;
 };
 
-struct NetDisconnectRequest{
+struct WifiDisconnectRequest{
     //
 };
 
-struct NetDisconnectResult{
+struct WifiDisconnectResult{
     bool result{false};
 };
 
-struct NetStatusRequest{
-    //
-};
-
-struct NetStatusResult{
+struct WifiStatusResult{
     bool connected{false};
     std::string ssid;
     std::string ipAddress;
     std::string state; // "disconnected", "scanning", "connecting", "connected"
     std::string interfaceName;
     int32_t signalStrength{0};
-};
-
-struct NetWifiToggleRequest{
-    bool enable;
 };

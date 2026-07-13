@@ -6,7 +6,8 @@
 #include "dbus_messages.hpp"
 #include "device_manager_messages.hpp"
 #include "cmd_messages.hpp"
-#include "network_messages.hpp"
+#include "network_manager/network_manager_messages.hpp"
+#include "network_manager/wifi_messages.hpp"
 
 template<class... Ts>
 struct overloaded : Ts...{ 
@@ -45,13 +46,13 @@ using Message = std::variant<
     CmdRequest,
     CmdResponse,
     // Network Manager
-    NetScanRequest,
-    NetScanResult,
-    NetConnectRequest,
-    NetConnectResult,
-    NetDisconnectRequest,
-    NetDisconnectResult,
-    NetStatusRequest,
-    NetStatusResult,
-    NetWifiToggleRequest
+    NmStatusRequest,
+    // Wifi
+    WifiScanRequest,
+    WifiScanResult,
+    WifiConnectRequest,
+    WifiConnectResult,
+    WifiDisconnectRequest,
+    WifiDisconnectResult,
+    WifiStatusResult
 >;

@@ -57,8 +57,8 @@ void CmdActor::handle(const Message& msg){
             auto response = dispatch(msg.cmd);
             sendMsg("ipc_server", CmdResponse{msg.conn, std::move(response)});
         },
-        [this](const NetScanResult& msg){ lastScan_ = msg; },
-        [this](const NetStatusResult& msg){ lastStatus_ = msg; },
+        [this](const WifiScanResult& msg){ lastScan_ = msg; },
+        [this](const WifiStatusResult& msg){ lastStatus_ = msg; },
         [](const auto&){}
     }, msg);
 }
@@ -182,20 +182,16 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
         switch(opt){
             case 'c':
                 if(args.size() < 2) return "error: wifi -c <ssid> [password]\n";
-                sendMsg("network_manager", NetConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
+                sendMsg("network_manager", WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
                 return "Connecting to '" + args[1] + "'...\n";
             case 'l':
                 if(lastScan_.accessPoints.empty()) return "No scan results. Try 'wifi scan' first.\n";
                 return formatApList();
             case 's':
-                if(lastStatus_.state.empty()){
-                    sendMsg("network_manager", NetStatusRequest{});
-                    return "Requesting status...\n";
-                }
-                if(!lastStatus_.connected) return "Disconnected\n";
-                return formatStatus();
+                sendMsg("network_manager", NmStatusRequest{});
+                return "Requesting status...\n";
             case 'd':
-                sendMsg("network_manager", NetDisconnectRequest{});
+                sendMsg("network_manager", WifiDisconnectRequest{});
                 return "Disconnecting...\n";
             default:
                 return "error: unknown wifi option '-" + std::string(1, opt) + "'\n";
@@ -205,7 +201,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     // subcommand-based
     auto& cmd = args[0];
     if(cmd == "scan"){
-        sendMsg("network_manager", NetScanRequest{});
+        sendMsg("network_manager", WifiScanRequest{});
         return "Scanning...\n";
     }
     if(cmd == "list"){
@@ -214,20 +210,16 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     }
     if(cmd == "connect"){
         if(args.size() < 2) return "error: wifi connect <ssid> [password]\n";
-        sendMsg("network_manager", NetConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
+        sendMsg("network_manager", WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
         return "Connecting to '" + args[1] + "'...\n";
     }
     if(cmd == "disconnect"){
-        sendMsg("network_manager", NetDisconnectRequest{});
+        sendMsg("network_manager", WifiDisconnectRequest{});
         return "Disconnecting...\n";
     }
     if(cmd == "status"){
-        if(lastStatus_.state.empty()){
-            sendMsg("network_manager", NetStatusRequest{});
-            return "Requesting status...\n";
-        }
-        if(!lastStatus_.connected) return "Disconnected\n";
-        return formatStatus();
+        sendMsg("network_manager", NmStatusRequest{});
+        return "Requesting status...\n";
     }
     return "error: unknown wifi subcommand '" + cmd + "'\n";
 }
