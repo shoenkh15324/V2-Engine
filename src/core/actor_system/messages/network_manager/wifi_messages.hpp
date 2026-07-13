@@ -3,6 +3,15 @@
 #include <string>
 #include <vector>
 
+enum class WifiState : uint8_t{
+    Disconnected = 0,
+    Scanning,
+    Connecting,
+    Connected,
+    Disconnecting,
+    Error
+};
+
 struct WifiApInfo{
     bool connected{false};
     uint16_t frequency{0};
@@ -45,7 +54,7 @@ struct WifiStatusResult{
     bool connected{false};
     std::string ssid;
     std::string ipAddress;
-    std::string state; // "disconnected", "scanning", "connecting", "connected"
+    WifiState state;
     std::string interfaceName;
     int32_t signalStrength{0};
 };

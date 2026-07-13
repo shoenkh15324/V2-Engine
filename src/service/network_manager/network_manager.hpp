@@ -4,6 +4,7 @@
 #include <string>
 
 #if V2_PLATFORM_LINUX
+#include <sdbus-c++/sdbus-c++.h>
 
 class NetworkManagerActor : public Actor{
 public:
@@ -23,6 +24,7 @@ private:
     void syncDeviceState();
 
     sdbus::IConnection* connection_{nullptr};
+    std::unique_ptr<sdbus::IProxy> nmProxy_;
     WifiHandler wifi_;
     int wifiSyncIntervalMs_{3000};
 };

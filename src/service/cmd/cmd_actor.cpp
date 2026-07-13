@@ -248,11 +248,20 @@ std::string CmdActor::formatApList(){
 }
 
 std::string CmdActor::formatStatus(){
+    const char* stateStr = "unknown";
+    switch(lastStatus_.state){
+        case WifiState::Disconnected:  stateStr = "disconnected"; break;
+        case WifiState::Scanning:      stateStr = "scanning"; break;
+        case WifiState::Connecting:    stateStr = "connecting"; break;
+        case WifiState::Connected:     stateStr = "connected"; break;
+        case WifiState::Disconnecting: stateStr = "disconnecting"; break;
+        case WifiState::Error:         stateStr = "error"; break;
+    }
     std::ostringstream oss;
     oss << "SSID: " << lastStatus_.ssid << "\n"
         << "IP: " << lastStatus_.ipAddress << "\n"
         << "Signal: " << lastStatus_.signalStrength << "\n"
-        << "State: " << lastStatus_.state << "\n"
+        << "State: " << stateStr << "\n"
         << "Interface: " << lastStatus_.interfaceName << "\n";
     return oss.str();
 }

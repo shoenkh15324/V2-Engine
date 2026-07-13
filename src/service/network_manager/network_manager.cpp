@@ -24,7 +24,8 @@ int NetworkManagerActor::open(){
         return Fail;
     }
     connection_ = &dbus->connection();
-    wifi_.open(*connection_);
+    nmProxy_ = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath("/org/freedesktop/NetworkManager"));
+    wifi_.open(*connection_, *nmProxy_);
     startTimer(Tick{}, wifiSyncIntervalMs_, true);
     //
     state_ = Opened;
@@ -48,6 +49,7 @@ void NetworkManagerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
     std::visit(overloaded{
         [this](const Tick&){
+            wifi_.syncDeviceState();
             if(wifi_.consumeScanRefreshPending()){
                 wifi_.refreshAps();
                 sendMsg("cmd_actor", WifiScanResult{wifi_.lastScanResults()});
@@ -58,10 +60,12 @@ void NetworkManagerActor::handle(const Message& msg){
             wifi_.requestScan();
         },
         [this](const WifiConnectRequest& msg){
-            wifi_.addAndActivateConnection(msg.ssid, msg.password);
+            bool ok = wifi_.addAndActivateConnection(msg.ssid, msg.password);
+            sendMsg("cmd_actor", WifiConnectResult{ok, ok ? "" : "Invalid state or device"});
         },
         [this](const WifiDisconnectRequest&){
-            wifi_.disconnectDevice();
+            bool ok = wifi_.disconnectDevice();
+            sendMsg("cmd_actor", WifiDisconnectResult{ok});
         },
         [this](const NmStatusRequest&){
             syncDeviceState();
@@ -72,9 +76,8 @@ void NetworkManagerActor::handle(const Message& msg){
 
 void NetworkManagerActor::syncDeviceState(){
     WifiStatusResult r;
-    auto state = wifi_.getDeviceState();
-    r.connected = (state == 100);
-    r.state = wifi_.deviceStateToString(state);
+    r.state = wifi_.state();
+    r.connected = (r.state == WifiState::Connected);
     if(wifi_.deviceFound()){
         r.interfaceName = wifi_.readInterfaceName();
         if(r.connected){
