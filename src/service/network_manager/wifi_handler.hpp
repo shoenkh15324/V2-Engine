@@ -28,6 +28,9 @@ public:
     void refreshAps();
     bool addAndActivateConnection(const std::string& ssid, const std::string& password);
     bool disconnectDevice();
+    void autoReconnect();
+    void setAutoReconnect(bool enable){ autoReconnectEnabled_ = enable; }
+    bool autoReconnectEnabled() const { return autoReconnectEnabled_; }
 
     // State queries
     WifiState state() const { return wifiState_; }
@@ -60,8 +63,11 @@ private:
     std::unique_ptr<sdbus::IProxy> deviceProxy_;
     std::string devicePath_;
     std::string activeConnectionPath_;
+    std::string lastConnectedSsid_;
+    std::string lastConnectedPassword_;
     std::vector<WifiApInfo> lastScanResults_;
     std::atomic<bool> scanRefreshPending_{false};
+    bool autoReconnectEnabled_{true};
 };
 
 #endif // V2_PLATFORM_LINUX

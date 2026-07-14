@@ -6,7 +6,6 @@
 #include <vector>
 #include <functional>
 #include <memory>
-#include <string_view>
 #include <unordered_map>
 
 class CmdActor : public Actor{
@@ -24,19 +23,16 @@ public:
     void handle(const Message& msg) override;
 
 private:
-    using Handler   = std::function<std::string(const std::vector<std::string>&)>;
-    using OnOption  = std::function<void(char opt, const std::string& val)>;
+    using Handler = std::function<std::string(const std::vector<std::string>&)>;
 
     std::string dispatch(const std::string& cmd);
     std::string handleActor(const std::vector<std::string>& args);
     std::string handlePmu(const std::vector<std::string>& args);
     std::string handleWifi(const std::vector<std::string>& args);
-    std::string handleTest(const std::vector<std::string>& args);
-    std::string parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption);
 
     // Actor helpers
     std::string doActorList();
-    std::string doActorEnableDisable(bool enable, const std::string& name);
+    std::string doActorToggle(bool enable, const std::string& name);
 
     // Wifi helpers
     std::string formatApList();
@@ -46,4 +42,6 @@ private:
     std::unique_ptr<IPmu> pmu_;
     WifiScanResult lastScan_;
     WifiStatusResult lastStatus_;
+    std::string lastConnectResult_;
+    std::string lastDisconnectResult_;
 };

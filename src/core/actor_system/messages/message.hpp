@@ -54,5 +54,6 @@ using Message = std::variant<
     WifiConnectResult,
     WifiDisconnectRequest,
     WifiDisconnectResult,
-    WifiStatusResult
+    WifiStatusResult,
+    WifiAutoReconnectRequest
 >;

@@ -54,6 +54,8 @@ void NetworkManagerActor::handle(const Message& msg){
                 wifi_.refreshAps();
                 sendMsg("cmd_actor", WifiScanResult{wifi_.lastScanResults()});
             }
+            // Auto Reconnection
+            wifi_.autoReconnect();
             syncDeviceState();
         },
         [this](const WifiScanRequest&){
@@ -66,6 +68,9 @@ void NetworkManagerActor::handle(const Message& msg){
         [this](const WifiDisconnectRequest&){
             bool ok = wifi_.disconnectDevice();
             sendMsg("cmd_actor", WifiDisconnectResult{ok});
+        },
+        [this](const WifiAutoReconnectRequest& msg){
+            wifi_.setAutoReconnect(msg.enable);
         },
         [this](const NmStatusRequest&){
             syncDeviceState();

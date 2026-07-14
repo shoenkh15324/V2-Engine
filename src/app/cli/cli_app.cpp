@@ -28,6 +28,7 @@ CliApp::CliApp()
             {"connect", "<ssid> [password]", "Connect to a network"},
             {"disconnect", "", "Disconnect current network"},
             {"status", "", "Show connection status"},
+            {"autoconnect", "<on|off>", "Toggle autoconnect"},
         }},
         {"pmu", {}, "PMU operations", {
             {"status", "", "Show PMU status"},

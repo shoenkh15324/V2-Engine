@@ -22,12 +22,11 @@ int CmdActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    handlers_["actor"]  = [this](const auto& a){ return handleActor(a); };
-    handlers_["pmu"]    = [this](const auto& a){ return handlePmu(a); };
-    handlers_["wifi"]   = [this](const auto& a){ return handleWifi(a); };
-    handlers_["test"]   = [this](const auto& a){ return handleTest(a); };
+    handlers_["actor"] = [this](const auto& a){ return handleActor(a); };
+    handlers_["pmu"] = [this](const auto& a){ return handlePmu(a); };
+    handlers_["wifi"] = [this](const auto& a){ return handleWifi(a); };
     //
-    pmu_ = []() -> std::unique_ptr<IPmu> {
+    pmu_ = []()->std::unique_ptr<IPmu>{
 #if V2_PLATFORM_LINUX && defined(__aarch64__)
         return std::make_unique<PmuRsp5>();
 #else
@@ -59,6 +58,8 @@ void CmdActor::handle(const Message& msg){
         },
         [this](const WifiScanResult& msg){ lastScan_ = msg; },
         [this](const WifiStatusResult& msg){ lastStatus_ = msg; },
+        [this](const WifiConnectResult& msg){ lastConnectResult_ = msg.result ? "Connected successfully" : "Failed" + msg.errorMsg; },
+        [this](const WifiDisconnectResult& msg){ lastDisconnectResult_ = msg.result ? "Disconnected successfully" : "Failed to disconnect"; },
         [](const auto&){}
     }, msg);
 }
@@ -88,29 +89,12 @@ std::string CmdActor::dispatch(const std::string& cmd){
 }
 
 std::string CmdActor::handleActor(const std::vector<std::string>& args){
-    // subcommand mode: actor list / actor enable <name> / actor disable <name>
-    if(!args.empty() && args[0][0] != '-'){
-        if(args[0] == "list"){
-            return doActorList();
-        }else if(args[0] == "enable" && args.size() >= 2){
-            return doActorEnableDisable(true, args[1]);
-        }else if(args[0] == "disable" && args.size() >= 2){
-            return doActorEnableDisable(false, args[1]);
-        }else{
-            return "error: unknown actor subcommand '" + args[0] + "'\n";
-        }
-    }
-    std::string result;
-    auto err = parseOptions(args, "d:e:l", [&](char opt, const std::string& val){
-        switch(opt){
-            case 'd': result += doActorEnableDisable(false, val); return;
-            case 'e': result += doActorEnableDisable(true, val);  return;
-            case 'l': result += doActorList();                    return;
-        }
-    });
-    if(!err.empty()) return err;
-    if(result.empty()) return "error: no action specified\n";
-    return result;
+    if(args.empty()) return "error: missing subcommand\n";
+    auto& cmd = args[0];
+    if(cmd == "list") return doActorList();
+    if(cmd == "enable" && args.size() >= 2) return doActorToggle(true, args[1]);
+    if(cmd == "disable" && args.size() >= 2) return doActorToggle(false, args[1]);
+    return "error: unknown actor subcommand '" + cmd + "'\n";
 }
 
 std::string CmdActor::doActorList(){
@@ -140,7 +124,7 @@ std::string CmdActor::doActorList(){
     return result;
 }
 
-std::string CmdActor::doActorEnableDisable(bool enable, const std::string& name){
+std::string CmdActor::doActorToggle(bool enable, const std::string& name){
     auto* reg = actorContext()->actorRegistry();
     if(!reg) return "error: actor registry unavailable\n";
     int ret = enable ? reg->enableActor(name) : reg->disableActor(name);
@@ -151,53 +135,29 @@ std::string CmdActor::doActorEnableDisable(bool enable, const std::string& name)
 }
 
 std::string CmdActor::handlePmu(const std::vector<std::string>& args){
-    if(!args.empty() && args[0][0] != '-'){
-        if(args[0] == "status") { /* fall through to default */ }
-        else return "error: unknown pmu subcommand '" + args[0] + "'\n";
+    if(args.empty()) return "error: missing subcommand\n";
+    auto& cmd = args[0];
+    if(cmd == "status"){
+        PmuData d;
+        pmu_->readPmuData(d);
+        std::ostringstream oss;
+        oss << "ARM   : " << (d.clockArmHz / 1000000)          << " MHz\n"
+            << "Core  : " << (d.clockCoreHz / 1000000)         << " MHz\n"
+            << "V3D   : " << (d.clockV3dHz / 1000000)          << " MHz\n"
+            << "Temp  : " << d.tempCelsius                     << " °C\n"
+            << "Vcore : " << d.voltCore                        << " V\n"
+            << "Icore : " << d.currentVddCoreA                 << " A\n"
+            << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
+            << (d.throttled ? "THROTTLED" : "Throttle")
+            << ": 0x" << std::hex << d.throttled << std::dec
+            << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
+        return oss.str();
     }
-    if(!pmu_) return "error: pmu unavailable\n";
-    PmuData d;
-    pmu_->readPmuData(d);
-
-    std::ostringstream oss;
-    oss << "ARM   : " << (d.clockArmHz / 1000000)          << " MHz\n"
-        << "Core  : " << (d.clockCoreHz / 1000000)         << " MHz\n"
-        << "V3D   : " << (d.clockV3dHz / 1000000)          << " MHz\n"
-        << "Temp  : " << d.tempCelsius                     << " °C\n"
-        << "Vcore : " << d.voltCore                        << " V\n"
-        << "Icore : " << d.currentVddCoreA                 << " A\n"
-        << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
-        << (d.throttled ? "THROTTLED" : "Throttle")
-        << ": 0x" << std::hex << d.throttled << std::dec
-        << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
-    return oss.str();
+    return "error: unknown pmu subcommand '" + cmd + "'\n";
 }
 
 std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     if(args.empty()) return "error: missing subcommand\n";
-
-    // flag-based subcommand
-    if(args[0].size() == 2 && args[0][0] == '-'){
-        char opt = args[0][1];
-        switch(opt){
-            case 'c':
-                if(args.size() < 2) return "error: wifi -c <ssid> [password]\n";
-                sendMsg("network_manager", WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
-                return "Connecting to '" + args[1] + "'...\n";
-            case 'l':
-                if(lastScan_.accessPoints.empty()) return "No scan results. Try 'wifi scan' first.\n";
-                return formatApList();
-            case 's':
-                return formatStatus();
-            case 'd':
-                sendMsg("network_manager", WifiDisconnectRequest{});
-                return "Disconnecting...\n";
-            default:
-                return "error: unknown wifi option '-" + std::string(1, opt) + "'\n";
-        }
-    }
-
-    // subcommand-based
     auto& cmd = args[0];
     if(cmd == "scan"){
         sendMsg("network_manager", WifiScanRequest{});
@@ -218,6 +178,12 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     }
     if(cmd == "status"){
         return formatStatus();
+    }
+    if(cmd == "autoconnect"){
+        if(args.size() < 2) return "error: wifi autoconnect <on|off>\n";
+        bool enable = (args[1] == "on");
+        sendMsg("network_manager", WifiAutoReconnectRequest{enable});
+        return enable ? "Auto-reconnect enabled\n" : "Auto-reconnect disabled\n";
     }
     return "error: unknown wifi subcommand '" + cmd + "'\n";
 }
@@ -263,44 +229,4 @@ std::string CmdActor::formatStatus(){
         << "Signal: " << (connected ? std::to_string(lastStatus_.signalStrength) : "N/A") << "\n"
         << "Interface: " << lastStatus_.interfaceName << "\n";
     return oss.str();
-}
-
-std::string CmdActor::handleTest(const std::vector<std::string>& args){
-    std::string result;
-    result += "args: [";
-    for(size_t i = 0; i < args.size(); ++i){
-        if(i > 0) result += ", ";
-        result += "'" + args[i] + "'";
-    }
-    result += "]\n";
-
-    auto parsed = parseOptions(args, "d:e:l", [&](char opt, const std::string& val){
-        result += "  option: '" + std::string(1, opt) + "'";
-        if(!val.empty()) result += " -> value: '" + val + "'";
-        result += "\n";
-    });
-
-    if(!parsed.empty()){
-        result += "  error: " + parsed;
-    }
-    return result;
-}
-
-std::string CmdActor::parseOptions(const std::vector<std::string>& args, std::string_view optstring, const OnOption& onOption){
-    for(size_t i = 0; i < args.size(); ++i){
-        const auto& arg = args[i];
-        if(arg.size() < 2 || arg[0] != '-'){
-            return "error: unexpected argument '" + arg + "'\n";
-        }
-        char opt = arg[1];
-        auto pos = optstring.find(opt);
-        if(pos == std::string_view::npos) return "error: invalid argument '" + arg + "'\n";
-        if(pos + 1 < optstring.size() && optstring[pos + 1] == ':'){
-            if(i + 1 >= args.size()) return "error: option '-" + std::string(1, opt) + "' requires an argument\n";
-            onOption(opt, args[++i]);
-        }else{
-            onOption(opt, "");
-        }
-    }
-    return {};
 }

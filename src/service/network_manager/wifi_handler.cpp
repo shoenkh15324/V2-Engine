@@ -142,6 +142,8 @@ bool WifiHandler::addAndActivateConnection(const std::string& ssid, const std::s
             .withArguments(settings, sdbus::ObjectPath(devicePath_), sdbus::ObjectPath("/"))
             .storeResultsTo(connPath, activeConnPath);
         activeConnectionPath_ = activeConnPath;
+        lastConnectedSsid_ = ssid;
+        lastConnectedPassword_ = password;
         wifiState_ = WifiState::Connected;
         V2_LOG_INFO("Connected to '{}', active conn: {}", ssid, activeConnectionPath_);
         return true;
@@ -168,6 +170,12 @@ bool WifiHandler::disconnectDevice(){
         wifiState_ = WifiState::Connected;
         V2_LOG_ERROR("Disconnect failed: {}", e.what());
         return false;
+    }
+}
+
+void WifiHandler::autoReconnect(){
+    if(autoReconnectEnabled_ && wifiState_ == WifiState::Disconnected && !lastConnectedSsid_.empty()){ V2_LOG_INFO("Auto-Reconnecting to '{}'", lastConnectedSsid_.c_str());
+        addAndActivateConnection(lastConnectedSsid_, lastConnectedPassword_);
     }
 }
 
