@@ -5,6 +5,7 @@
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include <vector>
+#include <cerrno>
 
 #if V2_PLATFORM_LINUX
 #include <sys/socket.h>
@@ -103,13 +104,14 @@ void IpcServerActor::handle(const Message& msg){
                 std::string cmd(reinterpret_cast<char*>(buf.data()), n);
                 if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
                 handleCommand(msg.conn, cmd);
+                actorContext()->dispatcher()->unsubscribe(msg.conn);
             }else if(n == 0){
                 V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", msg.conn);
                 actorContext()->dispatcher()->unsubscribe(msg.conn);
                 server_.closeClient(msg.conn);
                 connections_.erase(msg.conn);
             }else{
-                V2_LOG_ERROR("IpcServerActor: recv error (conn=%d)", msg.conn);
+               V2_LOG_ERROR("IpcServerActor: recv error (conn=%d) errno=%d", msg.conn, errno);
             }
         },
         [this](const CmdResponse& msg){

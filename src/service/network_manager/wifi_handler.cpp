@@ -102,7 +102,7 @@ void WifiHandler::refreshAps(){
 
 bool WifiHandler::addAndActivateConnection(const std::string& ssid, const std::string& password){
     if(devicePath_.empty()) return false;
-    if(wifiState_ != WifiState::Disconnected){ V2_LOG_WARN("Cannot connect in current state");
+    if(wifiState_ != WifiState::Disconnected && wifiState_ != WifiState::Connected){ V2_LOG_WARN("Cannot connect in current state: {}", static_cast<int>(wifiState_));
         return false;
     }
     wifiState_ = WifiState::Connecting;
