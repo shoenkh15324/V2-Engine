@@ -10,7 +10,7 @@
 #include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
-#include "core/perf/metrics.hpp"
+#include "core/perf/metrics/metrics.hpp"
 
 class Worker;
 

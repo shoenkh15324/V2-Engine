@@ -18,7 +18,14 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/common/time/timer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/config/runtime_config.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/os/signal_handler.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/perf/metrics.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/metrics/metrics.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/benchmark.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/bench_backpressure.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/bench_contention.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/bench_latency.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/bench_scaling.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/bench_scheduler.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/perf/benchmark/bench_throughput.cpp 
 )
 
 target_compile_definitions(v2_core PUBLIC

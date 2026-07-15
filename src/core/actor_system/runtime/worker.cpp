@@ -3,7 +3,7 @@
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/config/platform_config.h"
 #include "core/common/time/time.hpp"
-#include "core/perf/metrics.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include <pthread.h>
 
 Worker::Worker(Dispatcher* dispatcher, int id, int maxBatch) : dispatcher_(dispatcher), id_(id), maxBatch_(maxBatch){

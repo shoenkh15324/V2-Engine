@@ -5,7 +5,7 @@
 #include "core/actor_system/messages/cmd_messages.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
-#include "core/perf/metrics.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "infra/hal/pmu/pmu_rsp5.hpp"
 #include "infra/hal/pmu/pmu_mock.hpp"
 #include "service/monitor/monitor_data.hpp"

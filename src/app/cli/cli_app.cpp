@@ -37,8 +37,19 @@ CliApp::CliApp()
             {"enable", "", "Enable metrics"},
             {"disable", "", "Disable metrics"},
             {"snapshot", "", "Show metrics snapshot"},
-            {"reset", "", "Reset metrics"}
+            {"reset", "", "Reset metrics"},
+        }},
+#if 0
+        {"benchmark", {}, "Performance benchmarks", {
+            {"throughput", "[--workers N] [--iterations N]", "Measure message throughput"},
+            {"latency", "[--workers N] [--roundtrips N]", "Measure end-to-end latency"},
+            {"scaling", "[--actors N] [--msgs N]", "Measure worker scaling"},
+            {"backpressure", "[--cap N] [--workers N]", "Measure backperssure handling"},
+            {"scheduler", "[--timers N]", "Measure scheduler accuracy"},
+            {"contention", "[--actors N] [--workers N]", "Measure dispatch contention"},
+            {"all", "[--workers N] [--iterations N]", "Run all benchmarks"},
         }}
+#endif
     }
 {}
 

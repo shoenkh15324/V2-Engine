@@ -2,7 +2,7 @@
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
 #include "core/common/util/return.hpp"
-#include "core/perf/metrics.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>

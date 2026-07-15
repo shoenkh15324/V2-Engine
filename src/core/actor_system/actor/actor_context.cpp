@@ -1,7 +1,7 @@
 #include "actor_context.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
-#include "core/perf/metrics.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 
 ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
