@@ -4,6 +4,7 @@
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
 #include "core/common/os/signal_handler.hpp"
+#include "core/perf/metrics.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"
 #include "service/monitor/monitor_actor.hpp"
@@ -27,12 +28,12 @@ void MainApp::open(){
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
     //
+    Metrics::setEnabled(cfg_.enableMetrics);
     auto& sig = SignalHandler::instance();
     sig.listen(SIGINT, [this](int){ requestStop(); });
     sig.listen(SIGTERM, [this](int){ requestStop(); });
 
     actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
-
     actorSystem_->createActor<CmdActor>("cmd_actor", cfg_.mailboxSize)->setEssential(true);
     actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs)->setEssential(false);

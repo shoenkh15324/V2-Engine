@@ -2,6 +2,7 @@
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
 #include "core/common/util/return.hpp"
+#include "core/perf/metrics.hpp"
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
@@ -41,15 +42,22 @@ Dispatcher::~Dispatcher(){
 }
 
 void Dispatcher::dispatch(ActorContext* actorCtx){
+    bool deduped = false;
+    size_t queueDepth = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if(inQueue_.find(actorCtx) != inQueue_.end()){
-            return;
+            deduped = true;
+        }else{
+            readyQueue_.push_back(actorCtx);
+            inQueue_.insert(actorCtx);
         }
-        readyQueue_.push_back(actorCtx);
-        inQueue_.insert(actorCtx);
+        queueDepth = readyQueue_.size();
     }
-    sema_.release();
+    Metrics::recordDispatch(deduped, queueDepth);
+    if(!deduped){
+        sema_.release();
+    }
 }
 
 ActorContext* Dispatcher::acquire(){
@@ -61,6 +69,7 @@ ActorContext* Dispatcher::acquire(){
     ActorContext* ctx = readyQueue_.front();
     readyQueue_.pop_front();
     inQueue_.erase(ctx);
+    Metrics::recordAcquire();
     return ctx;
 }
 

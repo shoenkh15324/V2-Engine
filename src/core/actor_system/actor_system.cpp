@@ -4,6 +4,7 @@
 
 ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs)
     : dispatcher_(numWorkers, epollMaxEvents, epollWaitTimeoutMs){
+    Metrics::init(numWorkers);
     workers_.reserve(numWorkers);
     for(int i = 0; i < numWorkers; i++){
         workers_.push_back(std::make_unique<Worker>(&dispatcher_, i, maxBatch));

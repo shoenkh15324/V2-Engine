@@ -30,6 +30,9 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("monitor_recv_buffer_size")) cfg.monitorRecvBufferSize = j["monitor_recv_buffer_size"];
         if(j.contains("monitor_backlog")) cfg.monitorBacklog = j["monitor_backlog"];
 
+        // Metrics
+        if(j.contains("enable_metrics")) cfg.enableMetrics = j["enable_metrics"];
+
 #if V2_PLATFORM_LINUX
 
         // Epoll

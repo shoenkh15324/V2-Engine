@@ -2,6 +2,8 @@
 #include "dispatcher.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/config/platform_config.h"
+#include "core/common/time/time.hpp"
+#include "core/perf/metrics.hpp"
 #include <pthread.h>
 
 Worker::Worker(Dispatcher* dispatcher, int id, int maxBatch) : dispatcher_(dispatcher), id_(id), maxBatch_(maxBatch){
@@ -31,11 +33,21 @@ void Worker::runLoop(){
     pthread_setname_np(threadName_.c_str());
 #endif
     while(running_){
+        auto idleStartTime = Time::now();
         ActorContext* actorCtx = dispatcher_->acquire();
+        auto idleEndTime = Time::now();
+
         if(!actorCtx){
             if(!dispatcher_->isRunning()) break;
             continue;
         }
-        actorCtx->run(maxBatch_);
+
+        auto busyStartTime = Time::now();
+        int processed = actorCtx->run(maxBatch_);
+        auto busyEndTime = Time::now();
+
+        uint64_t gapIdleNs = Time::toNs(idleEndTime - idleStartTime);
+        uint64_t gapBusyNs = Time::toNs(busyEndTime - busyStartTime);
+        Metrics::recordBatch(id_, processed, gapBusyNs, gapIdleNs);
     }
 }

@@ -33,7 +33,12 @@ CliApp::CliApp()
         {"pmu", {}, "PMU operations", {
             {"status", "", "Show PMU status"},
         }},
-        {"test", {}, "Test command parsing"},
+        {"metrics", {}, "Metrics operations", {
+            {"enable", "", "Enable metrics"},
+            {"disable", "", "Disable metrics"},
+            {"snapshot", "", "Show metrics snapshot"},
+            {"reset", "", "Reset metrics"}
+        }}
     }
 {}
 

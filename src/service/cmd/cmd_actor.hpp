@@ -29,6 +29,7 @@ private:
     std::string handleActor(const std::vector<std::string>& args);
     std::string handlePmu(const std::vector<std::string>& args);
     std::string handleWifi(const std::vector<std::string>& args);
+    std::string handleMetrics(const std::vector<std::string>& args);
 
     // Actor helpers
     std::string doActorList();
@@ -37,6 +38,9 @@ private:
     // Wifi helpers
     std::string formatApList();
     std::string formatStatus();
+
+    // Metrics helpers
+    std::string formatMetricsSnapshot();
 
     std::unordered_map<std::string, Handler> handlers_;
     std::unique_ptr<IPmu> pmu_;

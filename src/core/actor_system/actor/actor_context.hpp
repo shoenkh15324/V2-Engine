@@ -20,7 +20,7 @@ public:
     ActorContext& operator=(ActorContext&&) = delete;
 
     void enqueue(Message msg);
-    void run(int maxBatch);
+    int run(int maxBatch);
     Actor* actor() const { return actor_.get(); }
     IScheduler* scheduler() const { return scheduler_; }
     IActorRegistry* actorRegistry() const { return actorRegistry_; }

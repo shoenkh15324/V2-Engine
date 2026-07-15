@@ -1,9 +1,11 @@
 #include "cmd_actor.hpp"
+#include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
+#include "core/perf/metrics.hpp"
 #include "infra/hal/pmu/pmu_rsp5.hpp"
 #include "infra/hal/pmu/pmu_mock.hpp"
 #include "service/monitor/monitor_data.hpp"
@@ -25,6 +27,7 @@ int CmdActor::open(){
     handlers_["actor"] = [this](const auto& a){ return handleActor(a); };
     handlers_["pmu"] = [this](const auto& a){ return handlePmu(a); };
     handlers_["wifi"] = [this](const auto& a){ return handleWifi(a); };
+    handlers_["metrics"] = [this](const auto& a){ return handleMetrics(a); };
     //
     pmu_ = []()->std::unique_ptr<IPmu>{
 #if V2_PLATFORM_LINUX && defined(__aarch64__)
@@ -229,5 +232,93 @@ std::string CmdActor::formatStatus(){
         << "Signal: " << (connected ? std::to_string(lastStatus_.signalStrength) : "N/A") << "\n"
         << "Interface: " << lastStatus_.interfaceName << "\n"
         << "Auto-reconnect: " << (lastStatus_.autoReconnect ? "On" : "Off") << "\n";
+    return oss.str();
+}
+
+std::string CmdActor::handleMetrics(const std::vector<std::string>& args){
+    if(args.empty()) return "error: missing subcommand\n";
+    auto& cmd = args[0];
+    if(cmd == "enable"){
+        Metrics::setEnabled(true);
+        return "ok: metrics enabled\n";
+    }
+    if(cmd == "disable"){
+        Metrics::setEnabled(false);
+        return "ok: metrics disabled\n";
+    }
+    if(cmd == "snapshot"){
+        return (Metrics::isEnabled() ? formatMetricsSnapshot() : "error: metrics is disabled\n");
+    }
+    if(cmd == "reset"){
+        Metrics::reset();
+        return "ok: metrics reset\n";
+    }
+    return "error: unknown metrics subcommand '" + cmd + "'\n";
+}
+
+std::string CmdActor::formatMetricsSnapshot(){
+    auto snap = Metrics::snapshot();
+    for(auto& a : snap.actors){
+        Actor* actor = actorContext()->actorRegistry()->findById(a.id);
+        a.name = actor ? actor->name() : "unknown";
+    }
+    std::ostringstream oss;
+    oss << "=== Metrics ===\n"
+        << "Status: " << (Metrics::isEnabled() ? "enabled" : "disabled") << "\n";
+
+    oss << "\n[Actors]\n";
+    oss << std::left
+        << std::setw(5)  << "ID"
+        << std::setw(18) << "Name"
+        << std::right
+        << std::setw(10) << "Enqueued"
+        << std::setw(10) << "Processed"
+        << std::setw(8)  << "Dropped"
+        << std::setw(6)  << "Peak"
+        << std::setw(16) << "HandleTime(ns)"
+        << std::setw(8)  << "Batches"
+        << "\n";
+    oss << std::string(81, '-') << "\n";
+    for(auto& a : snap.actors){
+        auto& d = a.data;
+        oss << std::left
+            << std::setw(5)  << a.id
+            << std::setw(18) << a.name
+            << std::right
+            << std::setw(10) << d.enqueued
+            << std::setw(10) << d.processed
+            << std::setw(8)  << d.dropped
+            << std::setw(6)  << d.peakDepth
+            << std::setw(16) << d.handleTimeNs
+            << std::setw(8)  << d.batches
+            << "\n";
+    }
+
+    oss << "\n[Workers]\n";
+    oss << std::right
+        << std::setw(5)  << "ID"
+        << std::setw(10) << "Batches"
+        << std::setw(16) << "BusyTime(ns)"
+        << std::setw(16) << "IdleTime(ns)"
+        << std::setw(10) << "Messages"
+        << "\n";
+    oss << std::string(57, '-') << "\n";
+    for(size_t i = 0; i < snap.workers.size(); i++){
+        auto& w = snap.workers[i];
+        oss << std::setw(5)  << i
+            << std::setw(10) << w.batches
+            << std::setw(16) << w.busyTimeNs
+            << std::setw(16) << w.idleTimeNs
+            << std::setw(10) << w.messages
+            << "\n";
+    }
+
+    auto& d = snap.dispatcher;
+    oss << "\n[Dispatcher]\n"
+        << "Dispatches: " << d.dispatchCount
+        << "    Acquires: " << d.acquireCount
+        << "    Deduplicated: " << d.deduplicated
+        << "    QueuePeak: " << d.readyQueuePeak
+        << "\n";
     return oss.str();
 }

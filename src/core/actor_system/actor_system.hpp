@@ -10,6 +10,7 @@
 #include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
+#include "core/perf/metrics.hpp"
 
 class Worker;
 
@@ -26,11 +27,13 @@ public:
     template<typename T, typename ... Args>
     T* createActor(const std::string& name, size_t mailboxSize = 512, Args&& ... args){
         V2_ASSERT((std::is_base_of_v<Actor, T>), "T must derive from Actor");
-        auto actor = std::make_unique<T>(name, nextActorId_++, std::forward<Args>(args)...);
+        uint64_t id = nextActorId_++;
+        auto actor = std::make_unique<T>(name, id, std::forward<Args>(args)...);
         auto actorCtx = std::make_unique<ActorContext>(std::move(actor), mailboxSize, &dispatcher_, &scheduler_, &actorRegistry_);
         T* ptr = static_cast<T*>(actorCtx->actor());
         actorRegistry_.add(ptr);
         actorContexts_.push_back(std::move(actorCtx));
+        Metrics::registerActor(id);
         V2_LOG_INFO("Create %s actor / mailbox: %d", name.c_str(), mailboxSize);
         return ptr;
     }

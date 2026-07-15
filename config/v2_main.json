@@ -6,5 +6,6 @@
   "enable_monitor": true,
   "enable_dbus": true,
   "enable_pmu": true,
-  "enable_network_manager": true
+  "enable_network_manager": true,
+  "enable_metrics": true
 }
