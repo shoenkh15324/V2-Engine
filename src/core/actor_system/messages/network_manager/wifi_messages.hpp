@@ -57,6 +57,7 @@ struct WifiStatusResult{
     WifiState state;
     std::string interfaceName;
     int32_t signalStrength{0};
+    bool autoReconnect{false};
 };
 
 struct WifiAutoReconnectRequest{

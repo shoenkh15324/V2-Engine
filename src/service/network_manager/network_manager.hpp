@@ -21,7 +21,7 @@ public:
     void handle(const Message& msg) override;
 
 private:
-    void syncDeviceState();
+    void reportStatus();
 
     sdbus::IConnection* connection_{nullptr};
     std::unique_ptr<sdbus::IProxy> nmProxy_;

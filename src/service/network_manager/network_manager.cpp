@@ -60,7 +60,7 @@ void NetworkManagerActor::handle(const Message& msg){
             }
             // Auto Reconnection
             wifi_.autoReconnect();
-            syncDeviceState();
+            reportStatus();
         },
         [this](const WifiScanRequest&){
             wifi_.requestScan();
@@ -77,15 +77,16 @@ void NetworkManagerActor::handle(const Message& msg){
             wifi_.setAutoReconnect(msg.enable);
         },
         [this](const NmStatusRequest&){
-            syncDeviceState();
+            reportStatus();
         },
         [](const auto&){}
     }, msg);
 }
 
-void NetworkManagerActor::syncDeviceState(){
+void NetworkManagerActor::reportStatus(){
     WifiStatusResult r;
     r.state = wifi_.state();
+    r.autoReconnect = wifi_.getAutoReconnect();
     r.connected = (r.state == WifiState::Connected);
     if(wifi_.deviceFound()){
         r.interfaceName = wifi_.readInterfaceName();

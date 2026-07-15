@@ -227,6 +227,7 @@ std::string CmdActor::formatStatus(){
         << "SSID: " << (connected ? lastStatus_.ssid : "N/A") << "\n"
         << "IP: " << (connected ? lastStatus_.ipAddress : "N/A") << "\n"
         << "Signal: " << (connected ? std::to_string(lastStatus_.signalStrength) : "N/A") << "\n"
-        << "Interface: " << lastStatus_.interfaceName << "\n";
+        << "Interface: " << lastStatus_.interfaceName << "\n"
+        << "Auto-reconnect: " << (lastStatus_.autoReconnect ? "On" : "Off") << "\n";
     return oss.str();
 }
