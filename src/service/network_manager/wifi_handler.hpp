@@ -29,45 +29,60 @@ public:
     bool addAndActivateConnection(const std::string& ssid, const std::string& password);
     bool disconnectDevice();
     void autoReconnect();
-    void setAutoReconnect(bool enable){ autoReconnectEnabled_ = enable; }
-    bool autoReconnectEnabled() const { return autoReconnectEnabled_; }
+    void setAutoReconnect(bool enable){ reconnect_.enabled = enable; }
+    bool getAutoReconnect() const { return reconnect_.enabled; }
 
     // State queries
-    WifiState state() const { return wifiState_; }
-    uint32_t getDeviceState();
+    WifiState state() const { return conn_.state; }
     std::string getActiveApPath();
     WifiApInfo readApInfo(const std::string& apPath);
     std::string readInterfaceName();
     std::string readIp4Address();
     void syncDeviceState();
-    static WifiState mapDeviceState(uint32_t nmState);
 
     // Flags / cache access
-    bool consumeScanRefreshPending(){ return scanRefreshPending_.exchange(false); }
-    const std::vector<WifiApInfo>& lastScanResults() const { return lastScanResults_; }
-    std::string activeConnectionPath() const { return activeConnectionPath_; }
-    bool deviceFound() const { return !devicePath_.empty(); }
+    bool consumeScanRefreshPending(){ return scan_.refreshPending.exchange(false); }
+    const std::vector<WifiApInfo>& lastScanResults() const { return scan_.results; }
+    std::string activeConnectionPath() const { return conn_.activePath; }
+    bool deviceFound() const { return !dbus_.devicePath.empty(); }
 
 private:
+    struct DbusInfo{
+        sdbus::IConnection* connection{nullptr};
+        sdbus::IProxy* nmProxy{nullptr};
+        std::unique_ptr<sdbus::IProxy> deviceProxy;
+        std::string devicePath;
+    };
+
+    struct ConnectionState{
+        WifiState state{WifiState::Disconnected};
+        std::string activePath;
+    };
+
+    struct AutoReconnect{
+        bool enabled{true};
+        std::string lastSsid;
+        std::string lastPassword;
+    };
+
+    struct ScanCache{
+        std::vector<WifiApInfo> results;
+        std::atomic<bool> refreshPending{false};
+    };
+
     // Device discovery
     bool findWirelessDevice();
 
     // Utilities
     std::string ssidBytesToString(const std::vector<uint8_t>& ssid);
-    std::string bssidBytesToString(const std::vector<uint8_t>& bssid);
     std::string flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags);
-    
-    WifiState wifiState_{WifiState::Disconnected};
-    sdbus::IConnection* connection_{nullptr};
-    sdbus::IProxy* nmProxy_;
-    std::unique_ptr<sdbus::IProxy> deviceProxy_;
-    std::string devicePath_;
-    std::string activeConnectionPath_;
-    std::string lastConnectedSsid_;
-    std::string lastConnectedPassword_;
-    std::vector<WifiApInfo> lastScanResults_;
-    std::atomic<bool> scanRefreshPending_{false};
-    bool autoReconnectEnabled_{true};
+    uint32_t getDeviceState();
+    static WifiState mapDeviceState(uint32_t nmState);
+
+    DbusInfo dbus_;
+    ConnectionState conn_;
+    AutoReconnect reconnect_;
+    ScanCache scan_;
 };
 
 #endif // V2_PLATFORM_LINUX

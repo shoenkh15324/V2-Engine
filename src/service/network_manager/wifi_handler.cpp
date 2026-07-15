@@ -13,29 +13,29 @@ WifiHandler::~WifiHandler(){
 }
 
 int WifiHandler::open(sdbus::IConnection& connection, sdbus::IProxy& nmProxy){
-    connection_ = &connection;
-    nmProxy_ = &nmProxy;
+    dbus_.connection = &connection;
+    dbus_.nmProxy = &nmProxy;
     if(!findWirelessDevice()){ V2_LOG_WARN("No wireless device found");
         return Fail;
     }
     try{
-        auto dev = deviceProxy_.get();
+        auto dev = dbus_.deviceProxy.get();
         if(dev){
             dev->uponSignal("AccessPointAdded")
                 .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
                 .call([this](const sdbus::ObjectPath&){ V2_LOG_INFO("AP added, refreshing");
-                    scanRefreshPending_.store(true);
+                    scan_.refreshPending.store(true);
                 });
             dev->uponSignal("AccessPointRemoved")
                 .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
                 .call([this](const sdbus::ObjectPath&){
-                    scanRefreshPending_.store(true);
+                    scan_.refreshPending.store(true);
                 });
             dev->uponSignal("PropertiesChanged")
                 .onInterface("org.freedesktop.DBus.Properties")
                 .call([this](const std::string& interfaceName, const std::map<std::string, sdbus::Variant>& changedProps, const std::vector<std::string>&){
                     if(interfaceName == "org.freedesktop.NetworkManager.Device.Wireless"){
-                        scanRefreshPending_.store(true);
+                        scan_.refreshPending.store(true);
                     }
                 });
         }
@@ -46,28 +46,28 @@ int WifiHandler::open(sdbus::IConnection& connection, sdbus::IProxy& nmProxy){
     return Ok;
 }
 int WifiHandler::close(){
-    scanRefreshPending_.store(false);
-    activeConnectionPath_.clear();
-    devicePath_.clear();
-    deviceProxy_.reset();
-    wifiState_ = WifiState::Disconnected;
+    scan_.refreshPending.store(false);
+    conn_.activePath.clear();
+    dbus_.devicePath.clear();
+    dbus_.deviceProxy.reset();
+    conn_.state = WifiState::Disconnected;
     return Ok;
 }
 
 // Wifi operations
 void WifiHandler::requestScan(){
-    if(devicePath_.empty()) return;
-    if(wifiState_ != WifiState::Disconnected && wifiState_ != WifiState::Connected){ V2_LOG_WARN("Cannot scan in current state");
+    if(dbus_.devicePath.empty()) return;
+    if(conn_.state != WifiState::Disconnected && conn_.state != WifiState::Connected){ V2_LOG_WARN("Cannot scan in current state");
         return;
     }
-    auto* dev = deviceProxy_.get();
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return;
     try{
         std::map<std::string, sdbus::Variant> options;
         dev->callMethod("RequestScan")
             .onInterface("org.freedesktop.NetworkManager.Device.Wireless")
             .withArguments(options);
-        wifiState_ = WifiState::Scanning;
+        conn_.state = WifiState::Scanning;
         V2_LOG_INFO("Scan requested");
     }catch(const sdbus::Error& e){
         V2_LOG_ERROR("RequestScan failed: {}", e.what());
@@ -75,8 +75,8 @@ void WifiHandler::requestScan(){
 }
 
 void WifiHandler::refreshAps(){
-    if(devicePath_.empty()) return;
-    auto* dev = deviceProxy_.get();
+    if(dbus_.devicePath.empty()) return;
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return;
 
     try{
@@ -94,18 +94,18 @@ void WifiHandler::refreshAps(){
             if(apPath == activeApPath) info.connected = true;
             results.push_back(std::move(info));
         }
-        lastScanResults_ = std::move(results);
+        scan_.results = std::move(results);
     }catch(const sdbus::Error& e){
         V2_LOG_ERROR("refreshAps failed: {}", e.what());
     }
 }
 
 bool WifiHandler::addAndActivateConnection(const std::string& ssid, const std::string& password){
-    if(devicePath_.empty()) return false;
-    if(wifiState_ != WifiState::Disconnected && wifiState_ != WifiState::Connected){ V2_LOG_WARN("Cannot connect in current state: {}", static_cast<int>(wifiState_));
+    if(dbus_.devicePath.empty()) return false;
+    if(conn_.state != WifiState::Disconnected && conn_.state != WifiState::Connected){ V2_LOG_WARN("Cannot connect in current state: {}", static_cast<int>(conn_.state));
         return false;
     }
-    wifiState_ = WifiState::Connecting;
+    conn_.state = WifiState::Connecting;
 
     // connection section
     std::map<std::string, sdbus::Variant> connSection;
@@ -137,51 +137,51 @@ bool WifiHandler::addAndActivateConnection(const std::string& ssid, const std::s
     try{
         sdbus::ObjectPath connPath;
         sdbus::ObjectPath activeConnPath;
-        nmProxy_->callMethod("AddAndActivateConnection")
+        dbus_.nmProxy->callMethod("AddAndActivateConnection")
             .onInterface("org.freedesktop.NetworkManager")
-            .withArguments(settings, sdbus::ObjectPath(devicePath_), sdbus::ObjectPath("/"))
+            .withArguments(settings, sdbus::ObjectPath(dbus_.devicePath), sdbus::ObjectPath("/"))
             .storeResultsTo(connPath, activeConnPath);
-        activeConnectionPath_ = activeConnPath;
-        lastConnectedSsid_ = ssid;
-        lastConnectedPassword_ = password;
-        wifiState_ = WifiState::Connected;
-        V2_LOG_INFO("Connected to '{}', active conn: {}", ssid, activeConnectionPath_);
+        conn_.activePath = activeConnPath;
+        reconnect_.lastSsid = ssid;
+        reconnect_.lastPassword = password;
+        conn_.state = WifiState::Connected;
+        V2_LOG_INFO("Connected to '{}', active conn: {}", ssid, conn_.activePath);
         return true;
     }catch(const sdbus::Error& e){ V2_LOG_ERROR("AddAndActivateConnection failed: {}", e.what());
-        wifiState_ = WifiState::Disconnected;
+        conn_.state = WifiState::Disconnected;
         return false;
     }
 }
 
 bool WifiHandler::disconnectDevice(){
-    if(wifiState_ != WifiState::Connected && wifiState_ != WifiState::Connecting){ V2_LOG_WARN("Cannot disconnect in current state");
+    if(conn_.state != WifiState::Connected && conn_.state != WifiState::Connecting){ V2_LOG_WARN("Cannot disconnect in current state");
         return false;
     }
-    wifiState_ = WifiState::Disconnecting;
-    auto* dev = deviceProxy_.get();
+    conn_.state = WifiState::Disconnecting;
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return false;
     try{
         dev->callMethod("Disconnect").onInterface("org.freedesktop.NetworkManager.Device");
-        activeConnectionPath_.clear();
-        wifiState_ = WifiState::Disconnected;
+        conn_.activePath.clear();
+        conn_.state = WifiState::Disconnected;
         V2_LOG_INFO("Disconnected");
         return true;
     }catch(const sdbus::Error& e){
-        wifiState_ = WifiState::Connected;
+        conn_.state = WifiState::Connected;
         V2_LOG_ERROR("Disconnect failed: {}", e.what());
         return false;
     }
 }
 
 void WifiHandler::autoReconnect(){
-    if(autoReconnectEnabled_ && wifiState_ == WifiState::Disconnected && !lastConnectedSsid_.empty()){ V2_LOG_INFO("Auto-Reconnecting to '{}'", lastConnectedSsid_.c_str());
-        addAndActivateConnection(lastConnectedSsid_, lastConnectedPassword_);
+    if(reconnect_.enabled && conn_.state == WifiState::Disconnected && !reconnect_.lastSsid.empty()){ V2_LOG_INFO("Auto-Reconnecting to '{}'", reconnect_.lastSsid.c_str());
+        addAndActivateConnection(reconnect_.lastSsid, reconnect_.lastPassword);
     }
 }
 
 // State queries
 uint32_t WifiHandler::getDeviceState(){
-    auto* dev = deviceProxy_.get();
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return 0;
     try{
         sdbus::Variant v;
@@ -196,7 +196,7 @@ uint32_t WifiHandler::getDeviceState(){
 }
 
 std::string WifiHandler::getActiveApPath(){
-    auto* dev = deviceProxy_.get();
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return {};
     try{
         sdbus::Variant v;
@@ -213,7 +213,7 @@ std::string WifiHandler::getActiveApPath(){
 WifiApInfo WifiHandler::readApInfo(const std::string& apPath){
     WifiApInfo info;
     info.objectPath = apPath;
-    auto apProxy = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(apPath));
+    auto apProxy = sdbus::createProxy(*dbus_.connection, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(apPath));
     auto readProp = [&](const std::string& prop)->sdbus::Variant{
         try{
             sdbus::Variant v;
@@ -247,7 +247,7 @@ WifiApInfo WifiHandler::readApInfo(const std::string& apPath){
 }
 
 std::string WifiHandler::readInterfaceName(){
-    auto* dev = deviceProxy_.get();
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return {};
     try{
         sdbus::Variant v;
@@ -262,7 +262,7 @@ std::string WifiHandler::readInterfaceName(){
 }
 
 std::string WifiHandler::readIp4Address(){
-    auto* dev = deviceProxy_.get();
+    auto* dev = dbus_.deviceProxy.get();
     if(!dev) return {};
     try{
         sdbus::Variant ipVar;
@@ -272,7 +272,7 @@ std::string WifiHandler::readIp4Address(){
             .storeResultsTo(ipVar);
         std::string ip4Path = std::string(ipVar.get<sdbus::ObjectPath>());
         if(ip4Path.empty() || ip4Path == "/") return {};
-        auto ipProxy = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(ip4Path));
+        auto ipProxy = sdbus::createProxy(*dbus_.connection, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(ip4Path));
         sdbus::Variant addrVar;
         ipProxy->callMethod("Get")
             .onInterface("org.freedesktop.DBus.Properties")
@@ -290,11 +290,11 @@ std::string WifiHandler::readIp4Address(){
 bool WifiHandler::findWirelessDevice(){
     try{
         std::vector<sdbus::ObjectPath> devices;
-        nmProxy_->callMethod("GetAllDevices")
+        dbus_.nmProxy->callMethod("GetAllDevices")
             .onInterface("org.freedesktop.NetworkManager")
             .storeResultsTo(devices);
         for(const auto& devPath : devices){
-            auto tempProxy = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(devPath));
+            auto tempProxy = sdbus::createProxy(*dbus_.connection, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath(devPath));
             sdbus::Variant devTypeVar;
             tempProxy->callMethod("Get")
                 .onInterface("org.freedesktop.DBus.Properties")
@@ -302,8 +302,8 @@ bool WifiHandler::findWirelessDevice(){
                 .storeResultsTo(devTypeVar);
             uint32_t devType = devTypeVar.get<uint32_t>();
             if(devType == 2){ // NM_DEVICE_TYPE_WIFI = 2
-                devicePath_ = devPath;
-                deviceProxy_ = std::move(tempProxy);
+                dbus_.devicePath = devPath;
+                dbus_.deviceProxy = std::move(tempProxy);
                 return true;
             }
         }
@@ -316,13 +316,6 @@ bool WifiHandler::findWirelessDevice(){
 // Utilities
 std::string WifiHandler::ssidBytesToString(const std::vector<uint8_t>& ssid){
     return std::string(ssid.begin(), ssid.end());
-}
-
-std::string WifiHandler::bssidBytesToString(const std::vector<uint8_t>& bssid){
-    if(bssid.size() != 6) return {};
-    char buf[18];
-    std::snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
-    return buf;
 }
 
 std::string WifiHandler::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags){
@@ -338,7 +331,7 @@ std::string WifiHandler::flagsToSecurity(uint32_t wpaFlags, uint32_t rsnFlags){
 
 void WifiHandler::syncDeviceState(){
     uint32_t nmState = getDeviceState();
-    wifiState_ = mapDeviceState(nmState);
+    conn_.state = mapDeviceState(nmState);
 }
 
 WifiState WifiHandler::mapDeviceState(uint32_t nmState){
