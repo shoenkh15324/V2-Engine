@@ -10,31 +10,29 @@ public:
     struct Result{
         std::string benchmarkName;
         std::string description;
-        
+
         bool success{true};
         std::string errorMsg;
 
+        struct TestConfig{
+            int workers{0};
+            int actors{0};
+            int maxBatch{0};
+            size_t mailboxSize{0};
+        };
+
+        struct ActorSnap{
+            std::string name;
+            size_t mailboxCapacity{0};
+            uint64_t msgProcessed{0};
+        };
+
+        TestConfig config{};
+        std::vector<ActorSnap> actorSnaps;
         uint64_t iterations{0};
         uint64_t totalDurationNs{0};
         double throughputPerSec{0.0};
         double avgLatencyNs{0.0};
-
-        struct WorkerSnap{
-            int workerId;
-            uint64_t msgProcessed{0};
-            uint64_t busyNs{0};
-            uint64_t idleNs{0};
-        };
-
-        struct DispatcherSnap{
-            uint64_t dispatchCount{0};
-            uint64_t acquireCount{0};
-            uint64_t deduplicated{0};
-            size_t readyQueuePeak{0};
-        };
-        
-        std::vector<WorkerSnap> workers;
-        DispatcherSnap dispatcher{};
     };
 
     virtual ~IBenchmark() = default;

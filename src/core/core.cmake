@@ -2,7 +2,7 @@
 
 message(STATUS "Configuring Core Layer")
 
-add_library(v2_core STATIC)
+add_library(v2_core OBJECT)
 
 target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_registry.cpp

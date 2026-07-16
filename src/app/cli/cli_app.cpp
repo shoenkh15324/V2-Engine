@@ -15,43 +15,41 @@
     #include <unistd.h>
 #endif
 
-CliApp::CliApp()
-    : subCmds_{ // name, usage, description
-        {"actor", {}, "Actor management", {
-            {"list", "", "List actors"},
-            {"enable", "<name>", "Enable actor"},
-            {"disable", "<name>", "Disable actor"},
-        }},
-        {"wifi", {}, "Wi-Fi management", {
-            {"scan", "", "Scan access points"},
-            {"list", "", "List scanned APs"},
-            {"connect", "<ssid> [password]", "Connect to a network"},
-            {"disconnect", "", "Disconnect current network"},
-            {"status", "", "Show connection status"},
-            {"autoconnect", "<on|off>", "Toggle autoconnect"},
-        }},
-        {"pmu", {}, "PMU operations", {
-            {"status", "", "Show PMU status"},
-        }},
-        {"metrics", {}, "Metrics operations", {
-            {"enable", "", "Enable metrics"},
-            {"disable", "", "Disable metrics"},
-            {"snapshot", "", "Show metrics snapshot"},
-            {"reset", "", "Reset metrics"},
-        }},
-#if 0
-        {"benchmark", {}, "Performance benchmarks", {
-            {"throughput", "[--workers N] [--iterations N]", "Measure message throughput"},
-            {"latency", "[--workers N] [--roundtrips N]", "Measure end-to-end latency"},
-            {"scaling", "[--actors N] [--msgs N]", "Measure worker scaling"},
-            {"backpressure", "[--cap N] [--workers N]", "Measure backperssure handling"},
-            {"scheduler", "[--timers N]", "Measure scheduler accuracy"},
-            {"contention", "[--actors N] [--workers N]", "Measure dispatch contention"},
-            {"all", "[--workers N] [--iterations N]", "Run all benchmarks"},
-        }}
-#endif
-    }
-{}
+CliApp::CliApp() : subCmds_{ // name, usage, description
+    {"actor", {}, "Actor management", {
+        {"list", "", "List actors"},
+        {"enable", "<name>", "Enable actor"},
+        {"disable", "<name>", "Disable actor"},
+    }},
+    {"wifi", {}, "Wi-Fi management", {
+        {"scan", "", "Scan access points"},
+        {"list", "", "List scanned APs"},
+        {"connect", "<ssid> [password]", "Connect to a network"},
+        {"disconnect", "", "Disconnect current network"},
+        {"status", "", "Show connection status"},
+        {"autoconnect", "<on|off>", "Toggle autoconnect"},
+    }},
+    {"pmu", {}, "PMU operations", {
+        {"status", "", "Show PMU status"},
+    }},
+    {"metrics", {}, "Metrics operations", {
+        {"enable", "", "Enable metrics"},
+        {"disable", "", "Disable metrics"},
+        {"snapshot", "", "Show metrics snapshot"},
+        {"reset", "", "Reset metrics"},
+    }},
+    {"benchmark", {}, "Performance benchmarks", {
+        {"throughput", "[--actors N] [--workers N] [--iterations N] [--maxbatch N]", "Measure message throughput"},
+        {"latency", "[--workers N] [--roundtrips N]", "Measure end-to-end latency"},
+        {"scaling", "[--actors N] [--msgs N]", "Measure worker scaling"},
+        {"backpressure", "[--cap N] [--workers N]", "Measure backperssure handling"},
+        {"scheduler", "[--timers N]", "Measure scheduler accuracy"},
+        {"contention", "[--actors N] [--workers N]", "Measure dispatch contention"},
+        {"all", "[--workers N] [--iterations N]", "Run all benchmarks"},
+    }}
+}{
+    //
+}
 
 CliApp::~CliApp(){
     close();

@@ -28,6 +28,7 @@ int CmdActor::open(){
     handlers_["pmu"] = [this](const auto& a){ return handlePmu(a); };
     handlers_["wifi"] = [this](const auto& a){ return handleWifi(a); };
     handlers_["metrics"] = [this](const auto& a){ return handleMetrics(a); };
+    handlers_["benchmark"] = [this](const auto& a){ return handleBenchmark(a); };
     //
     pmu_ = []()->std::unique_ptr<IPmu>{
 #if V2_PLATFORM_LINUX && defined(__aarch64__)
@@ -320,5 +321,71 @@ std::string CmdActor::formatMetricsSnapshot(){
         << "    Deduplicated: " << d.deduplicated
         << "    QueuePeak: " << d.readyQueuePeak
         << "\n";
+    return oss.str();
+}
+
+std::string CmdActor::handleBenchmark(const std::vector<std::string>& args){
+    if(args.empty()) return "error: missing subcommand\n";
+    auto& cmd = args[0];
+    if(cmd == "throughput" || cmd == "latency" || cmd == "scaling" || cmd == "backpressure" || cmd == "scheduler" || cmd == "contention"){
+        BenchmarkArgs bArgs;
+        for(size_t i = 1; i + 1 < args.size(); i += 2){
+            if(args[i].substr(0, 2) == "--"){
+                bArgs.push_back({args[i].substr(2), args[i + 1]});
+            }
+        }
+        auto result = Benchmark::run(cmd, bArgs);
+        return formatBenchmarkResult(std::move(result));
+    }
+    if(cmd == "all"){
+        BenchmarkArgs bArgs;
+        for(size_t i = 1; i + 1 < args.size(); i += 2){
+            if(args[i].substr(0, 2) == "--"){
+                bArgs.push_back({args[i].substr(2), args[i + 1]});
+            }
+        }
+        return Benchmark::runAll(bArgs);
+    }
+    return "error: unknown benchmark subcommand '" + cmd + "'\n";
+}
+
+std::string CmdActor::formatBenchmarkResult(const BenchmarkResult& result){
+    if(!result.success) return "error: " + result.errorMsg + "\n";
+
+    std::ostringstream oss;
+    oss << "=== Benchmark: " << result.benchmarkName << " ===\n"
+        << result.description << "\n\n";
+    oss << "[Test Config]\n"
+        << "  Workers:    " << result.config.workers << "\n"
+        << "  Actors:     " << result.config.actors << "\n"
+        << "  MaxBatch:   " << result.config.maxBatch << "\n"
+        << "  Mailbox:    " << result.config.mailboxSize << "\n"
+        << "  Iterations: " << result.iterations << "\n";
+
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.2f", result.throughputPerSec);
+    oss << "\n  Throughput: " << buf << " msgs/sec\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.avgLatencyNs);
+    oss << "  Latency:    " << buf << " ns/msg\n";
+    oss << "  Total Time: " << (result.totalDurationNs / 1000000.0) << " ms\n";
+
+    if(!result.actorSnaps.empty()){
+        oss << "\n[Actors]\n";
+        oss << std::left
+            << std::setw(16) << "Name"
+            << std::right
+            << std::setw(12) << "Mailbox"
+            << std::setw(12) << "Processed"
+            << "\n";
+        oss << std::string(40, '-') << "\n";
+        for(auto& a : result.actorSnaps){
+            oss << std::left
+                << std::setw(16) << a.name
+                << std::right
+                << std::setw(12) << a.mailboxCapacity
+                << std::setw(12) << a.msgProcessed
+                << "\n";
+        }
+    }
     return oss.str();
 }
