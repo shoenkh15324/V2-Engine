@@ -327,6 +327,16 @@ std::string CmdActor::formatMetricsSnapshot(){
 std::string CmdActor::handleBenchmark(const std::vector<std::string>& args){
     if(args.empty()) return "error: missing subcommand\n";
     auto& cmd = args[0];
+    if(cmd == "list"){
+        auto benchmarks = Benchmark::list();
+        if(benchmarks.empty()) return "no benchmarks registered\n";
+        std::ostringstream oss;
+        oss << "Available benchmarks:\n";
+        for(auto& b : benchmarks){
+            oss << "  " << std::left << std::setw(16) << b.name << b.description << "\n";
+        }
+        return oss.str();
+    }
     if(cmd == "throughput" || cmd == "latency" || cmd == "scaling" || cmd == "backpressure" || cmd == "scheduler" || cmd == "contention"){
         BenchmarkArgs bArgs;
         for(size_t i = 1; i + 1 < args.size(); i += 2){
@@ -360,14 +370,69 @@ std::string CmdActor::formatBenchmarkResult(const BenchmarkResult& result){
         << "  Actors:     " << result.config.actors << "\n"
         << "  MaxBatch:   " << result.config.maxBatch << "\n"
         << "  Mailbox:    " << result.config.mailboxSize << "\n"
-        << "  Iterations: " << result.iterations << "\n";
+        << "  Iterations: " << result.throughput.iterations << "\n"
+        << "  Warmup:     " << result.config.warmup << "\n";
 
     char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.2f", result.throughputPerSec);
-    oss << "\n  Throughput: " << buf << " msgs/sec\n";
-    std::snprintf(buf, sizeof(buf), "%.2f", result.avgLatencyNs);
-    oss << "  Latency:    " << buf << " ns/msg\n";
-    oss << "  Total Time: " << (result.totalDurationNs / 1000000.0) << " ms\n";
+    if(result.throughput.msgsPerSec > 0.0){
+        std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.msgsPerSec);
+        oss << "\n  Throughput: " << buf << " msgs/sec\n";
+    }
+    if(result.latency.avgNs > 0.0){
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.avgNs);
+        oss << "  Latency:    " << buf << " ns/msg\n";
+    }
+    std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.totalDurationNs / 1000000.0);
+    oss << "  Total Time: " << buf << " ms\n";
+
+    if(result.latency.percentiles.p50 > 0.0){
+        oss << "\n[Latency Distribution]\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.minNs);
+        oss << "  Min:    " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.percentiles.p50);
+        oss << "  P50:    " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.percentiles.p95);
+        oss << "  P95:    " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.percentiles.p99);
+        oss << "  P99:    " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.percentiles.p999);
+        oss << "  P999:   " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.latency.maxNs);
+        oss << "  Max:    " << buf << " ns\n";
+    }
+
+    if(result.backpressure.sent > 0){
+        oss << "\n[Backpressure]\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.dropRate);
+        oss << "  Drop Rate:   " << buf << "%\n"
+            << "  Sent:        " << result.backpressure.sent << "\n"
+            << "  Dropped:     " << result.backpressure.dropped << "\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.floodDurationNs / 1000000.0);
+        oss << "  Flood Time:  " << buf << " ms\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.drainDurationNs / 1000000.0);
+        oss << "  Drain Time:  " << buf << " ms\n";
+    }
+
+    if(!result.scalingCurve.workerScaling.empty()){
+        oss << "\n[Worker Scaling]\n";
+        double baseTp = result.scalingCurve.workerScaling.front().second;
+        for(auto& [w, tp] : result.scalingCurve.workerScaling){
+            double eff = (baseTp > 0) ? (tp / (w * baseTp)) : 0.0;
+            std::snprintf(buf, sizeof(buf), "%.0f", tp);
+            oss << "  " << w << " workers: " << buf << " m/s";
+            std::snprintf(buf, sizeof(buf), "%.2f", eff);
+            oss << " (" << buf << "x)\n";
+        }
+        oss << "\n[Actor Scaling]\n";
+        baseTp = result.scalingCurve.actorScaling.front().second;
+        for(auto& [a, tp] : result.scalingCurve.actorScaling){
+            double eff = (baseTp > 0) ? (tp / (a * baseTp)) : 0.0;
+            std::snprintf(buf, sizeof(buf), "%.0f", tp);
+            oss << "  " << a << " actors: " << buf << " m/s";
+            std::snprintf(buf, sizeof(buf), "%.2f", eff);
+            oss << " (" << buf << "x)\n";
+        }
+    }
 
     if(!result.actorSnaps.empty()){
         oss << "\n[Actors]\n";

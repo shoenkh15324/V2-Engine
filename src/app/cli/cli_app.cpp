@@ -39,12 +39,13 @@ CliApp::CliApp() : subCmds_{ // name, usage, description
         {"reset", "", "Reset metrics"},
     }},
     {"benchmark", {}, "Performance benchmarks", {
-        {"throughput", "[--actors N] [--workers N] [--iterations N] [--maxbatch N]", "Measure message throughput"},
-        {"latency", "[--workers N] [--roundtrips N]", "Measure end-to-end latency"},
-        {"scaling", "[--actors N] [--msgs N]", "Measure worker scaling"},
-        {"backpressure", "[--cap N] [--workers N]", "Measure backperssure handling"},
-        {"scheduler", "[--timers N]", "Measure scheduler accuracy"},
-        {"contention", "[--actors N] [--workers N]", "Measure dispatch contention"},
+        {"throughput", "[--workers N] [--actors N] [--iterations N] [--maxbatch N] [--warmup N] [--mailbox N]", "Measure message throughput"},
+        {"latency", "[--workers N] [--iterations N] [--maxbatch N] [--warmup N] [--mailbox N]", "Measure per-message end-to-end latency"},
+        {"contention", "[--workers N] [--producers N] [--iterations N] [--maxbatch N] [--warmup N] [--mailbox N]", "Measure multi-producer contention"},
+        {"scaling", "[--iterations N] [--maxbatch N] [--warmup N] [--scale-max N]", "Measure worker and actor scaling"},
+        {"backpressure", "[--workers N] [--maxbatch N] [--mailbox N] [--flood-rate N] [--flood-duration N]", "Measure mailbox overflow behavior"},
+        {"scheduler", "[--workers N] [--maxbatch N] [--interval N] [--duration N]", "Measure timer scheduling precision"},
+        {"list", "", "List available benchmarks"},
         {"all", "[--workers N] [--iterations N]", "Run all benchmarks"},
     }}
 }{

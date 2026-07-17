@@ -1,7 +1,9 @@
 #pragma once
-#include <string>
-#include <vector>
+#include <cstddef>
 #include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 class IBenchmark{
 public:
@@ -14,11 +16,12 @@ public:
         bool success{true};
         std::string errorMsg;
 
-        struct TestConfig{
+        struct Config{
             int workers{0};
             int actors{0};
             int maxBatch{0};
             size_t mailboxSize{0};
+            int warmup{0};
         };
 
         struct ActorSnap{
@@ -27,12 +30,45 @@ public:
             uint64_t msgProcessed{0};
         };
 
-        TestConfig config{};
+        struct Throughput{
+            uint64_t iterations{0};
+            uint64_t totalDurationNs{0};
+            double msgsPerSec{0.0};
+        };
+
+        struct Latency{
+            double avgNs{0.0};
+            double minNs{0.0};
+            double maxNs{0.0};
+
+            struct Percentiles{
+                double p50{0.0};
+                double p95{0.0};
+                double p99{0.0};
+                double p999{0.0};
+            };
+            Percentiles percentiles{};
+        };
+
+        struct Backpressure{
+            uint64_t sent{0};
+            uint64_t dropped{0};
+            double dropRate{0.0};
+            uint64_t floodDurationNs{0};
+            uint64_t drainDurationNs{0};
+        };
+
+        struct ScalingCurve{
+            std::vector<std::pair<int, double>> workerScaling;
+            std::vector<std::pair<int, double>> actorScaling;
+        };
+
+        Config config{};
         std::vector<ActorSnap> actorSnaps;
-        uint64_t iterations{0};
-        uint64_t totalDurationNs{0};
-        double throughputPerSec{0.0};
-        double avgLatencyNs{0.0};
+        Throughput throughput{};
+        Latency latency{};
+        Backpressure backpressure{};
+        ScalingCurve scalingCurve{};
     };
 
     virtual ~IBenchmark() = default;

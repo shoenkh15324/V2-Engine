@@ -2,63 +2,79 @@
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
+#include "core/actor_system/messages/tick_messages.hpp"
+#include <chrono>
 #include <vector>
+
+static constexpr uint64_t kSpinWaitTimeoutNs = 30000000000ULL; // 30초
+
+ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
+    ThroughputParams p;
+    for(auto& [k, v] : args){
+        try{
+            if(k == "workers") p.workers = std::stoi(v);
+            else if(k == "actors") p.actors = std::stoi(v);
+            else if(k == "iterations") p.iterations = std::stoi(v);
+            else if(k == "maxbatch") p.maxbatch = std::stoi(v);
+            else if(k == "warmup") p.warmup = std::stoi(v);
+            else if(k == "mailbox") p.mailbox = std::stoul(v);
+        }catch(const std::exception&){
+            // 파싱 실패 시 기본값 유지
+        }
+    }
+    if(p.workers < 1) p.workers = 1;
+    if(p.iterations < 1) p.iterations = 1;
+    if(p.maxbatch < 1) p.maxbatch = 1;
+    if(p.actors < 1) p.actors = 1;
+    if(p.actors > p.iterations) p.actors = p.iterations;
+    if(p.warmup < 0) p.warmup = 0;
+    return p;
+}
 
 IBenchmark::Result ThroughputBenchmark::run(const Args& args){
     bool wasMetricsEnabled = Metrics::isEnabled();
-    std::atomic<uint64_t> counter{0};
-    int workers = 4;
-    int iterations = 10000;
-    int maxbatch = 32;
-    int actors = 1;
-    
-    for(auto& [k, v] : args){
-        if(k == "workers") workers = std::stoi(v);
-        if(k == "iterations") iterations = std::stoi(v);
-        if(k == "maxbatch") maxbatch = std::stoi(v);
-        if(k == "actors") actors = std::stoi(v);
-    }
-
-    if(workers < 1) workers = 1;
-    if(iterations < 1) iterations = 1;
-    if(maxbatch < 1) maxbatch = 1;
-    if(actors < 1) actors = 1;
-    if(actors > iterations) actors = iterations;
-
-    int perActor = iterations / actors;
+    ThroughputParams p = ThroughputParams::parse(args);
+    int perActor = p.iterations / p.actors;
 
     Metrics::setEnabled(false);
-    ActorSystem actorSystem(workers, maxbatch);
-    std::vector<BenchActor*> benchActors;
-    for(int i = 0; i < actors; i++){
-        std::string name = "bench_" + std::to_string(i);
-        size_t mailboxSize = static_cast<size_t>(perActor) + 256;
-        auto* actor = actorSystem.createActor<BenchActor>(name, mailboxSize, counter);
-        benchActors.push_back(actor);
-    }
 
-    actorSystem.start();
-    auto startTime = Time::now();
-    for(int i = 0; i < iterations; i++){
-        benchActors[i % actors]->receiveMsg(Tick{});
-    }
-    while(counter.load(std::memory_order_relaxed) < static_cast<uint64_t>(iterations)){
-        Sleep::sleepMs(100);
-    }
-    auto endTime = Time::now();
-    actorSystem.stop();
+    auto runOnce = [&](int iters) -> uint64_t{
+        std::atomic<uint64_t> cnt{0};
+        ActorSystem sys(p.workers, p.maxbatch);
+        std::vector<BenchActor*> acts;
+        for(int i = 0; i < p.actors; i++){
+            std::string nm = "bench_" + std::to_string(i);
+            size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iters / p.actors) + 256;
+            acts.push_back(sys.createActor<BenchActor>(nm, mbSize, cnt));
+        }
+        sys.start();
+        auto st = Time::now();
+        for(int i = 0; i < iters; i++){
+            acts[i % p.actors]->receiveMsg(Tick{});
+        }
+        auto waitStart = Time::now();
+        while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(iters)){
+            if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
+            Sleep::sleepMs(100);
+        }
+        auto et = Time::now();
+        sys.stop();
+        return Time::toNs(et - st);
+    };
+
+    if(p.warmup > 0) runOnce(p.warmup);
+
+    uint64_t totalNs = runOnce(p.iterations);
 
     IBenchmark::Result res;
     res.benchmarkName = name();
     res.description = description();
-    res.config = {workers, actors, maxbatch, static_cast<size_t>(perActor) + 256};
-    res.iterations = iterations;
-    res.totalDurationNs = Time::toNs(endTime - startTime);
-    res.throughputPerSec = (res.totalDurationNs > 0) ? (static_cast<double>(iterations) * 1000000000.0 / static_cast<double>(res.totalDurationNs)) : 0.0;
-    res.avgLatencyNs = (iterations > 0) ? (static_cast<double>(res.totalDurationNs) / static_cast<double>(iterations)) : 0.0;
-    for(auto* actor : benchActors){
-        res.actorSnaps.push_back({actor->actorName(), actor->mailboxCapacity(), actor->processed()});
-    }
+    res.config = {p.workers, p.actors, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(perActor) + 256, p.warmup};
+    res.throughput.iterations = p.iterations;
+    res.throughput.totalDurationNs = totalNs;
+    res.throughput.msgsPerSec = (totalNs > 0)
+        ? (static_cast<double>(p.iterations) * 1000000000.0 / static_cast<double>(totalNs))
+        : 0.0;
 
     Metrics::setEnabled(wasMetricsEnabled);
     return res;

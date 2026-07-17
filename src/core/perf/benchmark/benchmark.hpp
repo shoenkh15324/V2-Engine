@@ -30,5 +30,10 @@ public:
     static std::string runAll(const BenchmarkArgs& args);
 
 private:
-    static std::map<std::string, BenchmarkCreator>& registry();
+    struct RegistryEntry{
+        std::string name;
+        std::string description;
+        BenchmarkCreator creator;
+    };
+    static std::vector<RegistryEntry>& entries();
 };

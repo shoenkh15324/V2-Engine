@@ -6,26 +6,35 @@
 #include <cstdint>
 #include <string>
 
+struct ThroughputParams{
+    int workers = 4;
+    int actors = 1;
+    int iterations = 10000;
+    int maxbatch = 32;
+    int warmup = 0;
+    size_t mailbox = 0;
+
+    static ThroughputParams parse(const IBenchmark::Args& args);
+};
+
 class BenchActor : public Actor{
 public:
     BenchActor(const std::string& name, uint64_t id, std::atomic<uint64_t>& counter)
-        : Actor(std::move(name), id), counter_(counter), actorName_(name){}
+        : Actor(name, id), counter_(counter){}
 
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }
-    void handle(const Message& msg) override {
+    void handle(const Message& /*msg*/) override {
         counter_.fetch_add(1, std::memory_order_relaxed);
         processed_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    const std::string& actorName() const { return actorName_; }
     size_t mailboxCapacity() const { return actorContext()->mailboxCapacity(); }
     uint64_t processed() const { return processed_.load(std::memory_order_relaxed); }
 
 private:
     std::atomic<uint64_t>& counter_;
     std::atomic<uint64_t> processed_{0};
-    std::string actorName_;
 };
 
 class ThroughputBenchmark : public IBenchmark{
