@@ -3,7 +3,6 @@
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
-#include "core/common/time/sleep.hpp"
 #include "core/actor_system/messages/tick_messages.hpp"
 #include <atomic>
 #include <chrono>
@@ -56,7 +55,6 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
         auto waitStart = Time::now();
         while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(iterations)){
             if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
-            Sleep::sleepMs(100);
         }
         auto et = Time::now();
         sys.stop();

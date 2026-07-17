@@ -135,8 +135,14 @@ int CliApp::run(int argc, char** argv){
     std::string cmd;
     if(!sub.empty()){
         cmd = sub;
-        for(auto& a : args)
-            cmd += " " + a;
+        for(auto& a : args){
+            auto eq = a.find('=');
+            if(eq != std::string::npos){
+                cmd += " --" + a.substr(0, eq) + " " + a.substr(eq + 1);
+            }else{
+                cmd += " " + a;
+            }
+        }
     }else{
         for(size_t i = 0; i < args.size(); ++i){
             if(i > 0) cmd += " ";

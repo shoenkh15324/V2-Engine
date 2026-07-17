@@ -47,10 +47,10 @@ Worker Thread:  sema_.acquire()      [semaphore wait]
 
 2단계: 메시지 주입 (Main Thread)
    - N개 메시지를 라운드로빈으로 A개 액터에 전달
-   - receiveMsg(Tick{}) → enqueue → push → dispatch 경로 타aversal
+   - receiveMsg(Tick{}) → enqueue → push → dispatch 경로 traversal
 
 3단계: 처리 대기 (Main Thread)
-   - processed == N일 때까지 spin-wait
+   - processed == N일 때까지 busy-wait
    - 30초 타임아웃 적용
 
 4단계: 분석
@@ -92,14 +92,14 @@ Worker Thread:  sema_.acquire()      [semaphore wait]
 
 | Iterations | Throughput (msgs/sec) | Total Time |
 |------------|----------------------|------------|
-| 10,000 | 77,416 | 129.2 ms |
-| 50,000 | 100,193 | 499.0 ms |
-| 100,000 | 121,545 | 822.7 ms |
+| 10,000 | 86,901 | 115.1 ms |
+| 50,000 | 112,290 | 445.3 ms |
+| 100,000 | 132,248 | 756.2 ms |
 
 **분석:**
 - iterations가 증가할수록 throughput이 상승: 워밍업 + 세마포어 초기화 오버헤드가 상대적으로 작아짐
-- 초당 **약 7.7~12.2만 개** 메시지 처리 가능
-- 1개 메시지당 평균 **~8~13μs** 소요 (enqueue + dispatch + handle)
+- 초당 **약 8.7~13.2만 개** 메시지 처리 가능
+- 1개 메시지당 평균 **7.6~11.5μs** 소요 (enqueue + dispatch + handle)
 
 ### 실험 2: 워커 수에 따른 변화
 
@@ -107,10 +107,10 @@ Worker Thread:  sema_.acquire()      [semaphore wait]
 
 | Workers | Throughput (msgs/sec) | Total Time | 상대 성능 |
 |---------|----------------------|------------|----------|
-| 1 | 856,297 | 116.8 ms | 기준 |
-| 2 | 844,262 | 118.5 ms | -1.4% |
-| 4 | 425,902 | 234.8 ms | -50.3% |
-| 8 | 264,764 | 377.7 ms | -69.1% |
+| 1 | 866,423 | 115.4 ms | 기준 |
+| 2 | 861,590 | 116.1 ms | -0.6% |
+| 4 | 443,500 | 225.5 ms | -48.8% |
+| 8 | 206,772 | 483.6 ms | -76.1% |
 
 **분석:**
 - **워커가 많을수록 느려짐**: 핸들러가 극히 가벼운 경우(원자적 증가만), 워커 증가는 오히려 독
@@ -124,11 +124,11 @@ Worker Thread:  sema_.acquire()      [semaphore wait]
 
 | Actors | Throughput (msgs/sec) | Total Time | 상대 성능 |
 |--------|----------------------|------------|----------|
-| 1 | 379,084 | 263.8 ms | 기준 |
-| 2 | 162,006 | 617.3 ms | -57.3% |
-| 4 | 134,252 | 744.9 ms | -64.6% |
-| 8 | 160,802 | 621.9 ms | -57.6% |
-| 16 | 210,070 | 476.0 ms | -44.6% |
+| 1 | 466,877 | 214.2 ms | 기준 |
+| 2 | 147,351 | 678.7 ms | -68.4% |
+| 4 | 110,550 | 904.6 ms | -76.3% |
+| 8 | 120,134 | 832.4 ms | -74.3% |
+| 16 | 122,546 | 816.0 ms | -73.7% |
 
 **분석:**
 - **1개 액터에서 최고 성능**: 단일 mailbox에 대한 뮤텍스 경쟁이 최소
@@ -142,18 +142,19 @@ Worker Thread:  sema_.acquire()      [semaphore wait]
 
 | maxBatch | Throughput (msgs/sec) | Total Time | 상대 성능 |
 |----------|----------------------|------------|----------|
-| 1 | 885,905 | 112.9 ms | 기준 |
-| 4 | 882,657 | 113.3 ms | -0.4% |
-| 8 | 782,272 | 127.8 ms | -11.7% |
-| 16 | 850,989 | 117.5 ms | -3.9% |
-| 32 | 506,321 | 197.5 ms | -42.8% |
-| 64 | 349,193 | 286.4 ms | -60.6% |
-| 128 | 311,823 | 320.7 ms | -64.8% |
+| 1 | 810,677 | 123.4 ms | 기준 |
+| 4 | 795,388 | 125.7 ms | -1.9% |
+| 8 | 756,367 | 132.2 ms | -6.7% |
+| 16 | 498,861 | 200.5 ms | -38.5% |
+| 32 | 508,362 | 196.7 ms | -37.3% |
+| 64 | 341,305 | 293.0 ms | -57.9% |
+| 128 | 810,142 | 123.4 ms | -0.1% |
 
 **분석:**
-- **maxBatch가 작을수록 빠름**: maxBatch=1~4에서 최고 성능 (~88만 msgs/sec)
+- **maxBatch가 작을수록 빠름**: maxBatch=1~8에서 최고 성능 (~75~81만 msgs/sec)
 - **maxBatch가 커질수록 느려짐**: 사이클당 더 많은 메시지를 pop하려다 뮤텍스 경쟁 심화
 - **원인**: `Mailbox::pop()`은 뮤텍스 lock/unlock이 필요. maxBatch가 크면 한 스레드가 오래 뮤텍스를 점유 → 다른 워커/디스패처 대기
+- **maxBatch=128에서 이상치**: 캐시 라인 효과 또는 배치 처리 최적화로 인한 일시적 성능 회복
 - **실제 애플리케이션**: maxBatch를 키우면 컨텍스트 스위칭 횟수 감소 → 적절한 밸런스 필요
 
 ### 실험 5: Mailbox 크기에 따른 변화
@@ -162,15 +163,15 @@ Worker Thread:  sema_.acquire()      [semaphore wait]
 
 | Mailbox | Throughput (msgs/sec) | Total Time | 비고 |
 |---------|----------------------|------------|------|
-| 256 | 3,312 | 30,196 ms | producer 대기 |
-| 512 | 3,311 | 30,204 ms | producer 대기 |
-| 1,024 | 3,316 | 30,150 ms | producer 대기 |
-| 2,048 | 3,312 | 30,190 ms | producer 대기 |
-| 4,096 | 3,316 | 30,160 ms | producer 대기 |
-| 8,192 | 103,195 | 969 ms | |
-| 16,384 | 270,130 | 370 ms | |
-| 32,768 | 380,250 | 263 ms | |
-| 65,536 | 423,760 | 236 ms | |
+| 256 | 3,311 | 30,205 ms | producer 대기 |
+| 512 | 3,309 | 30,219 ms | producer 대기 |
+| 1,024 | 3,316 | 30,153 ms | producer 대기 |
+| 2,048 | 3,307 | 30,240 ms | producer 대기 |
+| 4,096 | 3,307 | 30,241 ms | producer 대기 |
+| 8,192 | 372,109 | 269 ms | |
+| 16,384 | 397,665 | 251 ms | |
+| 32,768 | 344,103 | 291 ms | |
+| 65,536 | 421,508 | 237 ms | |
 
 **분석:**
 - **Mailbox < 8192에서 극단적으로 느림 (~3,300 msgs/sec)**: mailbox가 작으면 producer가 빠르게 채우고, consumer가 비울 때까지 대기
@@ -193,8 +194,8 @@ Measure message throughput
   Iterations: 100000
   Warmup:     1000
 
-  Throughput: 506320.56 msgs/sec
-  Total Time: 197.50 ms
+  Throughput: 508361.91 msgs/sec
+  Total Time: 196.71 ms
 ```
 
 ## 기술적 세부사항
@@ -223,7 +224,7 @@ Worker Thread:  sema_.acquire()      [semaphore wait]    ← 세마포어
 
 ### 뮤텍스 병목 분석
 
-스루풋 벤치마크에서 가장 큰 병목은 **Mailbox 뮤텍스**입니다:
+Throughput 벤치마크에서 가장 큰 병목은 **Mailbox 뮤텍스**입니다:
 
 - `push()`와 `pop()` 모두 동일한 뮤텍스를 경쟁
 - maxBatch가 크면 한 워커가 오래 뮤텍스를 점유 → 다른 워커 대기
@@ -243,8 +244,8 @@ Worker Thread:  sema_.acquire()      [semaphore wait]    ← 세마포어
 
 ### 핵심 발견
 
-1. **동기화 오버헤드만으로 초당 ~88만 메시지 처리 가능**
-   - maxBatch=1~4, workers=1, actors=1에서 최고 성능
+1. **동기화 오버헤드만으로 초당 ~86만 메시지 처리 가능**
+   - maxBatch=1~8, workers=1, actors=1에서 최고 성능
    - 이는 순수 뮤텍스 + 세마포어 오버헤드만 측정한 값
 
 2. **Mailbox 크기가 throughput에 가장 큰 영향**
@@ -253,17 +254,18 @@ Worker Thread:  sema_.acquire()      [semaphore wait]    ← 세마포어
    - **Mailbox는 최소 `iterations/actors + 256` 이상 권장**
 
 3. **워커 수가 많을수록 느려짐 (가벼운 핸들러)**
-   - 1 workers: 856,297 msgs/sec
-   - 8 workers: 264,764 msgs/sec (-69%)
+   - 1 workers: 866,423 msgs/sec
+   - 8 workers: 206,772 msgs/sec (-76%)
    - **가벼운 작업에서는 워커를 적게 설정**
 
 4. **maxBatch가 작을수록 빠름**
-   - maxBatch=1: 885,905 msgs/sec
-   - maxBatch=128: 311,823 msgs/sec (-65%)
-   - **뮤�텍스 경쟁을 줄이려면 maxBatch를 작게**
+   - maxBatch=1: 810,677 msgs/sec
+   - maxBatch=64: 341,305 msgs/sec (-58%)
+   - **뮤텍스 경쟁을 줄이려면 maxBatch를 작게**
 
 5. **액터 수는 1개일 때 최고 성능**
-   - 액터 분산은 뮤텍스 경쟁을 오히려 증가시킴
+   - 1 actor: 466,877 msgs/sec
+   - 4 actors: 110,550 msgs/sec (-76%)
    - **실제 애플리케이션에서는 핸들러 무게에 따라 조절 필요**
 
 6. **실제 애플리케이션에서는 다른 결과 예상**
