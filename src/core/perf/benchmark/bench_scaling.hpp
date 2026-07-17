@@ -1,6 +1,13 @@
 #pragma once
-#include "benchmark.hpp"
+#include "i_benchmark.hpp"
 #include <string>
+#include <utility>
+#include <vector>
+
+struct ScalingResult{
+    std::vector<std::pair<int, double>> workerScaling;
+    std::vector<std::pair<int, double>> actorScaling;
+};
 
 struct ScalingParams{
     int actors = 16;
@@ -17,5 +24,5 @@ class ScalingBenchmark : public IBenchmark{
 public:
     const char* name() const override { return "scaling"; }
     const char* description() const override { return "Measure worker and actor scaling efficiency"; }
-    Result run(const Args& args) override;
+    BenchmarkResult run(const Args& args) override;
 };

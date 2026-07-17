@@ -1,4 +1,5 @@
 #include "bench_contention.hpp"
+#include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
@@ -32,7 +33,7 @@ ContentionParams ContentionParams::parse(const IBenchmark::Args& args){
     return p;
 }
 
-IBenchmark::Result ContentionBenchmark::run(const Args& args){
+BenchmarkResult ContentionBenchmark::run(const Args& args){
     bool wasMetricsEnabled = Metrics::isEnabled();
     ContentionParams p = ContentionParams::parse(args);
 
@@ -71,7 +72,7 @@ IBenchmark::Result ContentionBenchmark::run(const Args& args){
     int64_t actualTotal = static_cast<int64_t>(p.producers) * msgsPerProducer;
     uint64_t totalNs = runOnce(p.producers, msgsPerProducer);
 
-    IBenchmark::Result res;
+    BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, 1, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(actualTotal) + 256, p.warmup};

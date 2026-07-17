@@ -3,7 +3,6 @@
 #include <iomanip>
 
 void Benchmark::registerBenchmark(const std::string& name, BenchmarkCreator creator){
-    // name/description을 미리 캐시
     auto bench = creator();
     entries().push_back({bench->name(), bench->description(), std::move(creator)});
 }
@@ -56,8 +55,10 @@ std::string Benchmark::runAll(const BenchmarkArgs& args){
                 oss << "  Sent: " << result.backpressure.sent
                     << "  Dropped: " << result.backpressure.dropped << "\n";
             }
-            std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.totalDurationNs / 1000000.0);
-            oss << "  Total Time: " << buf << " ms\n";
+            if(result.throughput.totalDurationNs > 0){
+                std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.totalDurationNs / 1000000.0);
+                oss << "  Total Time: " << buf << " ms\n";
+            }
         }else{
             oss << "  error: " << result.errorMsg << "\n";
         }

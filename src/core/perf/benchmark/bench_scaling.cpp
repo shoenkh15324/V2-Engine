@@ -1,4 +1,5 @@
 #include "bench_scaling.hpp"
+#include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
@@ -32,7 +33,7 @@ ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
     return p;
 }
 
-IBenchmark::Result ScalingBenchmark::run(const Args& args){
+BenchmarkResult ScalingBenchmark::run(const Args& args){
     bool wasMetricsEnabled = Metrics::isEnabled();
     ScalingParams p = ScalingParams::parse(args);
 
@@ -88,15 +89,15 @@ IBenchmark::Result ScalingBenchmark::run(const Args& args){
         ? static_cast<uint64_t>(static_cast<double>(p.iterations) * 1000000000.0 / baseTp)
         : 0;
 
-    IBenchmark::Result res;
+    BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, p.actors, p.maxbatch, 0, p.warmup};
     res.throughput.iterations = p.iterations;
     res.throughput.totalDurationNs = estimatedDurationNs;
     res.throughput.msgsPerSec = baseTp;
-    res.scalingCurve.workerScaling = std::move(workerResults);
-    res.scalingCurve.actorScaling = std::move(actorResults);
+    res.scaling.workerScaling = std::move(workerResults);
+    res.scaling.actorScaling = std::move(actorResults);
 
     Metrics::setEnabled(wasMetricsEnabled);
     return res;

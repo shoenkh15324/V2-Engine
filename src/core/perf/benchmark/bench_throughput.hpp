@@ -1,10 +1,16 @@
 #pragma once
-#include "benchmark.hpp"
+#include "i_benchmark.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include <atomic>
 #include <cstdint>
 #include <string>
+
+struct ThroughputResult{
+    uint64_t iterations{0};
+    uint64_t totalDurationNs{0};
+    double msgsPerSec{0.0};
+};
 
 struct ThroughputParams{
     int workers = 4;
@@ -41,5 +47,5 @@ class ThroughputBenchmark : public IBenchmark{
 public:
     const char* name() const override { return "throughput"; }
     const char* description() const override { return "Measure message throughput"; }
-    Result run(const Args& args) override;
+    BenchmarkResult run(const Args& args) override;
 };

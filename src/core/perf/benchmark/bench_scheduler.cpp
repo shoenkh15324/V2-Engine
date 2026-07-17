@@ -1,4 +1,5 @@
 #include "bench_scheduler.hpp"
+#include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
@@ -28,7 +29,7 @@ SchedulerParams SchedulerParams::parse(const IBenchmark::Args& args){
     return p;
 }
 
-IBenchmark::Result SchedulerBenchmark::run(const Args& args){
+BenchmarkResult SchedulerBenchmark::run(const Args& args){
     bool wasMetricsEnabled = Metrics::isEnabled();
     SchedulerParams p = SchedulerParams::parse(args);
 
@@ -90,20 +91,19 @@ IBenchmark::Result SchedulerBenchmark::run(const Args& args){
         p999 = intervals[std::min(n * 999 / 1000, n - 1)];
     }
 
-    IBenchmark::Result res;
+    BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, 0, p.maxbatch, 0, p.warmup};
     res.throughput.iterations = totalFirings;
     res.throughput.totalDurationNs = static_cast<uint64_t>(p.durationMs) * 1000000;
-    res.throughput.msgsPerSec = 0.0;
-    res.latency.avgNs = meanIntervalNs;
-    res.latency.minNs = minIntervalNs;
-    res.latency.maxNs = maxIntervalNs;
-    res.latency.percentiles.p50 = p50;
-    res.latency.percentiles.p95 = p95;
-    res.latency.percentiles.p99 = p99;
-    res.latency.percentiles.p999 = p999;
+    res.scheduler.avgIntervalNs = meanIntervalNs;
+    res.scheduler.minIntervalNs = minIntervalNs;
+    res.scheduler.maxIntervalNs = maxIntervalNs;
+    res.scheduler.p50 = p50;
+    res.scheduler.p95 = p95;
+    res.scheduler.p99 = p99;
+    res.scheduler.p999 = p999;
 
     Metrics::setEnabled(wasMetricsEnabled);
     return res;

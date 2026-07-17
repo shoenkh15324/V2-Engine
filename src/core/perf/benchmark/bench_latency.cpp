@@ -1,4 +1,5 @@
 #include "bench_latency.hpp"
+#include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
@@ -27,7 +28,7 @@ LatencyParams LatencyParams::parse(const IBenchmark::Args& args){
     return p;
 }
 
-IBenchmark::Result LatencyBenchmark::run(const Args& args){
+BenchmarkResult LatencyBenchmark::run(const Args& args){
     bool wasMetricsEnabled = Metrics::isEnabled();
     LatencyParams p = LatencyParams::parse(args);
 
@@ -91,7 +92,7 @@ IBenchmark::Result LatencyBenchmark::run(const Args& args){
     double sum = 0.0;
     for(auto lat : latencies) sum += static_cast<double>(lat);
 
-    IBenchmark::Result res;
+    BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, 1, p.maxbatch, mailboxSize, p.warmup};

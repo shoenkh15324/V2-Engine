@@ -1,5 +1,5 @@
 #pragma once
-#include "benchmark.hpp"
+#include "i_benchmark.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/time/time.hpp"
@@ -7,6 +7,26 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+
+struct ActorSnap{
+    std::string name;
+    size_t mailboxCapacity{0};
+    uint64_t msgProcessed{0};
+};
+
+struct LatencyPercentiles{
+    double p50{0.0};
+    double p95{0.0};
+    double p99{0.0};
+    double p999{0.0};
+};
+
+struct LatencyResult{
+    double avgNs{0.0};
+    double minNs{0.0};
+    double maxNs{0.0};
+    LatencyPercentiles percentiles{};
+};
 
 struct LatencyParams{
     int workers = 4;
@@ -52,5 +72,5 @@ class LatencyBenchmark : public IBenchmark{
 public:
     const char* name() const override { return "latency"; }
     const char* description() const override { return "Measure per-message end-to-end latency"; }
-    Result run(const Args& args) override;
+    BenchmarkResult run(const Args& args) override;
 };

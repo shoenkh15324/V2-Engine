@@ -10,7 +10,7 @@ V2-Engine actor 시스템의 최대 메시지 처리량(throughput)을 측정합
 
 ### 왜 이것이 중요한가?
 
- actor 시스템에서 메시지는 다음 단계를 거쳐 처리됩니다:
+actor 시스템에서 메시지는 다음 단계를 거쳐 처리됩니다:
 
 ```
 sendMsg() → Mailbox::push() → Dispatcher::dispatch() → Worker → Actor::handle()
@@ -38,7 +38,7 @@ sendMsg() → Mailbox::push() → Dispatcher::dispatch() → Worker → Actor::h
 | 파라미터 | 기본값 | 의미 |
 |---------|-------|------|
 | `--workers` | 4 | 워커 스레드 수 |
-| `--actors` | 4 | 타겟 액터 수 |
+| `--actors` | 1 | 타겟 액터 수 |
 | `--iterations` | 10,000 | 전송할 메시지 수 |
 | `--maxbatch` | 32 | 워커당 최대 배치 크기 |
 | `--warmup` | 0 | 워밍업 메시지 수 |
@@ -73,7 +73,7 @@ Total Time: ~500 ms
 
 **해석:**
 - 메시지 핸들러가 극히 가벼운 경우(원자적 증가만), **워커가 많을수록 느려짐**
-- 원인: 세마포어 wake-up + 뮤프스 경쟁 + 컨텍스트 스위칭 비용 > 병렬화 이득
+- 원인: 세마포어 wake-up + 뮤텍스 경쟁 + 컨텍스트 스위칭 비용 > 병렬화 이득
 - **실제 애플리케이션**에서는 핸들러가 무거워지므로 다른 결과 예상
 
 ## 출력 예시

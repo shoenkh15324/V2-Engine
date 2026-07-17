@@ -78,7 +78,7 @@ Latency Distribution:
 ### 결과 분석
 
 **P50 = 6.2μs**: 메시지의 절반은 6.2μs 안에 처리됩니다.
-- `enqueue()` → 뮤프스 잠금/해제 ≈ 50ns
+- `enqueue()` → 뮤텍스 잠금/해제 ≈ 50ns
 - `dispatch()` → 세마포어 시그널 ≈ 100ns
 - `dequeue()` → 워커가 배치로 꺼냄 → `handle()` 실행
 - 이 모든 것이 6.2μs 안에 완료됨

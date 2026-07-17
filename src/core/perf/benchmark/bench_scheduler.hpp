@@ -1,11 +1,23 @@
 #pragma once
-#include "benchmark.hpp"
+#include "i_benchmark.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/time/time.hpp"
 #include <mutex>
 #include <string>
 #include <vector>
+
+struct SchedulerResult{
+    uint64_t iterations{0};
+    uint64_t totalDurationNs{0};
+    double avgIntervalNs{0.0};
+    double minIntervalNs{0.0};
+    double maxIntervalNs{0.0};
+    double p50{0.0};
+    double p95{0.0};
+    double p99{0.0};
+    double p999{0.0};
+};
 
 struct SchedulerParams{
     int workers = 4;
@@ -40,5 +52,5 @@ class SchedulerBenchmark : public IBenchmark{
 public:
     const char* name() const override { return "scheduler"; }
     const char* description() const override { return "Measure timer scheduling precision"; }
-    Result run(const Args& args) override;
+    BenchmarkResult run(const Args& args) override;
 };

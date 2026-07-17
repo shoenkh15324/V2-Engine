@@ -369,9 +369,10 @@ std::string CmdActor::formatBenchmarkResult(const BenchmarkResult& result){
         << "  Workers:    " << result.config.workers << "\n"
         << "  Actors:     " << result.config.actors << "\n"
         << "  MaxBatch:   " << result.config.maxBatch << "\n"
-        << "  Mailbox:    " << result.config.mailboxSize << "\n"
-        << "  Iterations: " << result.throughput.iterations << "\n"
-        << "  Warmup:     " << result.config.warmup << "\n";
+        << "  Mailbox:    " << result.config.mailboxSize << "\n";
+    if(result.throughput.iterations > 0)
+        oss << "  Iterations: " << result.throughput.iterations << "\n";
+    oss << "  Warmup:     " << result.config.warmup << "\n";
 
     char buf[64];
     if(result.throughput.msgsPerSec > 0.0){
@@ -382,8 +383,10 @@ std::string CmdActor::formatBenchmarkResult(const BenchmarkResult& result){
         std::snprintf(buf, sizeof(buf), "%.2f", result.latency.avgNs);
         oss << "  Latency:    " << buf << " ns/msg\n";
     }
-    std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.totalDurationNs / 1000000.0);
-    oss << "  Total Time: " << buf << " ms\n";
+    if(result.throughput.totalDurationNs > 0){
+        std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.totalDurationNs / 1000000.0);
+        oss << "  Total Time: " << buf << " ms\n";
+    }
 
     if(result.latency.percentiles.p50 > 0.0){
         oss << "\n[Latency Distribution]\n";
@@ -413,10 +416,28 @@ std::string CmdActor::formatBenchmarkResult(const BenchmarkResult& result){
         oss << "  Drain Time:  " << buf << " ms\n";
     }
 
-    if(!result.scalingCurve.workerScaling.empty()){
+    if(result.scheduler.iterations > 0){
+        oss << "\n[Scheduler]\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.avgIntervalNs);
+        oss << "  Avg Interval: " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.minIntervalNs);
+        oss << "  Min Interval: " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.maxIntervalNs);
+        oss << "  Max Interval: " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p50);
+        oss << "  P50:          " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p95);
+        oss << "  P95:          " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p99);
+        oss << "  P99:          " << buf << " ns\n";
+        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p999);
+        oss << "  P999:         " << buf << " ns\n";
+    }
+
+    if(!result.scaling.workerScaling.empty()){
         oss << "\n[Worker Scaling]\n";
-        double baseTp = result.scalingCurve.workerScaling.front().second;
-        for(auto& [w, tp] : result.scalingCurve.workerScaling){
+        double baseTp = result.scaling.workerScaling.front().second;
+        for(auto& [w, tp] : result.scaling.workerScaling){
             double eff = (baseTp > 0) ? (tp / (w * baseTp)) : 0.0;
             std::snprintf(buf, sizeof(buf), "%.0f", tp);
             oss << "  " << w << " workers: " << buf << " m/s";
@@ -424,8 +445,8 @@ std::string CmdActor::formatBenchmarkResult(const BenchmarkResult& result){
             oss << " (" << buf << "x)\n";
         }
         oss << "\n[Actor Scaling]\n";
-        baseTp = result.scalingCurve.actorScaling.front().second;
-        for(auto& [a, tp] : result.scalingCurve.actorScaling){
+        baseTp = result.scaling.actorScaling.front().second;
+        for(auto& [a, tp] : result.scaling.actorScaling){
             double eff = (baseTp > 0) ? (tp / (a * baseTp)) : 0.0;
             std::snprintf(buf, sizeof(buf), "%.0f", tp);
             oss << "  " << a << " actors: " << buf << " m/s";

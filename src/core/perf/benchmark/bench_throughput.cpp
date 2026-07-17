@@ -1,4 +1,5 @@
 #include "bench_throughput.hpp"
+#include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
@@ -31,7 +32,7 @@ ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
     return p;
 }
 
-IBenchmark::Result ThroughputBenchmark::run(const Args& args){
+BenchmarkResult ThroughputBenchmark::run(const Args& args){
     bool wasMetricsEnabled = Metrics::isEnabled();
     ThroughputParams p = ThroughputParams::parse(args);
     int perActor = p.iterations / p.actors;
@@ -66,7 +67,7 @@ IBenchmark::Result ThroughputBenchmark::run(const Args& args){
 
     uint64_t totalNs = runOnce(p.iterations);
 
-    IBenchmark::Result res;
+    BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, p.actors, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(perActor) + 256, p.warmup};

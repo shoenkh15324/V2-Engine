@@ -55,7 +55,7 @@ efficiency(N) = throughput(N) / (N × baseThroughput)
 
 ```
 핸들링 비용:  ~5ns  (원자적 증가)
-동기화 비용: ~500ns (뮤프스 + 세마포어 + 컨텍스트 스위칭)
+동기화 비용: ~500ns (뮤텍스 + 세마포어 + 컨텍스트 스위칭)
 ```
 
 동기화 비용이 핸들링 비용의 **100배**. 따라서:
@@ -76,7 +76,7 @@ efficiency(N) = throughput(N) / (N × baseThroughput)
 **분석:**
 - 1 worker가 가장 빠름 → **동기화 오버헤드가 병렬화 이득을 압도**
 - 2 workers: -11% (세마포어 경쟁 시작)
-- 4 workers: -85% (본격적 뮤프스 + 세마포어 경쟁)
+- 4 workers: -85% (본격적 뮤텍스 + 세마포어 경쟁)
 - 8 workers: -95% (심각한 스레드 경쟁)
 
 ### 실험 2: Actor Scaling (workers=4 고정)
@@ -91,7 +91,7 @@ efficiency(N) = throughput(N) / (N × baseThroughput)
 **분석:**
 - 1 actor가 가장 빠름 → 메일박스가 분산되면 dispatch 비용 증가
 - 2 actors: -52% (dispatch가 2개 메일박스를 관리)
-- 8 actors: 약간 회복 (메일박스당 메시지 수 감소 → 뮤프스 경쟁 감소)
+- 8 actors: 약간 회복 (메일박스당 메시지 수 감소 → 뮤텍스 경쟁 감소)
 
 ### 스케일링 곡선 시각화
 
@@ -151,7 +151,7 @@ Measure worker and actor scaling efficiency
 
 단일 워커의 장점:
 - 세마포어 경쟁 없음
-- 뮤프스 contention 없음
+- 뮤텍스 contention 없음
 - 캐시 locality 극대화
 - 컨텍스트 스위칭 없음
 
@@ -159,8 +159,8 @@ Measure worker and actor scaling efficiency
 
 스케일링을 개선하려면:
 1. **핸들러를 무겁게**: I/O, DB, 계산 등 → 동기화 비용 상쇄
-2. **메일박스 분리**: 액터별 독립 메일박스 → 뮤프스 경쟁 감소
-3. **Lock-free 구조**: 뮤프스 대신 CAS 기반 큐 사용
+2. **메일박스 분리**: 액터별 독립 메일박스 → 뮤텍스 경쟁 감소
+3. **Lock-free 구조**: 뮤텍스 대신 CAS 기반 큐 사용
 4. **배치 최적화**: maxBatch 조정으로 디스패치 빈도 감소
 
 ## 결론

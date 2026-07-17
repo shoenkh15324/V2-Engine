@@ -1,19 +1,51 @@
 #pragma once
 #include "i_benchmark.hpp"
+#include "bench_throughput.hpp"
+#include "bench_latency.hpp"
+#include "bench_contention.hpp"
+#include "bench_scaling.hpp"
+#include "bench_backpressure.hpp"
+#include "bench_scheduler.hpp"
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <map>
 #include <memory>
 #include <functional>
 
+struct BenchmarkConfig{
+    int workers{0};
+    int actors{0};
+    int maxBatch{0};
+    size_t mailboxSize{0};
+    int warmup{0};
+};
+
+struct BenchmarkResult{
+    std::string benchmarkName;
+    std::string description;
+
+    bool success{true};
+    std::string errorMsg;
+
+    BenchmarkConfig config{};
+    std::vector<ActorSnap> actorSnaps;
+
+    ThroughputResult throughput{};
+    LatencyResult latency{};
+    BackpressureResult backpressure{};
+    ScalingResult scaling{};
+    SchedulerResult scheduler{};
+};
+
+using BenchmarkArgs = IBenchmark::Args;
+using BenchmarkCreator = std::function<std::unique_ptr<IBenchmark>()>;
+
 struct BenchmarkInfo{
     std::string name;
     std::string description;
 };
-
-using BenchmarkResult = IBenchmark::Result;
-using BenchmarkArgs = IBenchmark::Args;
-using BenchmarkCreator = std::function<std::unique_ptr<IBenchmark>()>;
 
 class Benchmark{
 public:

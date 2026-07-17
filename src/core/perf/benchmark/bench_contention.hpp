@@ -1,6 +1,12 @@
 #pragma once
-#include "benchmark.hpp"
+#include "i_benchmark.hpp"
 #include <string>
+
+struct ContentionResult{
+    uint64_t iterations{0};
+    uint64_t totalDurationNs{0};
+    double msgsPerSec{0.0};
+};
 
 struct ContentionParams{
     int workers = 4;
@@ -17,5 +23,5 @@ class ContentionBenchmark : public IBenchmark{
 public:
     const char* name() const override { return "contention"; }
     const char* description() const override { return "Measure multi-producer contention performance"; }
-    Result run(const Args& args) override;
+    BenchmarkResult run(const Args& args) override;
 };
