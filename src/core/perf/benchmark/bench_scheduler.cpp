@@ -95,8 +95,8 @@ BenchmarkResult SchedulerBenchmark::run(const Args& args){
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, 0, p.maxbatch, 0, p.warmup};
-    res.throughput.iterations = totalFirings;
     res.throughput.totalDurationNs = static_cast<uint64_t>(p.durationMs) * 1000000;
+    res.scheduler.iterations = totalFirings;
     res.scheduler.avgIntervalNs = meanIntervalNs;
     res.scheduler.minIntervalNs = minIntervalNs;
     res.scheduler.maxIntervalNs = maxIntervalNs;

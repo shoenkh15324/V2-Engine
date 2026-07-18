@@ -41,9 +41,7 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
 
         ActorSystem sys(p.workers, p.maxbatch);
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iters) + 256;
-        auto* act = sys.createActor<LatencyBenchActor>(
-            "latency_actor", mbSize, lats, sendTs, ack
-        );
+        auto* act = sys.createActor<LatencyBenchActor>("latency_actor", mbSize, lats, sendTs, ack);
         sys.start();
         auto st = Time::now();
         for(int i = 0; i < iters; i++){

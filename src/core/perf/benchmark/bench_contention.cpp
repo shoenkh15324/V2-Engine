@@ -76,9 +76,7 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
     res.config = {p.workers, 1, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(actualTotal) + 256, p.warmup};
     res.throughput.iterations = static_cast<uint64_t>(actualTotal);
     res.throughput.totalDurationNs = totalNs;
-    res.throughput.msgsPerSec = (totalNs > 0)
-        ? (static_cast<double>(actualTotal) * 1000000000.0 / static_cast<double>(totalNs))
-        : 0.0;
+    res.throughput.msgsPerSec = (totalNs > 0) ? (static_cast<double>(actualTotal) * 1000000000.0 / static_cast<double>(totalNs)) : 0.0;
 
     Metrics::setEnabled(wasMetricsEnabled);
     return res;
