@@ -2,7 +2,7 @@
 #include <atomic>
 #include <memory>
 #include "core/actor_system/messages/message.hpp"
-#include "core/actor_system/runtime/mailbox.hpp"
+#include "core/actor_system/runtime/i_mailbox.hpp"
 #include "core/actor_system/runtime/i_scheduler.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 
@@ -11,7 +11,7 @@ class Dispatcher;
 
 class ActorContext{
 public:
-    ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry);
+    ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry);
     ~ActorContext();
 
     ActorContext(const ActorContext&) = delete;
@@ -31,7 +31,7 @@ public:
 
 private:
     std::unique_ptr<Actor> actor_;
-    Mailbox<Message> mailbox_;
+    std::unique_ptr<IMailbox<Message>> mailbox_;
     std::atomic<bool> scheduled_{false};
     Dispatcher* dispatcher_ = nullptr;
     IScheduler* scheduler_ = nullptr;

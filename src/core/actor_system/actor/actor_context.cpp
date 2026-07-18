@@ -4,8 +4,8 @@
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 
-ActorContext::ActorContext(std::unique_ptr<Actor> actor, size_t mailboxSize, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
-: actor_(std::move(actor)), mailbox_(mailboxSize){
+ActorContext::ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
+: actor_(std::move(actor)), mailbox_(std::move(mailbox)){
     actor_->actorCtx_ = this;
     dispatcher_ = dispatcher;
     scheduler_ = scheduler;
@@ -19,11 +19,11 @@ ActorContext::~ActorContext(){
 }
 
 void ActorContext::enqueue(Message msg){
-    if(!mailbox_.push(std::move(msg))){
+    if(!mailbox_->push(std::move(msg))){
         Metrics::recordEnqueue(actor_->id(), false, 0);
         return;
     }
-    Metrics::recordEnqueue(actor_->id(), true, mailbox_.count());
+    Metrics::recordEnqueue(actor_->id(), true, mailbox_->count());
     if(dispatcher_ && !scheduled_.exchange(true)){
         dispatcher_->dispatch(this);
     }
@@ -34,7 +34,7 @@ int ActorContext::run(int maxBatch){
     Message msg;
     int processed = 0;
     while((maxBatch < 0) || (processed < maxBatch)){
-        if(!mailbox_.pop(msg)) break;
+        if(!mailbox_->pop(msg)) break;
         actor_->handle(msg);
         processed++;
     }
@@ -43,16 +43,16 @@ int ActorContext::run(int maxBatch){
     Metrics::recordHandle(actor_->id(), processed, gapNs);
 
     scheduled_ = false;
-    if(!mailbox_.empty()){
+    if(!mailbox_->empty()){
         dispatcher_->dispatch(this);
     }
     return processed;
 }
 
 size_t ActorContext::mailboxCount() const {
-    return mailbox_.count();
+    return mailbox_->count();
 }
 
 size_t ActorContext::mailboxCapacity() const {
-    return mailbox_.capacity();
+    return mailbox_->capacity();
 }

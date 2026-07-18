@@ -1,16 +1,20 @@
 #include <benchmark/benchmark.h>
-#include "core/actor_system/runtime/mailbox.hpp"
+#include "core/actor_system/runtime/mailbox_mutex.hpp"
+#include "core/actor_system/runtime/mailbox_lockfree.hpp"
 
 #define THREAD_MAX_NUM 128
 
+// ── MultiPush: 다중 프로듀서 (MPSC 둘 다 지원) ──
+
+template <typename MailboxT>
 static void MailboxMultiPush(benchmark::State& state){
     const int cap = static_cast<int>(state.range(0));
-    static Mailbox<int>* mb = nullptr;
+    static MailboxT* mb = nullptr;
     static std::atomic<bool> ready{false};
 
     if(state.thread_index() == 0){
         delete mb;
-        mb = new Mailbox<int>(cap);
+        mb = new MailboxT(cap);
         ready.store(true, std::memory_order_release);
     }else{
         while(!ready.load(std::memory_order_acquire));
@@ -19,9 +23,9 @@ static void MailboxMultiPush(benchmark::State& state){
     int val = 42;
     int dummy;
     for(auto _ : state){
-        if(!mb->push(val)){
+        if(!mb->push(std::move(val))){
             mb->pop(dummy);
-            mb->push(val);
+            mb->push(std::move(val));
         }
     }
     state.SetItemsProcessed(state.iterations());
@@ -29,20 +33,23 @@ static void MailboxMultiPush(benchmark::State& state){
         ready.store(false, std::memory_order_relaxed);
     }
 }
-BENCHMARK(MailboxMultiPush)
-    ->Args({64})
-    ->Args({1024})
-    ->Args({4096})
+BENCHMARK (MailboxMultiPush<MutexMailbox<int>>)
+    ->Args({64})->Args({1024})->Args({4096})
     ->ThreadRange(1, THREAD_MAX_NUM);
+BENCHMARK (MailboxMultiPush<LockFreeMailbox<int>>)
+    ->Args({64})->Args({1024})->Args({4096})
+    ->ThreadRange(1, THREAD_MAX_NUM);
+
+// ── MultiPop: 다중 컨슈머 (뮤텍스만) ──
 
 static void MailboxMultiPop(benchmark::State& state){
     const int cap = static_cast<int>(state.range(0));
-    static Mailbox<int>* mb = nullptr;
+    static MutexMailbox<int>* mb = nullptr;
     static std::atomic<bool> ready{false};
 
     if(state.thread_index() == 0){
         delete mb;
-        mb = new Mailbox<int>(cap);
+        mb = new MutexMailbox<int>(cap);
         ready.store(true, std::memory_order_release);
     }else{
         while(!ready.load(std::memory_order_acquire));
@@ -61,19 +68,19 @@ static void MailboxMultiPop(benchmark::State& state){
     }
 }
 BENCHMARK(MailboxMultiPop)
-    ->Args({64})
-    ->Args({1024})
-    ->Args({4096})
+    ->Args({64})->Args({1024})->Args({4096})
     ->ThreadRange(1, THREAD_MAX_NUM);
+
+// ── MultiHalf: 절반 프로듀서 + 절반 컨슈머 (뮤텍스만) ──
 
 static void MailboxMultiHalf(benchmark::State& state){
     const int cap = static_cast<int>(state.range(0));
-    static Mailbox<int>* mb = nullptr;
+    static MutexMailbox<int>* mb = nullptr;
     static std::atomic<bool> ready{false};
 
     if(state.thread_index() == 0){
         delete mb;
-        mb = new Mailbox<int>(cap);
+        mb = new MutexMailbox<int>(cap);
         ready.store(true, std::memory_order_release);
     }else{
         while(!ready.load(std::memory_order_acquire));
@@ -84,7 +91,7 @@ static void MailboxMultiHalf(benchmark::State& state){
     int dummy;
     for(auto _ : state){
         if(isProducer){
-            if(!mb->push(val)){
+            if(!mb->push(std::move(val))){
                 mb->pop(dummy);
                 mb->pop(val);
             }
@@ -101,19 +108,19 @@ static void MailboxMultiHalf(benchmark::State& state){
     }
 }
 BENCHMARK(MailboxMultiHalf)
-    ->Args({64})
-    ->Args({1024})
-    ->Args({4096})
+    ->Args({64})->Args({1024})->Args({4096})
     ->ThreadRange(2, THREAD_MAX_NUM);
+
+// ── MultiPingPong: 각 스레드가 push+pop (뮤텍스만) ──
 
 static void MailboxMultiPingPong(benchmark::State& state){
     const int cap = static_cast<int>(state.range(0));
-    static Mailbox<int>* mb = nullptr;
+    static MutexMailbox<int>* mb = nullptr;
     static std::atomic<bool> ready{false};
 
     if(state.thread_index() == 0){
         delete mb;
-        mb = new Mailbox<int>(cap);
+        mb = new MutexMailbox<int>(cap);
         ready.store(true, std::memory_order_release);
     }else{
         while(!ready.load(std::memory_order_acquire));
@@ -123,12 +130,12 @@ static void MailboxMultiPingPong(benchmark::State& state){
     int out;
     for(auto _ : state){
         do{
-            if(mb->push(val)) break;
+            if(mb->push(std::move(val))) break;
             mb->pop(out);
         }while(true);
         do{
             if(mb->pop(out)) break;
-            mb->push(val);
+            mb->push(std::move(val));
         }while(true);
     }
     state.SetItemsProcessed(state.iterations() * 2);
@@ -137,7 +144,5 @@ static void MailboxMultiPingPong(benchmark::State& state){
     }
 }
 BENCHMARK(MailboxMultiPingPong)
-    ->Args({64})
-    ->Args({1024})
-    ->Args({4096})
+    ->Args({64})->Args({1024})->Args({4096})
     ->ThreadRange(1, THREAD_MAX_NUM);
