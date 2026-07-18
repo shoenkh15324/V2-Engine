@@ -29,7 +29,7 @@ public:
 
     template<typename T, typename ... Args>
     T* createActor(const std::string& name, size_t mailboxSize = 512, Args&& ... args){
-        return createActorImpl<T>(name, MailboxType::Mutex, mailboxSize, std::forward<Args>(args)...);
+        return createActorImpl<T>(name, MailboxType::LockFree, mailboxSize, std::forward<Args>(args)...);
     }
 
     template<typename T, typename ... Args>

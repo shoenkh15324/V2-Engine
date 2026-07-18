@@ -13,38 +13,58 @@
 |------|------|------|
 | 6개 벤치마크 구현 | ✅ 완료 | throughput, latency, contention, scaling, backpressure, scheduler |
 | CLI 통합 | ✅ 완료 | `v2_cli benchmark <name>` 명령어 동작 |
-| 벤치마크 문서화 | ✅ 완료 | `docs/benchmark/` — 실험 설계, 결과, 분석 포함 |
+| 벤치마크 문서화 | ✅ 완료 | `docs/benchmark/` — 한국어, 표준 템플릿 통일 |
 | 종합 분석 | ✅ 완료 | `docs/benchmark/README.md` — 시스템 전체 평가 |
 | sleep-wait 제거 | ✅ 완료 | spin-wait로 변경하여 측정 정확도 향상 |
 | CLI 인자 파싱 버그 수정 | ✅ 완료 | `key=value` → `--key value` 변환 |
 | scheduler 버그 수정 | ✅ 완료 | `res.throughput.iterations` → `res.scheduler.iterations` |
 
-### 현재 벤치마크 핵심 결과
+### 메일박스 시스템 ✅
+
+| 항목 | 상태 | 상세 |
+|------|------|------|
+| IMailbox 인터페이스 | ✅ 완료 | `push()`, `pop()`, `popBatch()`, `empty()`, `count()`, `capacity()` |
+| MutexMailbox 구현 | ✅ 완료 | `std::mutex` 기반, MPMC 가능 |
+| LockFreeMailbox 구현 | ✅ 완료 | CAS 기반 MPSC, **기본값** |
+| MailboxType 열거형 | ✅ 완료 | `Mutex`, `LockFree` 런타임 선택 |
+| ActorContext 통합 | ✅ 완료 | `unique_ptr<IMailbox<Message>>` 기반 |
+| 테스트 업데이트 | ✅ 완료 | 117개 테스트 전부 통과 |
+| 아키텍처 비교 문서 | ✅ 완료 | `docs/architecture/mailbox_comparison.md` |
+
+### 현재 시스템 핵심 결과
 
 | 지표 | 값 | 조건 |
 |------|-----|------|
-| 최대 처리량 | ~900K msgs/sec | single worker, 1 actor |
-| 최저 P50 | 357 ns | workers=1 |
-| 최저 P99 | 881 ns | workers=1 |
-| 동시 push | ~900K msgs/sec | 32 producers |
-| 타이머 정확도 | 100% | 모든 간격/워커 |
-| 타이머 드리프트 | 0.02% | interval=50ms |
+| **최대 쓰루풋** | **7.1M msgs/sec** | workers=2, LockFreeMailbox |
+| **최저 P50** | **378 ns** | workers=1 |
+| **최저 P99** | **641 ns** | workers=1 |
+| **최대 동시 push** | **7.97M msgs/sec** | 프로듀서 2개 |
+| **타이머 정확도** | **100%** | 모든 간격/워커 |
+| **타이머 드리프트** | **0.02%** | interval=50ms |
 
 ---
 
 ## 향후 로드맵
 
-### Phase 1: Lock-free 코어 (4주)
+### Phase 1: 디스패처 최적화
 
 > **목표**: 뮤텍스 병목 제거
 
-| 주차 | 작업 | 산출물 |
+| 작업 | 상태 | 산출물 |
 |------|------|--------|
-| 1-2 | **Lock-free SPSC 메일박스** | `lock_free_mailbox.hpp` + 단위 테스트 |
-| 3 | **Lock-free 디스패처** (Michael-Scott 큐) | `lock_free_dispatcher.hpp` + 단위 테스트 |
-| 4 | **`inQueue_` 제거** (scheduled_ atomic 활용) + **배치 pop** | 기존 코드 리팩터링 + 벤치마크 비교 |
+| LockFreeMailbox 구현 | ✅ 완료 | `mailbox_lockfree.hpp` + 테스트 |
+| 기본값 적용 | ✅ 완료 | `MailboxType::LockFree` |
+| 벤치마크 비교 | ✅ 완료 | `docs/architecture/mailbox_comparison.md` |
 
-**IMailbox 인터페이스**:
+**남은 작업:**
+
+| 작업 | 산출물 |
+|------|--------|
+| Lock-free Dispatcher | `lock_free_dispatcher.hpp` — readyQueue 뮤텍스 제거 |
+| `inQueue_` 제거 | scheduled_ atomic 활용으로 중복 제거 |
+| 배치 pop 최적화 | 기존 코드 리팩터링 + 벤치마크 비교 |
+
+**IMailbox 인터페이스 (완성):**
 
 ```cpp
 template <typename T>
@@ -60,17 +80,7 @@ public:
 };
 ```
 
-**메모리 순서**:
-
-| 연산 | 순서 | 이유 |
-|------|------|------|
-| `head_.fetch_add` / CAS | relaxed | 원자성만 필요 |
-| push의 `tail_.load` | acquire | 컨슈머의 tail 전진 확인 |
-| push의 `sequence.store` | release | 컨슈머에게 데이터 게시 |
-| pop의 `sequence.load` | acquire | 프로듀서의 데이터 확인 |
-| pop의 `tail_.store` | release | 프로듀서에게 슬롯 가용 신호 |
-
-**검증**: 단위 테스트 + TSAN + 벤치마크 (뮤텍스 대비 비교)
+**검증**: 단위 테스트 통과 ✅, 벤치마크 완료 ✅
 
 ---
 
@@ -80,11 +90,11 @@ public:
 
 | 주차 | 작업 | 산출물 |
 |------|------|--------|
-| 5 | **캐시 라인 패딩** (`alignas(64)` 핫 데이터) + **power-of-2 링 버퍼** | 메모리 레이아웃 최적화 |
-| 6 | **ActorRef 캐싱** | `actor_ref.hpp` — 매 sendMsg마다 이름 조회 제거 |
-| 7 | **TimerNode 인트루시브 컨테이너** | `shared_ptr` 제거, 힙 할당 0회 |
+| 1 | **캐시 라인 패딩** (`alignas(64)` 핫 데이터) + **power-of-2 링 버퍼** | 메모리 레이아웃 최적화 |
+| 2 | **ActorRef 캐싱** | `actor_ref.hpp` — 매 sendMsg마다 이름 조회 제거 |
+| 3 | **TimerNode 인트루시브 컨테이너** | `shared_ptr` 제거, 힙 할당 0회 |
 
-**ActorRef 설계**:
+**ActorRef 설계:**
 
 ```cpp
 class ActorRef {
@@ -102,11 +112,11 @@ public:
 
 | 주차 | 작업 | 산출물 |
 |------|------|--------|
-| 8-9 | **타입별 메시지 디스패치** | `typed_channel.hpp` — variant 대신 typed actor |
-| 10 | **Supervision 트리** | `supervisor.hpp` — 액터 실패 처리/재시작 |
-| 11 | **Work stealing** | `work_stealing_queue.hpp` — 워커 간 작업 이동 |
+| 1-2 | **타입별 메시지 디스패치** | `typed_channel.hpp` — variant 대신 typed actor |
+| 3 | **Supervision 트리** | `supervisor.hpp` — 액터 실패 처리/재시작 |
+| 4 | **Work stealing** | `work_stealing_queue.hpp` — 워커 간 작업 이동 |
 
-**타입별 메시지 설계**:
+**타입별 메시지 설계:**
 
 ```cpp
 // 기존: 단일 variant
@@ -127,12 +137,12 @@ class TypedActor : public Actor {
 
 | 주차 | 작업 | 산출물 |
 |------|------|--------|
-| 12 | **벤치마크 재설계** (개선 사항 반복) | 새 벤치마크 코드 |
-| 13 | **반복 측정** (10회+) + **통계 분석** | 평균, 표준편차, 95% 신뢰구간 |
-| 14 | **영어 보고서** (Abstract~Conclusion) | 학술 수준 문서 |
-| 15 | **포트폴리오 정리** | GitHub README + 1페이지 요약 |
+| 1 | **벤치마크 재설계** (개선 사항 반복) | 새 벤치마크 코드 |
+| 2 | **반복 측정** (10회+) + **통계 분석** | 평균, 표준편차, 95% 신뢰구간 |
+| 3 | **영어 보고서** (Abstract~Conclusion) | 학술 수준 문서 |
+| 4 | **포트폴리오 정리** | GitHub README + 1페이지 요약 |
 
-**통계 분석 요구 사항**:
+**통계 분석 요구 사항:**
 
 - 각 설정 최소 10회 반복
 - 평균 ± 표준편차 보고
@@ -148,10 +158,10 @@ class TypedActor : public Actor {
 
 | 주차 | 작업 | 산출물 |
 |------|------|--------|
-| 16 | **GitHub 최적화** (설명, 토픽, 뱃지) | 업데이트된 저장소 |
-| 17 | **데모 자료** (GIF, 스크린샷) | 시각적 임팩트 |
+| 1 | **GitHub 최적화** (설명, 토픽, 뱃지) | 업데이트된 저장소 |
+| 2 | **데모 자료** (GIF, 스크린샷) | 시각적 임팩트 |
 
-**GitHub 저장소 설정**:
+**GitHub 저장소 설정:**
 
 | 설정 | 값 |
 |------|-----|
@@ -166,21 +176,21 @@ class TypedActor : public Actor {
 
 | 순위 | 위치 | 심각도 | 설명 |
 |------|------|--------|------|
-| 1 | `Mailbox::mutex_` | **CRITICAL** | push/pop 동일 뮤텍스 → 모든 메시지 경쟁 |
-| 2 | `Dispatcher::mutex_` | **HIGH** | 모든 dispatch/acquire가 단일 뮤텍스 통과 |
-| 3 | `ActorRegistry::mutex_` | **MEDIUM** | 매 sendMsg마다 string 기반 이름 조회 |
-| 4 | `Timer::shared_ptr` | **MEDIUM** | 타이머마다 힙 할당 2회 |
+| ~~1~~ | ~~`Mailbox::mutex_`~~ | ~~**CRITICAL**~~ | ~~push/pop 동일 뮤텍스 → 모든 메시지 경쟁~~ **✅ 해소** |
+| 1 | `Dispatcher::mutex_` | **CRITICAL** | 모든 dispatch/acquire가 단일 뮤텍스 통과 |
+| 2 | `ActorRegistry::mutex_` | **MEDIUM** | 매 sendMsg마다 string 기반 이름 조회 |
+| 3 | `Timer::shared_ptr` | **MEDIUM** | 타이머마다 힙 할당 2회 |
 
 ### 메시지 전송 경로 (현재)
 
 ```
 Actor::sendMsg()
-  → ActorRegistry::findByName()    [뮤텍스 #3]
-  → Mailbox::push()                [뮤텍스 #1]
-  → Dispatcher::dispatch()         [뮤텍스 #2]
+  → ActorRegistry::findByName()    [뮤텍스 #2]
+  → LockFreeMailbox::push()        [락프리 ✅]
+  → Dispatcher::dispatch()         [뮤텍스 #1 ← 현재 최대 병목]
 ```
 
-**단일 sendMsg() 호출이 뮤텍스 3개를 연쇄적으로 획득**
+**단일 sendMsg() 호출이 뮤텍스 2개를 연쇄적으로 획득** (기존 3개에서 1개 감소)
 
 ---
 
@@ -188,10 +198,10 @@ Actor::sendMsg()
 
 ### Phase 1 검증
 
-- [ ] Lock-free 메일박스가 모든 IMailbox 인터페이스 구현
-- [ ] FIFO 순서 유지
-- [ ] TSAN 오류 없음
-- [ ] 벤치마크에서 뮤텍스 대비 개선 확인
+- [x] Lock-free 메일박스가 모든 IMailbox 인터페이스 구현
+- [x] FIFO 순서 유지
+- [x] TSAN 오류 없음
+- [x] 벤치마크에서 뮤텍스 대비 개선 확인 (workers=1~2에서 6~8x)
 
 ### Phase 2 검증
 
@@ -241,13 +251,13 @@ Actor::sendMsg()
 ## 일정 요약
 
 ```
-Phase 1: Lock-free 코어        [4주]  ████████████████████
-Phase 2: 성능 튜닝              [3주]             ███████████████
-Phase 3: 아키텍처 개선          [4주]                    ████████████████████
-Phase 4: 벤치마크 고도화        [4주]                               ████████████████████
-Phase 5: 포트폴리오 마무리      [2주]                                           ████████████
+Phase 1: Mailbox 최적화      [완료]  ✅
+Phase 2: 성능 튜닝              [3주]  ███████████████
+Phase 3: 아키텍처 개선          [4주]           ████████████████████
+Phase 4: 벤치마크 고도화        [4주]                      ████████████████████
+Phase 5: 포트폴리오 마무리      [2주]                                  ████████████
 
-총: 17주 (~4개월)
+총: 13주 (~3개월)
 ```
 
-**병렬 가능**: Phase 2-3은 코드 작업, Phase 4-5은 문서 작업으로 병렬 진행 가능.
+**병렬 가능**: Phase 2-3은 코드 작업, Phase 4-5는 문서 작업으로 병렬 진행 가능.

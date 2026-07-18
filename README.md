@@ -8,7 +8,7 @@
 <h1 align="center">V2 Engine</h1>
 <p align="center">
   <b>경량 C++20 액터 모델 기반 서비스 프레임워크</b><br>
-  메시지 하나면 끝나는, 공유 메모리 & 뮤텍스 프리 아키텍처
+  락프리 MPSC 메일박스 + 이벤트 루프 기반 협력적 스케줄링
 </p>
 
 ---
@@ -34,7 +34,8 @@ V2 Engine은 **액터 모델**을 채택하여:
 
 - 모든 컴포넌트는 **독립된 액터**로 동작
 - 액터 간 통신은 **메시지 전달**만 사용 (뮤텍스 최소화)
-- **비동기 이벤트 루프** (epoll) 위에서 협력적 스케줄링
+- **락프리 MPSC 메일박스**로 높은 Throughput 달성
+- **비동기 이벤트 루프** 위에서 협력적 스케줄링
 - IPC, D-Bus, I2C 디바이스, 모니터링, TUI를 **하나의 프레임워크**에서 제공
 
 ---
@@ -44,8 +45,11 @@ V2 Engine은 **액터 모델**을 채택하여:
 ```cpp
 ActorSystem sys;
 
-// 액터 생성
+// 액터 생성 (기본: LockFreeMailbox)
 sys.createActor<MyActor>("my_actor", mailboxSize);
+
+// MutexMailbox가 필요할 때만
+sys.createActor<MyActor>("actor2", 1024, MailboxType::Mutex);
 
 // 메시지 전송
 sys.send("my_actor", MyMessage{42});
@@ -173,7 +177,7 @@ v2 -m
 
 | 기능 | 설명 |
 |------|------|
-| **액터 모델** | 경량 액터 + bounded mailbox (`Mailbox<T>`), 협력적 스케줄링 |
+| **액터 모델** | 경량 액터 + 락프리 MPSC 메일박스 (`LockFreeMailbox`), 협력적 스케줄링 |
 | **std::variant 메시지** | `std::visit` 기반 타입-safe 메시지, 상속/형변환 제로 |
 | **epoll 이벤트 루프** | timer FD, stop FD, transport I/O 통합 (`Dispatcher`) |
 | **세마포어 스케줄링** | `std::counting_semaphore` (C++20) 기반 worker 획득/해제 |
@@ -181,6 +185,13 @@ v2 -m
 | **JSON Lines 직렬화** | `nlohmann/json` 매크로 기반 메시지 marshal/unmarshal |
 | **액터 생명주기** | `Closed → Opening → Opened → Closing`, essential 플래그 지원, null-safe 소멸 |
 | **SignalHandler** | SIGINT/SIGTERM 등록으로 graceful shutdown |
+
+### 메일박스 구현
+
+| 구현체 | 동기화 | 특성 | 기본값 |
+|--------|--------|------|--------|
+| `LockFreeMailbox<T>` | CAS (락프리) | MPSC 전용, 높은 쓰루풋 | ✅ **기본** |
+| `MutexMailbox<T>` | `std::mutex` | MPMC 가능, 범용 | 선택 |
 
 ### 서비스 액터
 
@@ -209,6 +220,7 @@ Commands:
   version / -v      버전 정보
   status  / -s      데몬 상태 확인
   monitor / -m      TUI 모니터 실행
+  benchmark <name>  벤치마크 실행
 ```
 
 ### TUI 모니터
@@ -240,61 +252,47 @@ Commands:
 - **FetchContent** 외부 라이브러리 자동 다운로드 (FTXUI, nlohmann/json, sdbus-c++)
 - **CTest** + **CPack** 지원
 - **Google Test** (v1.17.0) 단위 테스트 — RingBuffer, Mailbox, ActorRegistry
-- **Google Benchmark** (v1.9.2) 기반 성능 측정 — [벤치마크 상세](#-성능-벤치마크)
+- **벤치마크 스위트** — `v2_cli benchmark <name>` [벤치마크 상세](#-성능-벤치마크)
 
 ---
 
 ## ⚡ 성능 벤치마크
 
-Google Benchmark (v1.9.2) 기반, Release 빌드 (LTO 활성화)
-
-### RingBuffer (구현 완료)
-
-| 벤치마크 | Time (ns) | 처리량 | 비고 |
-|---------|-----------|-------|------|
-| **Push** (64B chunk) | 3.06 | ~19.7 GiB/s | 소형 메시지 대량 전송 |
-| **Push** (full buffer) | 576 | ~102.7 GiB/s | 대형 chunk 단일 push |
-| **Pop** (64B chunk) | 5.39 | ~11.1 GiB/s | 소형 메시지 소비 |
-| **Pop** (64KB chunk) | 1179 | ~53.0 GiB/s | 대형 chunk pop |
-| **PingPong** (1KB chunk) | 16.95 | ~108.5 GiB/s | push+pop 왕복 처리량 |
-| **WrapStress** (4B chunk) | 5.13 | ~1.5 GiB/s | wrap 발생 worst-case |
-| **Reset** (65536 Buf) | 2.82 | — | 초경량 초기화 |
-
-> 측정 환경: 8-core Intel @ 4.7 GHz, L1d 48KB / L2 1MB / L3 96MB
+벤치마크 스위트는 `v2_cli benchmark <name>`으로 실행합니다.
 
 ```bash
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target benchmark_ring_buffer
-./build/test/benchmark_ring_buffer
+# 개별 벤치마크
+./build/v2_cli benchmark throughput --workers 4 --actors 1
+./build/v2_cli benchmark latency --iterations 50000
+./build/v2_cli benchmark contention --producers 8
+./build/v2_cli benchmark scaling
+./build/v2_cli benchmark backpressure
+./build/v2_cli benchmark scheduler --interval 50 --duration 5000
 ```
 
-### Mailbox (미구현)
+### 핵심 성능 지표
 
-```bash
-cmake --build build --target benchmark_mailbox
-./build/test/benchmark_mailbox
-```
+| 지표 | 값 | 조건 |
+|------|-----|------|
+| **최대 쓰루풋** | **7.1M msgs/sec** | workers=2, LockFreeMailbox |
+| **최저 P50** | **378 ns** | workers=1 |
+| **최저 P99** | **641 ns** | workers=1 |
+| **최대 동시 push** | **7.97M msgs/sec** | 프로듀서 2개 |
+| **타이머 정확도** | **100%** | 모든 간격 |
+| **타이머 드리프트** | **0.02%** | interval=50ms |
 
-### Timer (미구현)
+### 벤치마크 목록
 
-```bash
-cmake --build build --target benchmark_timer
-./build/test/benchmark_timer
-```
+| 벤치마크 | 목적 | 핵심 결과 |
+|---------|------|----------|
+| [throughput](docs/benchmark/throughput.md) | 종단간 메시지 처리 속도 | 7.1M msgs/sec (workers=2) |
+| [latency](docs/benchmark/latency.md) | 단일 메시지 레이턴시 | P50=378ns, P99=641ns |
+| [contention](docs/benchmark/contention.md) | 멀티 프로듀서 동시 push | 7.97M msgs/sec (프로듀서 2개) |
+| [scaling](docs/benchmark/scaling.md) | 워커/액터 스케일링 효율성 | 단일 워커 최적 |
+| [backpressure](docs/benchmark/backpressure.md) | 메일박스 오버플로우 동작 | maxBatch >= 32에서 0% 드롭 |
+| [scheduler](docs/benchmark/scheduler.md) | 타이머 스케줄링 정밀도 | 100% 정확도 |
 
-### Dispatcher (미구현)
-
-```bash
-cmake --build build --target benchmark_dispatcher
-./build/test/benchmark_dispatcher
-```
-
-### ActorSystem (미구현)
-
-```bash
-cmake --build build --target benchmark_actor_system
-./build/test/benchmark_actor_system
-```
+> 상세 벤치마크 결과는 `docs/benchmark/` 디렉토리 참조
 
 ---
 
