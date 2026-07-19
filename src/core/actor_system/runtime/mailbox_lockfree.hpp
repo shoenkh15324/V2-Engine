@@ -89,5 +89,5 @@ private:
     std::vector<Slot> slot_;
     const size_t capacity_;
     AlignedSizeT head_; // single consumer
-    alignas(kCacheLine) AlignedSizeT tail_; // multi producer
+    AlignedSizeT tail_; // multi producer
 };
