@@ -6,9 +6,10 @@
 
 ```
 Phase 1: 성능 병목 제거 ✅ 완료
-Phase 2: 메모리/전송 최적화
-Phase 3: 아키텍처 고도화
-Phase 4: 벤치마크 인프라 + 보고서
+Phase 2: actor_system 리팩토링
+Phase 3: 메모리/전송 최적화
+Phase 4: 아키텍처 고도화
+Phase 5: 벤치마크 인프라 + 보고서
 ```
 
 ---
@@ -38,7 +39,189 @@ Phase 4: 벤치마크 인프라 + 보고서
 
 ---
 
-## Phase 2: 메모리/전송 최적화
+## Phase 2: actor_system 리팩토링
+
+> **목표**: 강결합 구조 해소 → Runtime과 Actor 완전 분리, 단방향 의존성, 컴파일 의존성 최소화, 확장 가능한 구조 확보
+
+### 디렉토리 구조
+
+```
+actor_system/
+    ├── actor_system.hpp           # Facade (PImpl 적용)
+    ├── actor_system.cpp
+    ├── actor_system_impl.hpp      # 내부 구현
+    │
+    ├── actor/
+    │   ├── actor.hpp              # Actor 추상 클래스
+    │   ├── actor.cpp
+    │   ├── actor_handle.hpp       # 외부 참조용 핸들
+    │   └── i_actor_runtime.hpp    # Actor가 의존할 인터페이스
+    │
+    ├── runtime/
+    │   ├── actor_runtime.hpp      # IActorRuntime 구현체
+    │   ├── actor_runtime.cpp
+    │   ├── actor_registry.hpp     # Lookup 전용
+    │   ├── actor_registry.cpp
+    │   ├── scheduler.hpp          # Timer 관리만 담당
+    │   ├── scheduler.cpp
+    │   ├── timer_queue.hpp        # 우선순위 큐
+    │   │
+    │   └── dispatcher/
+    │       ├── work_dispatcher.hpp/cpp   # Work 분배만 담당
+    │       ├── worker_pool.hpp/cpp       # 워커 스레드 풀
+    │       ├── worker.hpp/cpp            # 개별 워커
+    │       ├── work_balancer.hpp/cpp     # Load Balancing
+    │       └── io/
+    │           ├── io_event_loop.hpp/cpp # epoll/I/O 이벤트
+    │           └── i_io_event_loop.hpp
+    │
+    ├── message/
+    │   ├── envelope.hpp           # MessageEnvelope 정의
+    │   ├── type_id.hpp            # typeId 상수
+    │   │
+    │   ├── system/                # 코어 메시지
+    │   ├── ipc/                   # IPC 메시지
+    │   ├── network/               # 네트워크 메시지
+    │   └── device/                # 디바이스 메시지
+    │
+    └── detail/                    # 내부 구현 헤더
+```
+
+### 핵심 아키텍처 변경
+
+#### 1. Actor ↔ ActorContext 순환 의존 제거
+
+**현재 문제**: Actor가 ActorContext를 직접 참조하고, ActorContext가 Actor를 참조하는 양방향 의존
+
+**개선**: `IActorRuntime` 인터페이스 도입으로 단방향 의존성 확보
+
+```cpp
+// actor/i_actor_runtime.hpp
+class IActorRuntime {
+public:
+    virtual void send(ActorId target, MessageEnvelope msg) = 0;
+    virtual void reply(ActorId from, MessageEnvelope msg) = 0;
+    virtual void schedule(MessageEnvelope msg, uint64_t delayMs) = 0;
+    virtual ActorId self() const = 0;
+    virtual void stop() = 0;
+    virtual ActorId spawn(std::unique_ptr<Actor> actor) = 0;
+};
+```
+
+#### 2. MessageEnvelope 기반 메시지 시스템
+
+**현재 문제**: `std::variant<Msg1, Msg2, ..., Msg28>` — 모든 메시지 헤더가 컴파일됨
+
+**개선**: Runtime은 전달만 담당, 메시지 내용은 각 모듈이 정의
+
+```cpp
+// message/envelope.hpp
+struct MessageEnvelope {
+    ActorId sender;
+    ActorId receiver;
+    uint16_t typeId;
+    std::shared_ptr<void> payload;
+    
+    template<typename T>
+    static MessageEnvelope create(ActorId sender, ActorId receiver, T&& data);
+    
+    template<typename T>
+    const T* as() const;
+};
+```
+
+#### 3. Dispatcher 역할 분리
+
+**현재 문제**: Dispatcher가 epoll + Worker 관리 + Actor Dispatch + Scheduling 모두 담당
+
+**개선**: 역할별 분리
+
+| 컴포넌트 | 책임 |
+|----------|------|
+| `WorkDispatcher` | Ready Actor Queue 관리, Worker에게 작업 전달 |
+| `WorkerPool` | 워커 스레드 풀 관리 |
+| `WorkBalancer` | Load Balancing, Work Stealing |
+| `IOEventLoop` | epoll, socket event, fd monitoring |
+| `Scheduler` | Timer Queue, Timeout 관리 |
+
+#### 4. Registry 역할 축소
+
+**현재 문제**: Registry가 등록/조회/삭제/생명주기 모두 담당
+
+**개선**: Lookup 전용으로 축소, 소유권은 ActorSystem이 관리
+
+```cpp
+// ActorRegistry는 약한 참조만 유지
+class ActorRegistry {
+    std::unordered_map<ActorId, ActorWeakRef> actors_;
+    // 실제 소유권은 ActorSystem이 가짐
+};
+```
+
+#### 5. PImpl 적용으로 컴파일 의존성 최소화
+
+**현재 문제**: `actor_system.hpp`가 모든 구현체를 include
+
+**개선**: 헤더에 인터페이스만 노출
+
+```cpp
+// actor_system.hpp
+class ActorSystem {
+public:
+    ActorSystem();
+    ~ActorSystem();
+    
+    template<typename T, typename... Args>
+    ActorId spawn(Args&&... args);
+    
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+```
+
+### 의존성 방향 (최종)
+
+```
+Application
+      │
+      ▼
+ActorSystem (PImpl)
+      │
+      ▼
+RuntimeContext
+      ├──────── ActorRegistry (Lookup만)
+      ├──────── Scheduler (Timer만)
+      ├──────── WorkDispatcher
+      │           ├──────── WorkerPool
+      │           └──────── WorkBalancer
+      ├──────── IOEventLoop (epoll만)
+      └──────── Mailbox (LockFree 큐)
+```
+
+**모든 의존성은 위→아래 방향으로만 흐르고, 순환 의존성이 없습니다.**
+
+### 리팩토링 우선순위
+
+| 순위 | 작업 | 예상 기간 |
+|------|------|-----------|
+| 1 | `IActorRuntime` 인터페이스 도입 | 2-3일 |
+| 2 | MessageEnvelope 기반 메시지 시스템 구축 | 3-4일 |
+| 3 | Dispatcher를 WorkDispatcher / IOEventLoop / Scheduler로 분리 | 4-5일 |
+| 4 | Registry를 Lookup 전용으로 축소 | 1-2일 |
+| 5 | ActorSystem이 Actor 생명주기를 단독 관리 | 2-3일 |
+| 6 | PImpl을 적용하여 컴파일 의존성 최소화 | 1-2일 |
+| 7 | Runtime API를 최소화하여 Actor와 Runtime 완전 분리 | 2-3일 |
+
+**총 예상 기간: 15-22일**
+
+### 변경 파일
+
+`actor_system.hpp/cpp`, `actor_system_impl.hpp` (신규), `actor/` 전체, `runtime/` 전체, `message/` 전체
+
+---
+
+## Phase 3: 메모리/전송 최적화
 
 > **목표**: 핫 패스 캐시 미스 + 불필요한 할당/잠금/원자 연산 제거
 
@@ -48,8 +231,6 @@ Phase 4: 벤치마크 인프라 + 보고서
 
 | 작업 | 상세 |
 |------|------|
-| ActorRef 도입 | `actor_ref.hpp` — 이름/ID 조회 결과를 캐싱, 재전송 시 뮤텍스/해시맵 bypass |
-| `sendMsg()` 재설계 | `Actor::sendMsg(ActorRef, msg)` 오버로드 추가, 기존 string/ID 오버로드 유지 |
 | 생성자 문자열 이동 | `Actor::Actor(name)` → `name_(std::move(name))` 불필요한 복사 제거 |
 
 ### 캐시 라인 패딩
@@ -108,11 +289,11 @@ Phase 4: 벤치마크 인프라 + 보고서
 | 지연 `count()` | `Metrics::recordDispatch/recordEnqueue` 내부에서만 `count()` 호출하도록 변경 |
 | 메트릭 비활성화 시 zero-overhead | `isEnabled()` 체크를 호출 전으로 이동, 비활성화 시 atomic 로드 0회 |
 
-**변경 파일**: `actor.hpp/cpp`, `actor_ref.hpp` (신규), `actor_context.hpp`, `dispatcher.hpp`, `worker.hpp`, `timer.hpp/cpp`, `scheduler.cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
+**변경 파일**: `actor.hpp/cpp`, `actor_context.hpp`, `dispatcher.hpp`, `worker.hpp`, `timer.hpp/cpp`, `scheduler.cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
 
 ---
 
-## Phase 3: 아키텍처 고도화
+## Phase 4: 아키텍처 고도화
 
 > **목표**: 정확성 + 타입 안전 + 장애 처리 + 로드 밸런싱
 
@@ -165,7 +346,7 @@ Phase 4: 벤치마크 인프라 + 보고서
 
 ---
 
-## Phase 4: 벤치마크 인프라 통일 + 학술 보고서
+## Phase 5: 벤치마크 인프라 통일 + 학술 보고서
 
 > **목표**: 벤치마크 시스템 단일화 + 학술 수준 성능 분석 + 포트폴리오
 
