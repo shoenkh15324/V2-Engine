@@ -1,16 +1,15 @@
 #pragma once
-#include <deque>
-#include <unordered_map>
-#include <unordered_set>
 #include <atomic>
-#include <mutex>
-#include <functional>
 #include <vector>
-#include "core/common/config/platform_config.h"
+#include <memory>
 #include <semaphore>
+#include <functional>
+#include <unordered_map>
+#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/common/config/platform_config.h"
 
 #if V2_PLATFORM_LINUX
-#include "core/common/os/epoll.hpp"
+    #include "core/common/os/epoll.hpp"
 #endif
 
 class ActorContext;
@@ -35,7 +34,7 @@ public:
     void run();
     void stop();
     void dispatch(ActorContext* actorCtx);
-    ActorContext* acquire();
+    ActorContext* acquire(int workerId);
     int subscribe(WatchedFd fd, Handler handler);
     int unsubscribe(WatchedFd fd);
     bool isRunning() const { return running_; }
@@ -44,12 +43,10 @@ private:
     int workerCount_ = 0;
     int epollMaxEvents_ = 64;
     int epollWaitTimeoutMs_ = 1000;
-    std::counting_semaphore<> sema_{0};
-    std::mutex mutex_;
     std::atomic<bool> running_{false};
-    std::deque<ActorContext*> readyQueue_;
-    std::unordered_set<ActorContext*> inQueue_;
     std::unordered_map<WatchedFd, Handler> handlers_;
+    std::vector<std::unique_ptr<LockFreeMpscQueue<ActorContext*>>> queues_;
+    std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
 
 #if V2_PLATFORM_LINUX
     Epoll epoll_;

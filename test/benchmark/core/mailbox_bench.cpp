@@ -1,13 +1,11 @@
 #include <benchmark/benchmark.h>
-#include "core/actor_system/runtime/mailbox_mutex.hpp"
-#include "core/actor_system/runtime/mailbox_lockfree.hpp"
+#include "core/common/container/lock_free_mpsc_queue.hpp"
 
 // ── Push latency ──
 
-template <typename MailboxT>
-static void MailboxPushLatency(benchmark::State& state){
+static void MpscQueuePushLatency(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     int val = 42;
     int dummy;
     for(auto _ : state){
@@ -18,19 +16,15 @@ static void MailboxPushLatency(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations());
 }
-BENCHMARK (MailboxPushLatency<MutexMailbox<int>>)
-    ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
-    ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxPushLatency<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueuePushLatency)
     ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
     ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
 
 // ── Pop latency ──
 
-template <typename MailboxT>
-static void MailboxPopLatency(benchmark::State& state){
+static void MpscQueuePopLatency(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     int out;
     for(auto _ : state){
         if(!mb.pop(out)){
@@ -42,19 +36,15 @@ static void MailboxPopLatency(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations());
 }
-BENCHMARK (MailboxPopLatency<MutexMailbox<int>>)
-    ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
-    ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxPopLatency<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueuePopLatency)
     ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
     ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
 
 // ── Push + Pop ping-pong ──
 
-template <typename MailboxT>
-static void MailboxPingPong(benchmark::State& state){
+static void MpscQueuePingPong(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     int out;
     for(auto _ : state){
         mb.push(42);
@@ -62,19 +52,15 @@ static void MailboxPingPong(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations() * 2);
 }
-BENCHMARK (MailboxPingPong<MutexMailbox<int>>)
-    ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
-    ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxPingPong<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueuePingPong)
     ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
     ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
 
 // ── Push to full buffer ──
 
-template <typename MailboxT>
-static void MailboxPushFull(benchmark::State& state){
+static void MpscQueuePushFull(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     for(int i = 0; i < cap; i++){
         mb.push(std::move(i));
     }
@@ -83,33 +69,27 @@ static void MailboxPushFull(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations());
 }
-BENCHMARK (MailboxPushFull<MutexMailbox<int>>)
-    ->Arg(1)->Arg(3)->Arg(64)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxPushFull<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueuePushFull)
     ->Arg(1)->Arg(3)->Arg(64)->Arg(1024)->Arg(4096);
 
 // ── Pop from empty buffer ──
 
-template <typename MailboxT>
-static void MailboxPopEmpty(benchmark::State& state){
-    MailboxT mb(state.range(0));
+static void MpscQueuePopEmpty(benchmark::State& state){
+    LockFreeMpscQueue<int> mb(state.range(0));
     int out;
     for(auto _ : state){
         mb.pop(out);
     }
     state.SetItemsProcessed(state.iterations());
 }
-BENCHMARK (MailboxPopEmpty<MutexMailbox<int>>)
-    ->Arg(1)->Arg(3)->Arg(64)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxPopEmpty<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueuePopEmpty)
     ->Arg(1)->Arg(3)->Arg(64)->Arg(1024)->Arg(4096);
 
 // ── Batch fill ──
 
-template <typename MailboxT>
-static void MailboxFillBatch(benchmark::State& state){
+static void MpscQueueFillBatch(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     int dummy;
     for(auto _ : state){
         for(int i = 0; i < cap; i++){
@@ -119,19 +99,15 @@ static void MailboxFillBatch(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations() * cap);
 }
-BENCHMARK (MailboxFillBatch<MutexMailbox<int>>)
-    ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
-    ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxFillBatch<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueueFillBatch)
     ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
     ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
 
 // ── Batch drain ──
 
-template <typename MailboxT>
-static void MailboxDrainBatch(benchmark::State& state){
+static void MpscQueueDrainBatch(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     int out;
     for(auto _ : state){
         for(int i = 0; i < cap; i++){
@@ -143,19 +119,15 @@ static void MailboxDrainBatch(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations() * cap);
 }
-BENCHMARK (MailboxDrainBatch<MutexMailbox<int>>)
-    ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
-    ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
-BENCHMARK (MailboxDrainBatch<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueueDrainBatch)
     ->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
     ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024)->Arg(4096);
 
 // ── Wrap-around ──
 
-template <typename MailboxT>
-static void MailboxWrapAround(benchmark::State& state){
+static void MpscQueueWrapAround(benchmark::State& state){
     int cap = state.range(0);
-    MailboxT mb(cap);
+    LockFreeMpscQueue<int> mb(cap);
     for(int i = 0; i < cap - 1; i++){
         mb.push(std::move(i));
     }
@@ -166,9 +138,6 @@ static void MailboxWrapAround(benchmark::State& state){
     }
     state.SetItemsProcessed(state.iterations() * 2);
 }
-BENCHMARK (MailboxWrapAround<MutexMailbox<int>>)
-    ->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
-    ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024);
-BENCHMARK (MailboxWrapAround<LockFreeMailbox<int>>)
+BENCHMARK(MpscQueueWrapAround)
     ->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(7)
     ->Arg(16)->Arg(31)->Arg(64)->Arg(128)->Arg(256)->Arg(512)->Arg(1024);

@@ -4,7 +4,7 @@
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 
-ActorContext::ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
+ActorContext::ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
     actor_->actorCtx_ = this;
     dispatcher_ = dispatcher;

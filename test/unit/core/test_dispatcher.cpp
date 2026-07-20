@@ -1,10 +1,15 @@
 #include <gtest/gtest.h>
 #include "core/actor_system/runtime/dispatcher.hpp"
+#include "core/actor_system/actor/actor_context.hpp"
+#include "core/actor_system/actor/actor.hpp"
+#include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/common/util/return.hpp"
 #include "core/common/config/platform_config.h"
+#include "core/actor_system/messages/tick_messages.hpp"
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 #if V2_PLATFORM_LINUX
     #include <unistd.h>
@@ -12,7 +17,13 @@
 
 namespace{
 
-struct TestContext{};
+class TestActor : public Actor{
+public:
+    using Actor::Actor;
+    int open() override { state_ = Opened; return 0; }
+    int close() override { state_ = Closed; return 0; }
+    void handle(const Message&) override {}
+};
 
 } // namespace
 
@@ -34,42 +45,40 @@ TEST(Dispatcher, DispatchAcquire){
     Dispatcher d(1);
     d.start();
 
-    TestContext ctx;
-    d.dispatch(reinterpret_cast<ActorContext*>(&ctx));
-    ActorContext* acquired = d.acquire();
-    EXPECT_EQ(acquired, reinterpret_cast<ActorContext*>(&ctx));
+    auto actor = std::make_unique<TestActor>("test", 1);
+    auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    ActorContext ctx(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+
+    d.dispatch(&ctx);
+    ActorContext* acquired = d.acquire(0);
+    EXPECT_EQ(acquired, &ctx);
 
     d.stop();
-}
-
-TEST(Dispatcher, DispatchDuplicate){
-    Dispatcher d(1);
-    d.start();
-
-    TestContext ctx;
-    d.dispatch(reinterpret_cast<ActorContext*>(&ctx));
-    d.dispatch(reinterpret_cast<ActorContext*>(&ctx));
-
-    ActorContext* a1 = d.acquire();
-    EXPECT_EQ(a1, reinterpret_cast<ActorContext*>(&ctx));
-
-    d.stop();
-    ActorContext* a2 = d.acquire();
-    EXPECT_EQ(a2, nullptr);
 }
 
 TEST(Dispatcher, DispatchFifo){
     Dispatcher d(1);
     d.start();
 
-    TestContext a, b, c;
-    d.dispatch(reinterpret_cast<ActorContext*>(&a));
-    d.dispatch(reinterpret_cast<ActorContext*>(&b));
-    d.dispatch(reinterpret_cast<ActorContext*>(&c));
+    auto a1 = std::make_unique<TestActor>("a", 1);
+    auto m1 = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    ActorContext ctx1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
 
-    EXPECT_EQ(d.acquire(), reinterpret_cast<ActorContext*>(&a));
-    EXPECT_EQ(d.acquire(), reinterpret_cast<ActorContext*>(&b));
-    EXPECT_EQ(d.acquire(), reinterpret_cast<ActorContext*>(&c));
+    auto a2 = std::make_unique<TestActor>("b", 2);
+    auto m2 = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    ActorContext ctx2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
+
+    auto a3 = std::make_unique<TestActor>("c", 3);
+    auto m3 = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    ActorContext ctx3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
+
+    d.dispatch(&ctx1);
+    d.dispatch(&ctx2);
+    d.dispatch(&ctx3);
+
+    EXPECT_EQ(d.acquire(0), &ctx1);
+    EXPECT_EQ(d.acquire(0), &ctx2);
+    EXPECT_EQ(d.acquire(0), &ctx3);
 
     d.stop();
 }
@@ -78,14 +87,17 @@ TEST(Dispatcher, AcquireOnEmpty){
     Dispatcher d(1);
     d.start();
 
-    TestContext ctx;
+    auto actor = std::make_unique<TestActor>("test", 1);
+    auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    ActorContext ctx(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+
     std::thread t([&](){
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        d.dispatch(reinterpret_cast<ActorContext*>(&ctx));
+        d.dispatch(&ctx);
     });
 
-    ActorContext* acquired = d.acquire();
-    EXPECT_EQ(acquired, reinterpret_cast<ActorContext*>(&ctx));
+    ActorContext* acquired = d.acquire(0);
+    EXPECT_EQ(acquired, &ctx);
 
     t.join();
     d.stop();
@@ -96,8 +108,7 @@ TEST(Dispatcher, AcquireAfterStop){
     d.start();
     d.stop();
 
-    // stop() releases semaphore, but queue is empty -> returns nullptr
-    ActorContext* acquired = d.acquire();
+    ActorContext* acquired = d.acquire(0);
     EXPECT_EQ(acquired, nullptr);
 }
 
@@ -106,10 +117,9 @@ TEST(Dispatcher, StopReleasesWorkers){
     d.start();
     d.stop();
 
-    // stop() with workerCount=3 releases semaphore 3 times
-    EXPECT_EQ(d.acquire(), nullptr);
-    EXPECT_EQ(d.acquire(), nullptr);
-    EXPECT_EQ(d.acquire(), nullptr);
+    EXPECT_EQ(d.acquire(0), nullptr);
+    EXPECT_EQ(d.acquire(1), nullptr);
+    EXPECT_EQ(d.acquire(2), nullptr);
 }
 
 // Epoll
@@ -188,7 +198,7 @@ TEST(Dispatcher, StopStopsRun){
     std::thread t([&](){ d.run(); });
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     d.stop();
-    t.join(); // should not hang
+    t.join();
 }
 
 #endif

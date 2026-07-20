@@ -34,7 +34,7 @@ void Worker::runLoop(){
 #endif
     while(running_){
         auto idleStartTime = Time::now();
-        ActorContext* actorCtx = dispatcher_->acquire();
+        ActorContext* actorCtx = dispatcher_->acquire(id_);
         auto idleEndTime = Time::now();
 
         if(!actorCtx){

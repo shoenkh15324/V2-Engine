@@ -1,4 +1,6 @@
 #include "dispatcher.hpp"
+#include "core/actor_system/actor/actor_context.hpp"
+#include "core/actor_system/actor/actor.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
 #include "core/common/util/return.hpp"
@@ -19,7 +21,10 @@ Dispatcher::Dispatcher(int workerCount, int epollMaxEvents, int epollWaitTimeout
     , epollEvents_(epollMaxEvents)
 #endif
 {
-    //
+    for(int i = 0; i < workerCount; i++){
+        queues_.push_back(std::make_unique<LockFreeMpscQueue<ActorContext*>>(1024));
+        semas_.push_back(std::make_unique<std::counting_semaphore<>>(0));
+    }
 }
 
 void Dispatcher::start(){
@@ -42,34 +47,18 @@ Dispatcher::~Dispatcher(){
 }
 
 void Dispatcher::dispatch(ActorContext* actorCtx){
-    bool deduped = false;
-    size_t queueDepth = 0;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if(inQueue_.find(actorCtx) != inQueue_.end()){
-            deduped = true;
-        }else{
-            readyQueue_.push_back(actorCtx);
-            inQueue_.insert(actorCtx);
-        }
-        queueDepth = readyQueue_.size();
-    }
-    Metrics::recordDispatch(deduped, queueDepth);
-    if(!deduped){
-        sema_.release();
-    }
+    uint64_t actorId = actorCtx->actor()->id();
+    int workerId = static_cast<int>(actorId % workerCount_);
+    queues_[workerId]->push(std::move(actorCtx));
+    Metrics::recordDispatch(false, queues_[workerId]->count());
+    semas_[workerId]->release();
 }
 
-ActorContext* Dispatcher::acquire(){
-    sema_.acquire();
-    std::lock_guard<std::mutex> lock(mutex_);
-    if(readyQueue_.empty()){
-        return nullptr;
-    }
-    ActorContext* ctx = readyQueue_.front();
-    readyQueue_.pop_front();
-    inQueue_.erase(ctx);
-    Metrics::recordAcquire();
+ActorContext* Dispatcher::acquire(int workerId){
+   semas_[workerId]->acquire();
+    ActorContext* ctx = nullptr;
+    queues_[workerId]->pop(ctx);
+    if(ctx) Metrics::recordAcquire();
     return ctx;
 }
 
@@ -80,7 +69,9 @@ void Dispatcher::stop(){
     auto _ = ::write(stopFd_, &one, sizeof(one));
     (void)_;
 #endif
-    sema_.release(workerCount_ > 0 ? workerCount_ : 1);
+    for(int i = 0; i < workerCount_; i++){
+        semas_[i]->release();
+    }
 }
 
 void Dispatcher::run(){

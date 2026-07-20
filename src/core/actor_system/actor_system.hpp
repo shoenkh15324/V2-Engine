@@ -6,10 +6,8 @@
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
-#include "core/actor_system/runtime/i_mailbox.hpp"
-#include "core/actor_system/runtime/mailbox_mutex.hpp"
-#include "core/actor_system/runtime/mailbox_lockfree.hpp"
 #include "core/actor_system/actor/actor_context.hpp"
+#include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
@@ -29,12 +27,7 @@ public:
 
     template<typename T, typename ... Args>
     T* createActor(const std::string& name, size_t mailboxSize = 512, Args&& ... args){
-        return createActorImpl<T>(name, MailboxType::LockFree, mailboxSize, std::forward<Args>(args)...);
-    }
-
-    template<typename T, typename ... Args>
-    T* createActor(const std::string& name, size_t mailboxSize, MailboxType mailboxType, Args&& ... args){
-        return createActorImpl<T>(name, mailboxType, mailboxSize, std::forward<Args>(args)...);
+        return createActorImpl<T>(name, mailboxSize, std::forward<Args>(args)...);
     }
 
     void start();
@@ -43,23 +36,12 @@ public:
     void requestStop();
 
 private:
-    template <typename T>
-    static std::unique_ptr<IMailbox<T>> createMailbox(MailboxType type, size_t size){
-        switch(type){
-            case MailboxType::LockFree:
-                return std::make_unique<LockFreeMailbox<T>>(size);
-            case MailboxType::Mutex:
-            default:
-                return std::make_unique<MutexMailbox<T>>(size);
-        }
-    }
-
     template <typename T, typename ... Args>
-    T* createActorImpl(const std::string& name, MailboxType mailboxType, size_t mailboxSize, Args&& ... args){
+    T* createActorImpl(const std::string& name, size_t mailboxSize, Args&& ... args){
         V2_ASSERT((std::is_base_of_v<Actor, T>), "T must derive from Actor");
         uint64_t id = nextActorId_++;
         auto actor = std::make_unique<T>(name, id, std::forward<Args>(args)...);
-        auto mailbox = createMailbox<Message>(mailboxType, mailboxSize);
+        auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(mailboxSize);
         auto actorCtx = std::make_unique<ActorContext>(std::move(actor), std::move(mailbox), &dispatcher_, &scheduler_, &actorRegistry_);
         T* ptr = static_cast<T*>(actorCtx->actor());
         actorRegistry_.add(ptr);
