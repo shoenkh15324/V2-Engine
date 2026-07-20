@@ -1,4 +1,5 @@
 #include "actor_system.hpp"
+#include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/worker.hpp"
 #include "core/actor_system/actor/actor.hpp"
 
@@ -20,7 +21,8 @@ void ActorSystem::start(){
     dispatcher_.start();
     scheduler_.start(&dispatcher_);
     for(auto& ctx : actorContexts_){
-        ctx->actor()->open();
+        int ret = ctx->actor()->open();
+        if(ret != Ok) V2_LOG_ERROR("Actor %s failed to open", ctx->actor()->name().c_str());
     }
     for(auto& w : workers_){
         w->start();

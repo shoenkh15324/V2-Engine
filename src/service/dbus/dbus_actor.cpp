@@ -20,10 +20,15 @@ int DbusActor::open(){
     try{
         connection_ = sdbus::createSystemBusConnection(sdbus::ServiceName(busName_));
         connection_->enterEventLoopAsync();
-
         serverHandler_ = std::make_unique<DbusServerHandler>(*connection_, *this);
         clientHandler_ = std::make_unique<DbusClientHandler>(*connection_, *this);
-    }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to open D-Bus connection: {}", e.what());
+    }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to open D-Bus connection: %s", e.what());
+        clientHandler_.reset();
+        serverHandler_.reset();
+        if(connection_){
+            connection_->leaveEventLoop();
+            connection_.reset();
+        }
         state_ = Closed;
         return Fail;
     }
@@ -38,7 +43,6 @@ int DbusActor::close(){
     //
     serverHandler_.reset();
     clientHandler_.reset();
-
     if(connection_){
         connection_->leaveEventLoop();
         connection_.reset();

@@ -55,18 +55,18 @@ void DbusClientHandler::handleSubscribeSignal(const DbusSubscribeSignal& msg){
             actor_.sendMsg(subscriber, std::move(event));
         });
         signalSubscriptions_[key] = {msg.subscriberActorName, std::move(proxy)};
-        V2_LOG_INFO("Subscribed to D-Bus signal: {}", key);
+        V2_LOG_INFO("Subscribed to D-Bus signal: %s", key);
     }catch(const sdbus::Error& e){
-        V2_LOG_ERROR("Failed to subscribe D-Bus signal {}: {}", key, e.what());
+        V2_LOG_ERROR("Failed to subscribe D-Bus signal %s: %s", key, e.what());
     }
 }
 
 void DbusClientHandler::handleUnsubscribeSignal(const DbusSubscribeSignal& msg){
     auto key = msg.destination + ":" + msg.objectPath + ":" + msg.interfaceName + "." + msg.signalName;
     if(signalSubscriptions_.erase(key) > 0){
-        V2_LOG_INFO("Unsubscribed from D-Bus signal: {}", key);
+        V2_LOG_INFO("Unsubscribed from D-Bus signal: %s", key);
     }else{
-        V2_LOG_WARN("Signal subscription not found: {}", key);
+        V2_LOG_WARN("Signal subscription not found: %s", key);
     }
 }
 
