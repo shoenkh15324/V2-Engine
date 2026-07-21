@@ -6,7 +6,7 @@
 
 ```
 Phase 1: 성능 병목 제거 ✅ 완료
-Phase 2: actor_system 리팩토링
+Phase 2: actor_system 리팩토링 🔄 진행 중
 Phase 3: 메모리/전송 최적화
 Phase 4: 아키텍처 고도화
 Phase 5: 벤치마크 인프라 + 보고서
@@ -30,12 +30,12 @@ Phase 5: 벤치마크 인프라 + 보고서
 
 | 작업 | 상세 |
 |------|------|
-| Per-Worker MPSC 큐 | 전역 `readyQueue_` + `mutex_` → 워커별 `LockFreeMpscQueue<ActorContext*>` |
+| Per-Worker MPSC 큐 | 전역 `readyQueue_` + `mutex_` → 워커별 `LockFreeMpscQueue<ActorRuntime*>` |
 | Per-Worker 세마포어 | 전역 `counting_semaphore` → 워커별 세마포어 (thundering herd 제거) |
 | 액터-워커 악피니티 | `hash(actorId) % workerCount`으로 고정 배정 → 한 액터를 한 워커만 처리 |
-| `inQueue_` 제거 | `ActorContext::scheduled_` 원자적 교환으로 dedup 대체 |
+| `inQueue_` 제거 | `ActorRuntime::scheduled_` 원자적 교환으로 dedup 대체 |
 
-**변경 파일**: `lock_free_mpsc_queue.hpp`, `actor_system.hpp/cpp`, `actor_context.hpp/cpp`, `dispatcher.hpp/cpp`, `worker.cpp`, 테스트/벤치마크
+**변경 파일**: `lock_free_mpsc_queue.hpp`, `actor_system.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.cpp`, 테스트/벤치마크
 
 ---
 
@@ -45,58 +45,54 @@ Phase 5: 벤치마크 인프라 + 보고서
 > 
 > **진행 상황**:
 > - ✅ `IActorRuntime` 인터페이스 도입 (Actor ↔ ActorContext 순환 의존 제거)
-> - 🔄 Dispatcher를 WorkDispatcher / IOEventLoop / Scheduler로 분리
+> - ✅ Dispatcher를 WorkDispatcher / EventLoopEpoll / Scheduler로 분리
+> - ✅ `IWorkDispatcher`, `IEventLoop` 인터페이스 도입 (의존성 역전)
+> - ✅ `ActorContext` → `ActorRuntime` 리네임
+> - 🔄 PImpl 적용으로 컴파일 의존성 최소화
 
 ### 디렉토리 구조
 
 ```
 actor_system/
-    ├── actor_system.hpp           # Facade (PImpl 적용)
+    ├── actor_system.hpp           # Facade
     ├── actor_system.cpp
-    ├── actor_system_impl.hpp      # 내부 구현
     │
     ├── actor/
     │   ├── actor.hpp              # Actor 추상 클래스
-    │   ├── actor.cpp
-    │   ├── actor_handle.hpp       # 외부 참조용 핸들
-    │   └── i_actor_runtime.hpp    # Actor가 의존할 인터페이스
+    │   └── actor.cpp
     │
     ├── runtime/
+    │   ├── i_actor_runtime.hpp    # Actor가 의존할 인터페이스
     │   ├── actor_runtime.hpp      # IActorRuntime 구현체
     │   ├── actor_runtime.cpp
-    │   ├── actor_registry.hpp     # Lookup 전용
-    │   ├── actor_registry.cpp
-    │   ├── scheduler.hpp          # Timer 관리만 담당
+    │   ├── i_scheduler.hpp        # Scheduler 인터페이스
+    │   ├── scheduler.hpp
     │   ├── scheduler.cpp
+    │   ├── i_actor_registry.hpp   # Registry 인터페이스
+    │   ├── actor_registry.hpp
+    │   ├── actor_registry.cpp
     │   │
     │   └── dispatcher/
-    │       ├── work_dispatcher.hpp/cpp   # Work 분배만 담당
-    │       ├── worker_pool.hpp/cpp       # 워커 스레드 풀
-    │       ├── worker.hpp/cpp            # 개별 워커
-    │       ├── work_balancer.hpp/cpp     # Load Balancing
+    │       ├── i_work_dispatcher.hpp  # WorkDispatcher 인터페이스
+    │       ├── work_dispatcher.hpp/cpp
+    │       ├── worker.hpp/cpp
     │       └── io/
-    │           ├── io_event_loop.hpp/cpp # epoll/I/O 이벤트
-    │           └── i_io_event_loop.hpp
+    │           ├── i_event_loop.hpp       # EventLoop 인터페이스
+    │           ├── event_loop_epoll.hpp   # epoll 구현체
+    │           └── event_loop_epoll.cpp
     │
-    ├── message/
-    │   ├── message.hpp            # Message 정의
-    │   ├── type_id.hpp            # typeId 상수
-    │   │
-    │   ├── system/                # 코어 메시지
-    │   ├── ipc/                   # IPC 메시지
-    │   ├── network/               # 네트워크 메시지
-    │   └── device/                # 디바이스 메시지
-    │
-    └── detail/                    # 내부 구현 헤더
+    └── message/
+        ├── message.hpp
+        └── type_id.hpp
 ```
 
 ### 핵심 아키텍처 변경
 
-#### 1. Actor ↔ ActorContext 순환 의존 제거
+#### 1. Actor ↔ ActorRuntime 순환 의존 제거 ✅
 
-**현재 문제**: Actor가 ActorContext를 직접 참조하고, ActorContext가 Actor를 참조하는 양방향 의존
+**기존 문제**: Actor가 ActorRuntime을 직접 참조하고, ActorRuntime이 Actor를 참조하는 양방향 의존
 
-**개선**: `IActorRuntime` 인터페이스 도입으로 단방향 의존성 확보
+**해결**: `IActorRuntime` 인터페이스 도입으로 단방향 의존성 확보
 
 ```cpp
 // actor/i_actor_runtime.hpp
@@ -111,140 +107,30 @@ public:
 };
 ```
 
-#### 2. Dispatcher 역할 분리
+#### 2. Dispatcher 역할 분리 ✅
 
-**현재 문제**: Dispatcher가 epoll + Worker 관리 + Actor Dispatch + Scheduling 모두 담당
+**기존 문제**: Dispatcher가 epoll + Worker 관리 + Actor Dispatch + Scheduling 모두 담당
 
-**개선**: 역할별 분리
+**해결**: 역할별 분리 + 인터페이스 기반 의존성 역전
 
 | 컴포넌트 | 책임 | 파일 |
 |----------|------|------|
-| `WorkDispatcher` | Ready Actor Queue 관리, Worker에게 작업 전달 (MPSC 큐, 세마포어) | `dispatcher/work_dispatcher.hpp/cpp` |
-| `IOEventLoop` | epoll, fd subscribe/unsubscribe, 이벤트 루프 | `dispatcher/io/io_event_loop.hpp/cpp` |
-| `Scheduler` | Timer Queue, Timeout 관리 (IOEventLoop에 의존) | `runtime/scheduler.hpp/cpp` |
+| `IWorkDispatcher` | Ready Actor Queue 인터페이스 | `dispatcher/i_work_dispatcher.hpp` |
+| `WorkDispatcher` | MPSC 큐 + 세마포어 기반 work 분배 | `dispatcher/work_dispatcher.hpp/cpp` |
+| `IEventLoop` | fd 구독/구독해제 인터페이스 | `dispatcher/io/i_event_loop.hpp` |
+| `EventLoopEpoll` | epoll 기반 이벤트 루프 (Linux 전용) | `dispatcher/io/event_loop_epoll.hpp/cpp` |
+| `Scheduler` | Timer Queue, Timeout 관리 (`IEventLoop`에 의존) | `runtime/scheduler.hpp/cpp` |
 
-**제외 대상** (차후 작업):
-| 컴포넌트 | 설명 |
-|----------|------|
-| `WorkerPool` | 워커 스레드 풀 관리 (현재 Worker가 개별 관리) |
-| `WorkBalancer` | Load Balancing, Work Stealing (Phase 4) |
-
-##### WorkDispatcher
-
-```cpp
-class WorkDispatcher {
-public:
-    explicit WorkDispatcher(int workerCount);
-    void dispatch(ActorContext* actorCtx);   // hash(actorId) % workerCount 기반 enqueue
-    ActorContext* acquire(int workerId);      // 세마포어 대기 후 pop
-    void stop();                              // 모든 세마포어 해제로 워커 깨우기
-    bool isRunning() const;
-    int workerCount() const;
-private:
-    int workerCount_;
-    std::vector<std::unique_ptr<LockFreeMpscQueue<ActorContext*>>> queues_;
-    std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
-    std::atomic<bool> running_{false};
-};
-```
-
-##### IOEventLoop
-
-```cpp
-// io/i_io_event_loop.hpp
-class IIOEventLoop {
-public:
-    virtual ~IIOEventLoop() = default;
-    virtual int subscribe(int fd, std::function<void()> handler) = 0;
-    virtual int unsubscribe(int fd) = 0;
-};
-
-// io/io_event_loop.hpp
-class IOEventLoop : public IIOEventLoop {
-public:
-    explicit IOEventLoop(int maxEvents = 64, int waitTimeoutMs = 1000);
-    void start();   // stopFd 생성 + epoll 등록
-    void run();     // epoll_wait 루프 (메인 스레드)
-    void stop();    // stopFd로 종료 신호
-    int subscribe(int fd, std::function<void()> handler) override;
-    int unsubscribe(int fd) override;
-private:
-    Epoll epoll_;
-    int stopFd_ = -1;
-    std::unordered_map<int, std::function<void()>> handlers_;
-    std::vector<epoll_event> epollEvents_;
-    std::atomic<bool> running_{false};
-};
-```
-
-##### Scheduler 의존성 변경
-
-```cpp
-// 변경 전
-class Scheduler {
-    Dispatcher* dispatcher_;  // subscribe/unsubscribe용
-    void start(Dispatcher* dispatcher);
-};
-
-// 변경 후
-class Scheduler {
-    IIOEventLoop* ioLoop_;    // subscribe/unsubscribe용
-    void start(IIOEventLoop* ioLoop);
-};
-```
-
-##### IActorRuntime 인터페이스 변경
-
-```cpp
-// 변경 전
-class IActorRuntime {
-    virtual Dispatcher* dispatcher() const = 0;  // 모든 의존성 노출
-};
-
-// 변경 후
-class IActorRuntime {
-    virtual WorkDispatcher* workDispatcher() const = 0;  // work dispatch만
-    virtual IOEventLoop* ioEventLoop() const = 0;        // I/O 이벤트만
-};
-```
-
-##### Service Actors 변경
-
-```cpp
-// 변경 전
-actorContext()->dispatcher()->subscribe(fd, handler);
-
-// 변경 후
-runtime()->ioEventLoop()->subscribe(fd, handler);
-```
-
-##### 의존성 흐름 (최종)
+##### 의존성 흐름
 
 ```
 ActorSystem
   ├── WorkDispatcher (큐/세마포어만)
-  ├── IOEventLoop (epoll만)
-  ├── Scheduler → IIOEventLoop에 의존
-  ├── Workers[] → WorkDispatcher에만 의존
-  └── ActorContext → WorkDispatcher에만 의존
+  ├── EventLoopEpoll (epoll만, Linux 전용)
+  ├── Scheduler → IEventLoop에 의존
+  ├── Workers[] → IWorkDispatcher에만 의존
+  └── ActorRuntime → IWorkDispatcher에만 의존
 ```
-
-##### 작업 단계
-
-| 순위 | 작업 | 예상 기간 |
-|------|------|-----------|
-| 1 | WorkDispatcher 추출 (dispatcher에서 큐/세마포어 분리) | 0.5일 |
-| 2 | IOEventLoop 추출 (dispatcher에서 epoll 분리) | 0.5일 |
-| 3 | Scheduler 의존성을 Dispatcher → IOEventLoop로 변경 | 0.5일 |
-| 4 | IActorRuntime 인터페이스에 workDispatcher/ioEventLoop 추가 | 0.5일 |
-| 5 | ActorContext를 WorkDispatcher에만 의존하도록 변경 | 0.5일 |
-| 6 | Service actors 업데이트 (dispatcher() → ioEventLoop()) | 0.5일 |
-| 7 | ActorSystem 구조 변경 (Dispatcher → WorkDispatcher + IOEventLoop) | 0.5일 |
-| 8 | core.cmake 소스 경로 업데이트 | 0.5일 |
-| 9 | 테스트 파일 분리/업데이트 | 0.5일 |
-| 10 | 빌드 + 테스트 검증 | 0.5일 |
-
-**총 예상 기간: 5일**
 
 #### 3. Registry 역할 축소
 
@@ -310,38 +196,52 @@ struct MessageEnvelope {
 Application
       │
       ▼
-ActorSystem (PImpl)
+ActorSystem
       │
-      ▼
-RuntimeContext
-      ├──────── ActorRegistry (Lookup만)
-      ├──────── Scheduler (Timer만)
-      ├──────── WorkDispatcher
-      │           ├──────── WorkerPool
-      │           └──────── WorkBalancer
-      ├──────── IOEventLoop (epoll만)
-      └──────── Mailbox (LockFree 큐)
+      ├── WorkDispatcher ──► IWorkDispatcher (interface)
+      │       └── Worker
+      │
+      ├── EventLoopEpoll ──► IEventLoop (interface)   [Linux 전용]
+      │
+      ├── Scheduler ──► IEventLoop (interface)
+      │       └── Timer
+      │
+      ├── ActorRegistry ──► IActorRegistry (interface)
+      │
+      └── ActorRuntime ──► IActorRuntime (interface)
+              ├── IWorkDispatcher*
+              ├── IScheduler*
+              ├── IActorRegistry*
+              └── IEventLoop*
+
+Actor ──► IActorRuntime* (forward decl, friend: ActorRuntime)
 ```
 
-**모든 의존성은 위→아래 방향으로만 흐르고, 순환 의존성이 없습니다.**
+**모든 의존성은 인터페이스를 통해 흐르고, 구체 클래스는 ActorSystem에서만 직접 참조합니다.**
 
 ### 리팩토링 우선순위
 
-| 순위 | 작업 | 상태 | 예상 기간 |
-|------|------|------|-----------|
+| 순위 | 작업 | 상태 | 기간 |
+|------|------|------|------|
 | 1 | `IActorRuntime` 인터페이스 도입 | ✅ 완료 | 2-3일 |
-| 2 | Dispatcher를 WorkDispatcher / IOEventLoop / Scheduler로 분리 | 🔄 진행 예정 | 5일 |
+| 2 | Dispatcher를 WorkDispatcher / EventLoopEpoll / Scheduler로 분리 | ✅ 완료 | 5일 |
 | 3 | MessageEnvelope 기반 메시지 시스템 구축 | | 3-4일 |
 | 4 | Registry를 Lookup 전용으로 축소 | | 1-2일 |
 | 5 | ActorSystem이 Actor 생명주기를 단독 관리 | | 2-3일 |
 | 6 | PImpl을 적용하여 컴파일 의존성 최소화 | | 1-2일 |
 | 7 | Runtime API를 최소화하여 Actor와 Runtime 완전 분리 | | 2-3일 |
 
-**총 예상 기간: 16-22일** (IActorRuntime 완료로 1-2일 단축)
+**총 예상 기간: 16-22일** (Phase 2 완료로 7일 단축)
 
 ### 변경 파일
 
-`actor_system.hpp/cpp`, `actor_system_impl.hpp` (신규), `actor/` 전체, `runtime/` 전체, `message/` 전체
+**Phase 2 완료 파일:**
+- **신규**: `i_work_dispatcher.hpp`, `work_dispatcher.hpp/cpp`, `i_event_loop.hpp`, `event_loop_epoll.hpp/cpp`, `i_actor_runtime.hpp`, `i_scheduler.hpp`, `i_actor_registry.hpp`
+- **수정**: `actor_system.hpp/cpp`, `actor_runtime.hpp/cpp`, `worker.hpp/cpp`, `scheduler.hpp/cpp`, `actor.hpp`, `ipc_server_actor.cpp`, `monitor_actor.cpp`, `core.cmake`
+- **삭제**: `dispatcher.hpp/cpp`, `i_io_event_loop.hpp`, `io_event_loop.hpp/cpp`, `worker_pool.hpp/cpp`
+
+**Phase 3~5 변경 파일:**
+`actor.hpp/cpp`, `actor_runtime.hpp`, `dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`, `timer.hpp/cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
 
 ---
 
@@ -363,7 +263,7 @@ RuntimeContext
 
 | 작업 | 상세 |
 |------|------|
-| `ActorContext::scheduled_` | 프로듀서 쓰기 / 워커 읽기 간 캐시 라인 분리 (`alignas(64)`) |
+| `ActorRuntime::scheduled_` | 프로듀서 쓰기 / 워커 읽기 간 캐시 라인 분리 (`alignas(64)`) |
 | `ActorMetrics` | 6개 atomic을 48바이트에 패킹 → `alignas(64)`로 분리 (`metrics.hpp:8-14`) |
 | `WorkerMetrics` / `DispatcherMetrics` | 인접 atomic 패딩 추가 (`metrics.hpp:46-80`) |
 | `kCacheLine` 상수 공유 | `lock_free_mpsc_queue.hpp` → `common/`으로 이동, 전역 사용 |
@@ -413,7 +313,7 @@ RuntimeContext
 | 지연 `count()` | `Metrics::recordDispatch/recordEnqueue` 내부에서만 `count()` 호출하도록 변경 |
 | 메트릭 비활성화 시 zero-overhead | `isEnabled()` 체크를 호출 전으로 이동, 비활성화 시 atomic 로드 0회 |
 
-**변경 파일**: `actor.hpp/cpp`, `actor_context.hpp`, `dispatcher.hpp`, `worker.hpp`, `timer.hpp/cpp`, `scheduler.cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
+**변경 파일**: `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp`, `timer.hpp/cpp`, `scheduler.cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
 
 ---
 
@@ -439,7 +339,7 @@ RuntimeContext
 | 작업 | 상세 |
 |------|------|
 | `supervisor.hpp` | 액터 실패 처리/재시작 트리 구조 |
-| 예외 격리 | `ActorContext::run()`에서 `try/catch`로 `handle()` 감싸기, 크래프된 액터 격리 |
+| 예외 격리 | `ActorRuntime::run()`에서 `try/catch`로 `handle()` 감싸기, 크래프된 액터 격리 |
 | 재시작 전략 | `one_for_one` (단일 액터 재시작), `one_for_all` (부모-자식 전체 재시작) |
 | 데드 레터 큐 | 실패한 메시지를 보관하는 큐 (디버깅/재시도용) |
 | 라이프사이클 훅 | `preStart()`, `postStop()`, `preRestart()`, `postRestart()` 추가 |
@@ -460,13 +360,13 @@ RuntimeContext
 
 | 작업 | 상세 |
 |------|------|
-| `scheduled_` 더블 디스패치 | `scheduled_=false` → `empty()` 사이 프로듀서가 중복 디스패치 가능 → `exchange` 기반으로 수정 (`actor_context.cpp:45-47`) |
-| 타이머 use-after-free | `Scheduler::addTimer()`에서 `Actor*` raw 포인터 캡처 → `ActorContext*` 또는 `weak_ptr`로 변경 (`scheduler.cpp:13-14`) |
+| `scheduled_` 더블 디스패치 | `scheduled_=false` → `empty()` 사이 프로듀서가 중복 디스패치 가능 → `exchange` 기반으로 수정 (`actor_runtime.cpp:45-47`) |
+| 타이머 use-after-free | `Scheduler::addTimer()`에서 `Actor*` raw 포인터 캡처 → `ActorRuntime*` 또는 `weak_ptr`로 변경 (`scheduler.cpp:13-14`) |
 | `ActorState` 레이스 | non-atomic `uint8_t`를 메인/워커 스레드가 동시에 접근 → `std::atomic<uint8_t>` 또는 `std::atomic<ActorState>` (`actor.hpp:53`) |
 | 그레이셔널 드레인 | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 (`actor_system.cpp:30-38`) |
 | `Worker::stop()` 데드락 | 세마포어 해제 없이 `join()` 호출 시 데드락 → 정지 순서 강제 또는 세마포어 추가 해제 (`worker.cpp:22-27`) |
 
-**변경 파일**: `typed_channel.hpp` (신규), `supervisor.hpp` (신규), `work_stealing_queue.hpp` (신규), `actor.hpp/cpp`, `actor_context.hpp/cpp`, `dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`
+**변경 파일**: `typed_channel.hpp` (신규), `supervisor.hpp` (신규), `work_stealing_queue.hpp` (신규), `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`
 
 ---
 
