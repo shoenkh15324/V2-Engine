@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "core/common/util/return.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/actor_runtime.hpp"
 #include "core/actor_system/runtime/actor_registry.hpp"
@@ -42,8 +43,8 @@ TEST(ActorRuntime, CreateWithRegistry){
     auto* a = actor.get();
     ActorRuntime ctx(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
     reg.add(a);
-    EXPECT_EQ(reg.findByName("a"), a);
-    EXPECT_EQ(reg.findById(1), a);
+    EXPECT_EQ(reg.findByName("a").get(), a);
+    EXPECT_EQ(reg.findById(1).get(), a);
 }
 
 // Enqueue
@@ -123,7 +124,7 @@ TEST(ActorRuntime, DestructorRemovesFromRegistry){
     {
         ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
         reg.add(ctx.actor());
-        EXPECT_NE(reg.findByName("a"), nullptr);
+        EXPECT_TRUE(reg.findByName("a").valid());
     }
-    EXPECT_EQ(reg.findByName("a"), nullptr);
+    EXPECT_FALSE(reg.findByName("a").valid());
 }

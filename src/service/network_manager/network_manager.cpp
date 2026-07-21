@@ -3,6 +3,7 @@
 #include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 #include "service/dbus/dbus_actor.hpp"
 
 #if V2_PLATFORM_LINUX
@@ -19,7 +20,8 @@ int NetworkManagerActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    auto* dbus = dynamic_cast<DbusActor*>(runtime()->actorRegistry()->findByName("dbus_actor"));
+    auto dbusHandle = runtime()->actorRegistry()->findByName("dbus_actor");
+    auto* dbus = dynamic_cast<DbusActor*>(dbusHandle.get());
     if(!dbus){ V2_LOG_ERROR("D-Bus actor is not found");
         state_ = Closed;
         return Fail;

@@ -1,5 +1,6 @@
 #include "actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/dispatcher/i_work_dispatcher.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
@@ -48,4 +49,23 @@ int ActorRuntime::run(int maxBatch){
         workDispatcher_->dispatch(this);
     }
     return processed;
+}
+
+int ActorRuntime::enableActor(const std::string& name){
+    if(!actorRegistry_) return -1;
+    ActorHandle h = actorRegistry_->findByName(name);
+    if(!h.valid()) return -1;
+    Actor* a = h.get();
+    if(!a) return -1;
+    return a->open() == 0 ? 0 : -3;
+}
+
+int ActorRuntime::disableActor(const std::string& name){
+    if(!actorRegistry_) return -1;
+    ActorHandle h = actorRegistry_->findByName(name);
+    if(!h.valid()) return -1;
+    Actor* a = h.get();
+    if(!a) return -1;
+    if(a->isEssential()) return -2;
+    return a->close() == 0 ? 0 : -3;
 }

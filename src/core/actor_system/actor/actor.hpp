@@ -17,6 +17,7 @@ class ActorRuntime;
 
 class Actor{
     friend class ActorRuntime;
+    friend class ActorHandle;
 public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor();
@@ -44,6 +45,8 @@ public:
 
     const std::string& name() const { return name_; }
     uint64_t id() const { return id_; }
+    uint64_t generation() const { return generation_; }
+    void setGeneration(uint64_t gen){ generation_ = gen; }
     ActorState getState() const { return state_; }
     bool isEssential() const { return essential_; }
     void setEssential(bool v){ essential_ = v; }
@@ -59,5 +62,6 @@ private:
     IActorRuntime* runtime_ = nullptr;
     std::string name_;
     uint64_t id_;
+    uint64_t generation_{0};
     bool essential_{false};
 };

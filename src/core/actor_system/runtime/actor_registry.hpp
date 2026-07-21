@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include "core/actor_system/runtime/i_actor_registry.hpp"
@@ -9,7 +8,7 @@ class Actor;
 
 class ActorRegistry : public IActorRegistry{
 public:
-    ActorRegistry() = default;
+    ActorRegistry();
     ~ActorRegistry() = default;
     
     ActorRegistry(const ActorRegistry&) = delete;
@@ -17,17 +16,24 @@ public:
     ActorRegistry(ActorRegistry&&) = delete;
     ActorRegistry& operator=(ActorRegistry&&) = delete;
 
-    void add(Actor* actor);
-    void remove(Actor* actor);
-    void clear();
-    Actor* findByName(const std::string& name) const override;
-    Actor* findById(uint64_t id) const override;
-    void forEachActor(const std::function<void(Actor*)>& callback) const override;
-    int enableActor(const std::string& name) override;
-    int disableActor(const std::string& name) override;
+    ActorHandle findByName(const std::string& name) override;
+    ActorHandle findById(uint64_t id) override;
+    Actor* resolve(const ActorHandle& handle) const override;
+
+    void forEachActor(const std::function<void(ActorHandle)>& callback) const override;
+    
+    void add(Actor* actor) override;
+    void remove(Actor* actor) override;
+    void clear() override;
 
 private:
-    mutable std::mutex mutex_;
-    std::unordered_map<std::string, Actor*> byName_;
-    std::unordered_map<uint64_t, Actor*> byId_;
+    struct ActorEntry{
+        Actor* actor;
+        uint64_t generation;
+    };
+
+    IActorRegistry* self_ = nullptr;
+    std::unordered_map<std::string, ActorEntry> byName_;
+    std::unordered_map<uint64_t, ActorEntry> byId_;
+    std::unordered_map<uint64_t, uint64_t> generations_;
 };

@@ -2,18 +2,21 @@
 #include <cstdint>
 #include <string>
 #include <functional>
+#include "core/actor_system/actor/actor_handle.hpp"
 
 class Actor;
 
 class IActorRegistry{
 public:
     virtual ~IActorRegistry() = default;
-    virtual Actor* findByName(const std::string& name) const = 0;
-    virtual Actor* findById(uint64_t id) const = 0;
-    virtual void forEachActor(const std::function<void(Actor*)>& callback) const = 0;
-    virtual void remove(Actor* actor) = 0;
 
-    // Returns 0 on success, negative on error
-    virtual int enableActor(const std::string& name) = 0;
-    virtual int disableActor(const std::string& name) = 0;
+    virtual ActorHandle findByName(const std::string& name) = 0;
+    virtual ActorHandle findById(uint64_t id) = 0;
+    virtual Actor* resolve(const ActorHandle& handle) const = 0;
+
+    virtual void forEachActor(const std::function<void(ActorHandle)>& callback) const = 0;
+
+    virtual void add(Actor* actor) = 0;
+    virtual void remove(Actor* actor) = 0;
+    virtual void clear() = 0;
 };

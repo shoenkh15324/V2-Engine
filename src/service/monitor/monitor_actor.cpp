@@ -1,6 +1,7 @@
 #include "monitor_actor.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
@@ -64,7 +65,9 @@ void MonitorActor::unsubscribeAll(){
 }
 
 void MonitorActor::collectActorInfo(std::vector<ActorInfo>& actors){
-    runtime()->actorRegistry()->forEachActor([&](Actor* a){
+    runtime()->actorRegistry()->forEachActor([&](ActorHandle h){
+        Actor* a = h.get();
+        if(!a) return;
         ActorInfo info;
         info.name = a->name();
         info.id = a->id();

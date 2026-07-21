@@ -4,6 +4,7 @@
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_scheduler.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 
 Actor::Actor(std::string name, uint64_t id) : name_(name), id_(id){
     //
@@ -18,33 +19,33 @@ Actor::~Actor(){
 }
 
 void Actor::sendMsg(const std::string& targetName, Message msg){
-    auto* target = runtime_->actorRegistry()->findByName(targetName);
-    if(target){
-        target->receiveMsg(std::move(msg));
+    ActorHandle target = runtime_->actorRegistry()->findByName(targetName);
+    if(target.valid()){
+        target.send(std::move(msg));
     }
 }
 
 void Actor::sendMsg(uint64_t targetId, Message msg){
-    auto* target = runtime_->actorRegistry()->findById(targetId);
-    if(target){
-        target->receiveMsg(std::move(msg));
+    ActorHandle target = runtime_->actorRegistry()->findById(targetId);
+    if(target.valid()){
+        target.send(std::move(msg));
     }
 }
 
 int Actor::sendMsgAfter(const std::string& targetName, Message msg, uint64_t delayMs){
-    auto* target = runtime_->actorRegistry()->findByName(targetName);
-    if(!target){
+    ActorHandle target = runtime_->actorRegistry()->findByName(targetName);
+    if(!target.valid()){
         return Fail;
     }
-    return runtime_->scheduler() ? runtime_->scheduler()->addTimer(target, std::move(msg), delayMs, false) : Fail;
+    return runtime_->scheduler() ? runtime_->scheduler()->addTimer(target.get(), std::move(msg), delayMs, false) : Fail;
 }
 
 int Actor::sendMsgAfter(uint64_t targetId, Message msg, uint64_t delayMs){
-    auto* target = runtime_->actorRegistry()->findById(targetId);
-    if(!target){
+    ActorHandle target = runtime_->actorRegistry()->findById(targetId);
+    if(!target.valid()){
         return Fail;
     }
-    return runtime_->scheduler() ? runtime_->scheduler()->addTimer(target, std::move(msg), delayMs, false) : Fail;
+    return runtime_->scheduler() ? runtime_->scheduler()->addTimer(target.get(), std::move(msg), delayMs, false) : Fail;
 }
 
 void Actor::receiveMsg(Message msg){
@@ -72,4 +73,3 @@ size_t Actor::mailboxCount() const {
 size_t Actor::mailboxCapacity() const {
     return runtime_ ? runtime_->mailboxCapacity() : 0;
 }
-

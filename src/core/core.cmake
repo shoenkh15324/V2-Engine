@@ -8,6 +8,7 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/actor_registry.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor_system.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_handle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/actor_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/work_dispatcher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/io/event_loop_epoll.cpp

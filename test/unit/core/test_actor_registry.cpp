@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "core/actor_system/runtime/actor_registry.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 #include <memory>
 #include <thread>
 #include <vector>
@@ -34,20 +35,22 @@ TEST(ActorRegistry, AddAndFindByName){
     ActorRegistry reg;
     TestActor actor("sensor", 1);
     reg.add(&actor);
-    EXPECT_EQ(reg.findByName("sensor"), &actor);
+    EXPECT_TRUE(reg.findByName("sensor").valid());
+    EXPECT_EQ(reg.findByName("sensor").get(), &actor);
 }
 
 TEST(ActorRegistry, AddAndFindById){
     ActorRegistry reg;
     TestActor actor("sensor", 42);
     reg.add(&actor);
-    EXPECT_EQ(reg.findById(42), &actor);
+    EXPECT_TRUE(reg.findById(42).valid());
+    EXPECT_EQ(reg.findById(42).get(), &actor);
 }
 
 TEST(ActorRegistry, FindNonExistent){
     ActorRegistry reg;
-    EXPECT_EQ(reg.findByName("nope"), nullptr);
-    EXPECT_EQ(reg.findById(999), nullptr);
+    EXPECT_FALSE(reg.findByName("nope").valid());
+    EXPECT_FALSE(reg.findById(999).valid());
 }
 
 TEST(ActorRegistry, Remove){
@@ -55,8 +58,8 @@ TEST(ActorRegistry, Remove){
     TestActor actor("sensor", 1);
     reg.add(&actor);
     reg.remove(&actor);
-    EXPECT_EQ(reg.findByName("sensor"), nullptr);
-    EXPECT_EQ(reg.findById(1), nullptr);
+    EXPECT_FALSE(reg.findByName("sensor").valid());
+    EXPECT_FALSE(reg.findById(1).valid());
 }
 
 TEST(ActorRegistry, MultipleActors){
@@ -69,12 +72,12 @@ TEST(ActorRegistry, MultipleActors){
     reg.add(&a2);
     reg.add(&a3);
 
-    EXPECT_EQ(reg.findByName("sensor"), &a1);
-    EXPECT_EQ(reg.findByName("actuator"), &a2);
-    EXPECT_EQ(reg.findByName("controller"), &a3);
-    EXPECT_EQ(reg.findById(1), &a1);
-    EXPECT_EQ(reg.findById(2), &a2);
-    EXPECT_EQ(reg.findById(3), &a3);
+    EXPECT_EQ(reg.findByName("sensor").get(), &a1);
+    EXPECT_EQ(reg.findByName("actuator").get(), &a2);
+    EXPECT_EQ(reg.findByName("controller").get(), &a3);
+    EXPECT_EQ(reg.findById(1).get(), &a1);
+    EXPECT_EQ(reg.findById(2).get(), &a2);
+    EXPECT_EQ(reg.findById(3).get(), &a3);
 }
 
 TEST(ActorRegistry, Clear){
@@ -86,8 +89,8 @@ TEST(ActorRegistry, Clear){
     reg.add(&a2);
     reg.clear();
 
-    EXPECT_EQ(reg.findByName("sensor"), nullptr);
-    EXPECT_EQ(reg.findById(2), nullptr);
+    EXPECT_FALSE(reg.findByName("sensor").valid());
+    EXPECT_FALSE(reg.findById(2).valid());
 }
 
 TEST(ActorRegistry, ForEachActor){
@@ -101,42 +104,8 @@ TEST(ActorRegistry, ForEachActor){
     reg.add(&a3);
 
     int count = 0;
-    reg.forEachActor([&](Actor*){ count++; });
+    reg.forEachActor([&](ActorHandle){ count++; });
     EXPECT_EQ(count, 3);
-}
-
-TEST(ActorRegistry, EnableActor){
-    ActorRegistry reg;
-    TestActor actor("sensor", 1);
-    reg.add(&actor);
-    EXPECT_EQ(reg.enableActor("sensor"), 0);
-    EXPECT_TRUE(actor.opened);
-}
-
-TEST(ActorRegistry, DisableActor){
-    ActorRegistry reg;
-    TestActor actor("sensor", 1);
-    reg.add(&actor);
-    reg.enableActor("sensor");
-    EXPECT_EQ(reg.disableActor("sensor"), 0);
-    EXPECT_FALSE(actor.opened);
-}
-
-TEST(ActorRegistry, DisableEssentialActor){
-    ActorRegistry reg;
-    TestActor actor("sensor", 1);
-    actor.setEssential(true);
-    reg.add(&actor);
-    reg.enableActor("sensor");
-    EXPECT_TRUE(actor.opened);
-    EXPECT_EQ(reg.disableActor("sensor"), -2);
-    EXPECT_TRUE(actor.opened);
-}
-
-TEST(ActorRegistry, EnableUnknown){
-    ActorRegistry reg;
-    EXPECT_EQ(reg.enableActor("nope"), -1);
-    EXPECT_EQ(reg.disableActor("nope"), -1);
 }
 
 TEST(ActorRegistry, ThreadSafety){
@@ -156,6 +125,6 @@ TEST(ActorRegistry, ThreadSafety){
     t1.join();
     t2.join();
 
-    reg.forEachActor([&](Actor*){ found++; });
+    reg.forEachActor([&](ActorHandle){ found++; });
     EXPECT_EQ(found, 100);
 }

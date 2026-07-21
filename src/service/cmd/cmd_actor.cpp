@@ -1,5 +1,6 @@
 #include "cmd_actor.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
@@ -105,12 +106,14 @@ std::string CmdActor::doActorList(){
     auto* reg = runtime()->actorRegistry();
     if(!reg) return "error: actor registry unavailable\n";
     int n = 0;
-    reg->forEachActor([&](Actor*){ ++n; });
+    reg->forEachActor([&](ActorHandle){ ++n; });
     char buf[256];
     std::string result = "actor_count: " + std::to_string(n) + "\n\n"
                          "  ID  NAME              STATE      ESSENTIAL\n"
                          "  --- ----------------- ---------- ---------\n";
-    reg->forEachActor([&](Actor* a){
+    reg->forEachActor([&](ActorHandle h){
+        Actor* a = h.get();
+        if(!a) return;
         const char* st = "Unknown";
         switch(a->getState()){
             case Closed: st = "Closed"; break;
@@ -129,9 +132,9 @@ std::string CmdActor::doActorList(){
 }
 
 std::string CmdActor::doActorToggle(bool enable, const std::string& name){
-    auto* reg = runtime()->actorRegistry();
-    if(!reg) return "error: actor registry unavailable\n";
-    int ret = enable ? reg->enableActor(name) : reg->disableActor(name);
+    auto* rt = runtime();
+    if(!rt) return "error: actor runtime unavailable\n";
+    int ret = enable ? rt->enableActor(name) : rt->disableActor(name);
     if(ret == 0) return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
     if(ret == -1) return "error: not found '" + name + "'\n";
     if(ret == -2) return "error: '" + name + "' is essential\n";
@@ -260,7 +263,8 @@ std::string CmdActor::handleMetrics(const std::vector<std::string>& args){
 std::string CmdActor::formatMetricsSnapshot(){
     auto snap = Metrics::snapshot();
     for(auto& a : snap.actors){
-        Actor* actor = runtime()->actorRegistry()->findById(a.id);
+        ActorHandle h = runtime()->actorRegistry()->findById(a.id);
+        Actor* actor = h.get();
         a.name = actor ? actor->name() : "unknown";
     }
     std::ostringstream oss;

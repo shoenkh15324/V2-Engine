@@ -1,54 +1,52 @@
 #include "actor_registry.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 
-void ActorRegistry::add(Actor* actor){
-    std::lock_guard<std::mutex> lock(mutex_);
-    byName_[actor->name()] = actor;
-    byId_[actor->id()] = actor;
+ActorRegistry::ActorRegistry(){
+    self_ = this;
 }
 
-void ActorRegistry::remove(Actor* actor){
-    std::lock_guard<std::mutex> lock(mutex_);
-    byName_.erase(actor->name());
-    byId_.erase(actor->id());
-}
-
-void ActorRegistry::clear(){
-    std::lock_guard<std::mutex> lock(mutex_);
-    byName_.clear();
-    byId_.clear();
-}
-
-Actor* ActorRegistry::findByName(const std::string& name) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+ActorHandle ActorRegistry::findByName(const std::string& name){
     auto it = byName_.find(name);
-    return (it != byName_.end()) ? it->second : nullptr;
+    if(it == byName_.end()) return ActorHandle();
+    return ActorHandle(it->second.actor->id(), it->second.generation, self_);
 }
 
-Actor* ActorRegistry::findById(uint64_t id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+ActorHandle ActorRegistry::findById(uint64_t id){
     auto it = byId_.find(id);
-    return (it != byId_.end()) ? it->second : nullptr;
+    if(it == byId_.end()) return ActorHandle();
+    return ActorHandle(id, it->second.generation, self_);
 }
 
-void ActorRegistry::forEachActor(const std::function<void(Actor*)>& callback) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for(auto& [id, actor] : byId_){
-        callback(actor);
+Actor* ActorRegistry::resolve(const ActorHandle& handle) const {
+    auto it = byId_.find(handle.id());
+    if(it == byId_.end()) return nullptr;
+    if(it->second.generation != handle.generation()) return nullptr;
+    return it->second.actor;
+}
+
+void ActorRegistry::forEachActor(const std::function<void(ActorHandle)>& callback) const {
+    for(auto& [id, entry] : byId_){
+        callback(ActorHandle(id, entry.generation, self_));
     }
 }
 
-int ActorRegistry::enableActor(const std::string& name){
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = byName_.find(name);
-    if(it == byName_.end()) return -1;
-    return it->second->open() == 0 ? 0 : -3;
+void ActorRegistry::add(Actor* actor){
+    uint64_t id = actor->id();
+    uint64_t gen = generations_[id]++;
+    byName_[actor->name()] = {actor, gen};
+    byId_[id] = {actor, gen};
+    actor->setGeneration(gen);
 }
 
-int ActorRegistry::disableActor(const std::string& name){
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = byName_.find(name);
-    if(it == byName_.end()) return -1;
-    if(it->second->isEssential()) return -2;
-    return it->second->close() == 0 ? 0 : -3;
+void ActorRegistry::remove(Actor* actor){
+    uint64_t id = actor->id();
+    generations_[id]++;
+    byName_.erase(actor->name());
+    byId_.erase(id);
+}
+
+void ActorRegistry::clear(){
+    byName_.clear();
+    byId_.clear();
 }
