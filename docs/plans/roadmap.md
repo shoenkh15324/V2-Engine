@@ -48,6 +48,9 @@ Phase 5: 벤치마크 인프라 + 보고서
 > - ✅ Dispatcher를 WorkDispatcher / EventLoopEpoll / Scheduler로 분리
 > - ✅ `IWorkDispatcher`, `IEventLoop` 인터페이스 도입 (의존성 역전)
 > - ✅ `ActorContext` → `ActorRuntime` 리네임
+> - ✅ `ActorHandle` 도입 (generation 기반 safe reference, dangling 방지)
+> - ✅ Registry를 Lookup 전용으로 축소 + enableActor/disableActor를 Runtime으로 이동
+> - ✅ Registry 런타임 시 lock-free 구조 완성
 > - 🔄 PImpl 적용으로 컴파일 의존성 최소화
 
 ### 디렉토리 구조
@@ -59,7 +62,9 @@ actor_system/
     │
     ├── actor/
     │   ├── actor.hpp              # Actor 추상 클래스
-    │   └── actor.cpp
+    │   ├── actor.cpp
+    │   ├── actor_handle.hpp       # generation 기반 safe reference
+    │   └── actor_handle.cpp
     │
     ├── runtime/
     │   ├── i_actor_runtime.hpp    # Actor가 의존할 인터페이스
@@ -132,17 +137,31 @@ ActorSystem
   └── ActorRuntime → IWorkDispatcher에만 의존
 ```
 
-#### 3. Registry 역할 축소
+#### 3. Registry 역할 축소 ✅
 
-**현재 문제**: Registry가 등록/조회/삭제/생명주기 모두 담당
+**기존 문제**: Registry가 등록/조회/삭제/생명주기 모두 담당
 
-**개선**: Lookup 전용으로 축소, 소유권은 ActorSystem이 관리
+**해결**: Lookup 전용으로 축소, enableActor/disableActor는 IActorRuntime으로 이동
 
 ```cpp
-// ActorRegistry는 약한 참조만 유지
-class ActorRegistry {
-    std::unordered_map<ActorId, ActorWeakRef> actors_;
-    // 실제 소유권은 ActorSystem이 가짐
+// IActorRegistry — 순수 lookup
+class IActorRegistry {
+    virtual ActorHandle findByName(const std::string& name) = 0;
+    virtual ActorHandle findById(uint64_t id) = 0;
+    virtual Actor* resolve(const ActorHandle& handle) const = 0;
+    virtual void add(Actor* actor) = 0;
+    virtual void remove(Actor* actor) = 0;
+    virtual void clear() = 0;
+};
+
+// ActorHandle — generation 기반 safe reference
+class ActorHandle {
+    uint64_t id_;
+    uint64_t generation_;
+    IActorRegistry* registry_;
+    bool valid() const;
+    Actor* get() const;
+    void send(Message msg);
 };
 ```
 
@@ -207,6 +226,7 @@ ActorSystem
       │       └── Timer
       │
       ├── ActorRegistry ──► IActorRegistry (interface)
+      │       └── ActorHandle (generation-based safe reference)
       │
       └── ActorRuntime ──► IActorRuntime (interface)
               ├── IWorkDispatcher*
@@ -215,9 +235,11 @@ ActorSystem
               └── IEventLoop*
 
 Actor ──► IActorRuntime* (forward decl, friend: ActorRuntime)
+ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 ```
 
 **모든 의존성은 인터페이스를 통해 흐르고, 구체 클래스는 ActorSystem에서만 직접 참조합니다.**
+**ActorRegistry는 런타임 시 lock-free, write ops는 start() 전에만 발생합니다.**
 
 ### 리팩토링 우선순위
 
@@ -226,18 +248,18 @@ Actor ──► IActorRuntime* (forward decl, friend: ActorRuntime)
 | 1 | `IActorRuntime` 인터페이스 도입 | ✅ 완료 | 2-3일 |
 | 2 | Dispatcher를 WorkDispatcher / EventLoopEpoll / Scheduler로 분리 | ✅ 완료 | 5일 |
 | 3 | MessageEnvelope 기반 메시지 시스템 구축 | | 3-4일 |
-| 4 | Registry를 Lookup 전용으로 축소 | | 1-2일 |
+| 4 | Registry를 Lookup 전용으로 축소 + ActorHandle 도입 | ✅ 완료 | 1-2일 |
 | 5 | ActorSystem이 Actor 생명주기를 단독 관리 | | 2-3일 |
 | 6 | PImpl을 적용하여 컴파일 의존성 최소화 | | 1-2일 |
 | 7 | Runtime API를 최소화하여 Actor와 Runtime 완전 분리 | | 2-3일 |
 
-**총 예상 기간: 16-22일** (Phase 2 완료로 7일 단축)
+**총 예상 기간: 14-20일** (Phase 2 완료로 9일 단축)
 
 ### 변경 파일
 
 **Phase 2 완료 파일:**
-- **신규**: `i_work_dispatcher.hpp`, `work_dispatcher.hpp/cpp`, `i_event_loop.hpp`, `event_loop_epoll.hpp/cpp`, `i_actor_runtime.hpp`, `i_scheduler.hpp`, `i_actor_registry.hpp`
-- **수정**: `actor_system.hpp/cpp`, `actor_runtime.hpp/cpp`, `worker.hpp/cpp`, `scheduler.hpp/cpp`, `actor.hpp`, `ipc_server_actor.cpp`, `monitor_actor.cpp`, `core.cmake`
+- **신규**: `i_work_dispatcher.hpp`, `work_dispatcher.hpp/cpp`, `i_event_loop.hpp`, `event_loop_epoll.hpp/cpp`, `i_actor_runtime.hpp`, `i_scheduler.hpp`, `i_actor_registry.hpp`, `actor_handle.hpp/cpp`
+- **수정**: `actor_system.hpp/cpp`, `actor_runtime.hpp/cpp`, `worker.hpp/cpp`, `scheduler.hpp/cpp`, `actor.hpp`, `actor_registry.hpp/cpp`, `cmd_actor.cpp`, `monitor_actor.cpp`, `network_manager.cpp`, `core.cmake`
 - **삭제**: `dispatcher.hpp/cpp`, `i_io_event_loop.hpp`, `io_event_loop.hpp/cpp`, `worker_pool.hpp/cpp`
 
 **Phase 3~5 변경 파일:**
