@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "core/actor_system/runtime/worker.hpp"
-#include "core/actor_system/runtime/dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/worker.hpp"
+#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
 
 TEST(Worker, Create){
     Dispatcher d(1);

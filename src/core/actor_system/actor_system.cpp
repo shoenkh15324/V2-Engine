@@ -1,6 +1,6 @@
 #include "actor_system.hpp"
 #include "core/common/util/return.hpp"
-#include "core/actor_system/runtime/worker.hpp"
+#include "core/actor_system/runtime/dispatcher/worker.hpp"
 #include "core/actor_system/actor/actor.hpp"
 
 ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs)

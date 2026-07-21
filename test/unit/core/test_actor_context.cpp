@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
 #include "core/common/util/return.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
-#include "core/actor_system/actor/actor_runtime.hpp"
-#include "core/actor_system/actor/actor_registry.hpp"
-#include "core/actor_system/runtime/dispatcher.hpp"
+#include "core/actor_system/actor/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_registry.hpp"
+#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/messages/tick_messages.hpp"
 #include <memory>

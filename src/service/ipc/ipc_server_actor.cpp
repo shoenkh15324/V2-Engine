@@ -1,7 +1,7 @@
 #include "ipc_server_actor.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
-#include "core/actor_system/runtime/dispatcher.hpp"
+#include "core/actor_system/actor/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include <vector>

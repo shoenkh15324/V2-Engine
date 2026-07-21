@@ -5,13 +5,14 @@ message(STATUS "Configuring Core Layer")
 add_library(v2_core OBJECT)
 
 target_sources(v2_core PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_registry.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/actor_registry.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor_system.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_runtime.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/actor_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/dispatcher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/scheduler.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/worker.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/worker.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/worker_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/log/log.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/container/ring_buffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/time/time.cpp

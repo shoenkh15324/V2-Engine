@@ -1,8 +1,8 @@
 #include "network_manager.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
-#include "core/actor_system/actor/i_actor_registry.hpp"
+#include "core/actor_system/actor/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/i_actor_registry.hpp"
 #include "service/dbus/dbus_actor.hpp"
 
 #if V2_PLATFORM_LINUX

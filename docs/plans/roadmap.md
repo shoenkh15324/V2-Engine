@@ -107,29 +107,7 @@ public:
 };
 ```
 
-#### 2. MessageEnvelope 기반 메시지 시스템
-
-**현재 문제**: `std::variant<Msg1, Msg2, ..., Msg28>` — 모든 메시지 헤더가 컴파일됨
-
-**개선**: Runtime은 전달만 담당, 메시지 내용은 각 모듈이 정의
-
-```cpp
-// message/envelope.hpp
-struct MessageEnvelope {
-    ActorId sender;
-    ActorId receiver;
-    uint16_t typeId;
-    std::shared_ptr<void> payload;
-    
-    template<typename T>
-    static MessageEnvelope create(ActorId sender, ActorId receiver, T&& data);
-    
-    template<typename T>
-    const T* as() const;
-};
-```
-
-#### 3. Dispatcher 역할 분리
+#### 2. Dispatcher 역할 분리
 
 **현재 문제**: Dispatcher가 epoll + Worker 관리 + Actor Dispatch + Scheduling 모두 담당
 
@@ -143,7 +121,7 @@ struct MessageEnvelope {
 | `IOEventLoop` | epoll, socket event, fd monitoring |
 | `Scheduler` | Timer Queue, Timeout 관리 |
 
-#### 4. Registry 역할 축소
+#### 3. Registry 역할 축소
 
 **현재 문제**: Registry가 등록/조회/삭제/생명주기 모두 담당
 
@@ -157,7 +135,7 @@ class ActorRegistry {
 };
 ```
 
-#### 5. PImpl 적용으로 컴파일 의존성 최소화
+#### 4. PImpl 적용으로 컴파일 의존성 최소화
 
 **현재 문제**: `actor_system.hpp`가 모든 구현체를 include
 
@@ -176,6 +154,28 @@ public:
 private:
     class Impl;
     std::unique_ptr<Impl> impl_;
+};
+```
+
+#### 5. MessageEnvelope 기반 메시지 시스템
+
+**현재 문제**: `std::variant<Msg1, Msg2, ..., Msg28>` — 모든 메시지 헤더가 컴파일됨
+
+**개선**: Runtime은 전달만 담당, 메시지 내용은 각 모듈이 정의
+
+```cpp
+// message/envelope.hpp
+struct MessageEnvelope {
+    ActorId sender;
+    ActorId receiver;
+    uint16_t typeId;
+    std::shared_ptr<void> payload;
+    
+    template<typename T>
+    static MessageEnvelope create(ActorId sender, ActorId receiver, T&& data);
+    
+    template<typename T>
+    const T* as() const;
 };
 ```
 

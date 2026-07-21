@@ -2,7 +2,7 @@
 #include "core/common/config/platform_config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/log/log.hpp"
-#include "dispatcher.hpp"
+#include "dispatcher/dispatcher.hpp"
 
 Scheduler::~Scheduler(){
     stop();

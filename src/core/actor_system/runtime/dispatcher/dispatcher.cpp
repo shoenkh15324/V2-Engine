@@ -1,5 +1,5 @@
 #include "dispatcher.hpp"
-#include "core/actor_system/actor/actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"

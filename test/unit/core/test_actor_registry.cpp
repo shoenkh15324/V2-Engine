@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "core/actor_system/actor/actor_registry.hpp"
+#include "core/actor_system/runtime/actor_registry.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include <memory>
 #include <thread>
