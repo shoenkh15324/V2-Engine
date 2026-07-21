@@ -1,14 +1,14 @@
 #pragma once
-#include "core/common/config/platform_config.h"
 #include <atomic>
 #include <thread>
 #include <string>
+#include "core/common/config/platform_config.h"
 
-class Dispatcher;
+class IWorkDispatcher;
 
 class Worker{
 public:
-    explicit Worker(Dispatcher* dispatcher, int id, int maxBatch);
+    explicit Worker(IWorkDispatcher* workDispatcher, int id, int maxBatch);
     ~Worker();
 
     void start();
@@ -17,7 +17,7 @@ public:
 private:
     void runLoop();
 
-    Dispatcher* dispatcher_;
+    IWorkDispatcher* workDispatcher_;
     std::thread thread_;
     std::atomic<bool> running_{false};
     std::string threadName_;

@@ -1,11 +1,21 @@
 #include "scheduler.hpp"
-#include "core/common/config/platform_config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/log/log.hpp"
-#include "dispatcher/dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 
 Scheduler::~Scheduler(){
     stop();
+}
+
+void Scheduler::start(IEventLoop* eventLoop){
+    timer_.start();
+    eventLoop_ = eventLoop;
+    subscribeTimer();
+}
+
+void Scheduler::stop(){
+    unsubscribeTimer();
+    timer_.stop();
 }
 
 int Scheduler::addTimer(Actor* target, Message message, uint64_t timeMs, bool repeating){
@@ -20,28 +30,13 @@ void Scheduler::cancel(int timerId){
 }
 
 void Scheduler::subscribeTimer(){
-#if V2_PLATFORM_LINUX
-    if(dispatcher_ && timer_.fd() >= 0){
-        dispatcher_->subscribe(timer_.fd(), [this](){ timer_.handleTimerEvent(); });
+    if(eventLoop_ && (timer_.fd() >= 0)){
+        eventLoop_->subscribe(timer_.fd(), [this](){ timer_.handleTimerEvent(); });
     }
-#endif
 }
 
 void Scheduler::unsubscribeTimer(){
-#if V2_PLATFORM_LINUX
-    if(dispatcher_ && timer_.fd() >= 0){
-        dispatcher_->unsubscribe(timer_.fd());
+    if(eventLoop_ && (timer_.fd() >= 0)){
+        eventLoop_->unsubscribe(timer_.fd());
     }
-#endif
-}
-
-void Scheduler::start(Dispatcher* dispatcher){
-    timer_.start();
-    dispatcher_ = dispatcher;
-    subscribeTimer();
-}
-
-void Scheduler::stop(){
-    unsubscribeTimer();
-    timer_.stop();
 }

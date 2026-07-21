@@ -13,10 +13,10 @@ enum ActorState : uint8_t{
 };
 
 class IActorRuntime;
-class ActorContext;
+class ActorRuntime;
 
 class Actor{
-    friend class ActorContext;
+    friend class ActorRuntime;
 public:
     explicit Actor(std::string name = "unknown", uint64_t id = -1);
     virtual ~Actor();

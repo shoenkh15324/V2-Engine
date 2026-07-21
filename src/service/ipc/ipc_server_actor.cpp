@@ -1,7 +1,7 @@
 #include "ipc_server_actor.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
-#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include <vector>
@@ -23,10 +23,10 @@ IpcServerActor::~IpcServerActor(){
 
 
 void IpcServerActor::subscribeListener(){
-    auto* dispatcher = runtime()->dispatcher();
+    auto* ioLoop = runtime()->eventLoop();
     int listenFd = server_.fd();
     IActorRuntime* ctx = runtime();
-    dispatcher->subscribe(listenFd, [ctx, this, listenFd](){
+    ioLoop->subscribe(listenFd, [ctx, this, listenFd](){
         ConnHandle conn = static_cast<ConnHandle>(server_.accept());
         if(conn >= 0){
             connections_.insert(conn);
@@ -36,23 +36,23 @@ void IpcServerActor::subscribeListener(){
 }
 
 void IpcServerActor::subscribeClient(ConnHandle conn){
-    auto* dispatcher = runtime()->dispatcher();
+    auto* ioLoop = runtime()->eventLoop();
     IActorRuntime* ctx = runtime();
-    dispatcher->subscribe(conn, [ctx, this, conn](){
+    ioLoop->subscribe(conn, [ctx, this, conn](){
         ctx->enqueue(IpcDataReceived{conn});
     });
 }
 
 void IpcServerActor::unsubscribeAll(){
-    auto* dispatcher = runtime() ? runtime()->dispatcher() : nullptr;
-    if(!dispatcher) return;
+    auto* ioLoop = runtime() ? runtime()->eventLoop() : nullptr;
+    if(!ioLoop) return;
     for(ConnHandle conn : connections_){
-        dispatcher->unsubscribe(conn);
+        ioLoop->unsubscribe(conn);
         ::close(conn);
     }
     connections_.clear();
     if(server_.fd() >= 0){
-        dispatcher->unsubscribe(server_.fd());
+        ioLoop->unsubscribe(server_.fd());
     }
 }
 
@@ -104,10 +104,10 @@ void IpcServerActor::handle(const Message& msg){
                 std::string cmd(reinterpret_cast<char*>(buf.data()), n);
                 if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
                 handleCommand(msg.conn, cmd);
-                runtime()->dispatcher()->unsubscribe(msg.conn);
+                runtime()->eventLoop()->unsubscribe(msg.conn);
             }else if(n == 0){
                 V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", msg.conn);
-                runtime()->dispatcher()->unsubscribe(msg.conn);
+                runtime()->eventLoop()->unsubscribe(msg.conn);
                 server_.closeClient(msg.conn);
                 connections_.erase(msg.conn);
             }else if(errno != EAGAIN && errno != EWOULDBLOCK){
@@ -119,7 +119,7 @@ void IpcServerActor::handle(const Message& msg){
         [this](const CmdResponse& msg){
             V2_LOG_INFO("IpcServerActor: response received for conn=%d", msg.conn);
             server_.send(msg.conn, msg.result.data(), msg.result.size());
-            runtime()->dispatcher()->unsubscribe(msg.conn);
+            runtime()->eventLoop()->unsubscribe(msg.conn);
             connections_.erase(msg.conn);
             server_.closeClient(msg.conn);
         },

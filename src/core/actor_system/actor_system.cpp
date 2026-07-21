@@ -3,12 +3,11 @@
 #include "core/actor_system/runtime/dispatcher/worker.hpp"
 #include "core/actor_system/actor/actor.hpp"
 
-ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs)
-    : dispatcher_(numWorkers, epollMaxEvents, epollWaitTimeoutMs){
+ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs) : workDispatcher_(numWorkers), eventLoop_(epollMaxEvents, epollWaitTimeoutMs){
     Metrics::init(numWorkers);
     workers_.reserve(numWorkers);
     for(int i = 0; i < numWorkers; i++){
-        workers_.push_back(std::make_unique<Worker>(&dispatcher_, i, maxBatch));
+        workers_.push_back(std::make_unique<Worker>(&workDispatcher_, i, maxBatch));
     }
 }
 
@@ -18,9 +17,10 @@ ActorSystem::~ActorSystem(){
 }
 
 void ActorSystem::start(){
-    dispatcher_.start();
-    scheduler_.start(&dispatcher_);
-    for(auto& ctx : actorContexts_){
+    workDispatcher_.start();
+    eventLoop_.start();
+    scheduler_.start(&eventLoop_);
+    for(auto& ctx : actorRuntimes_){
         int ret = ctx->actor()->open();
         if(ret != Ok) V2_LOG_ERROR("Actor %s failed to open", ctx->actor()->name().c_str());
     }
@@ -30,28 +30,28 @@ void ActorSystem::start(){
 }
 
 void ActorSystem::stop(){
-    for(auto& ctx : actorContexts_){
+    for(auto& ctx : actorRuntimes_){
         ctx->actor()->close();
     }
     scheduler_.stop();
-    dispatcher_.stop();
+    eventLoop_.stop();
+    workDispatcher_.stop();
     for(auto& w : workers_){
         w->stop();
     }
 }
 
 void ActorSystem::run(){
-#if V2_PLATFORM_LINUX
-    dispatcher_.run();
-#endif
+    eventLoop_.run();
 }
 
 void ActorSystem::requestStop(){
-    for(auto& ctx : actorContexts_){
+    for(auto& ctx : actorRuntimes_){
         ctx->actor()->close();
     }
     scheduler_.stop();
-    dispatcher_.stop();
+    eventLoop_.stop();
+    workDispatcher_.stop();
     for(auto& w : workers_){
         w->stop();
     }

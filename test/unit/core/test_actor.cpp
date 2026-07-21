@@ -78,11 +78,11 @@ TEST(Actor, SendMsgByName){
 
     auto targetActor = std::make_unique<TestActor>("target", 2);
     auto* target = targetActor.get();
-    auto targetCtx = std::make_unique<ActorContext>(std::move(targetActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+    auto targetCtx = std::make_unique<ActorRuntime>(std::move(targetActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
     reg.add(target);
     auto senderActor = std::make_unique<TestActor>("sender", 1);
     auto* sender = senderActor.get();
-    auto senderCtx = std::make_unique<ActorContext>(std::move(senderActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+    auto senderCtx = std::make_unique<ActorRuntime>(std::move(senderActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
     reg.add(sender);
 
     sender->sendMsg("target", Tick{});
@@ -94,11 +94,11 @@ TEST(Actor, SendMsgById){
 
     auto targetActor = std::make_unique<TestActor>("target", 42);
     auto* target = targetActor.get();
-    auto targetCtx = std::make_unique<ActorContext>(std::move(targetActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+    auto targetCtx = std::make_unique<ActorRuntime>(std::move(targetActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
     reg.add(target);
     auto senderActor = std::make_unique<TestActor>("sender", 1);
     auto* sender = senderActor.get();
-    auto senderCtx = std::make_unique<ActorContext>(std::move(senderActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+    auto senderCtx = std::make_unique<ActorRuntime>(std::move(senderActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
     reg.add(sender);
 
     sender->sendMsg(uint64_t(42), Tick{});
@@ -110,7 +110,7 @@ TEST(Actor, SendMsgUnknown){
 
     auto senderActor = std::make_unique<TestActor>("sender", 1);
     auto* sender = senderActor.get();
-    auto senderCtx = std::make_unique<ActorContext>(std::move(senderActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+    auto senderCtx = std::make_unique<ActorRuntime>(std::move(senderActor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
     reg.add(sender);
 
     sender->sendMsg("nobody", Tick{}); // should not crash
@@ -119,7 +119,7 @@ TEST(Actor, SendMsgUnknown){
 TEST(Actor, ReceiveMsg){
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    auto ctx = std::make_unique<ActorContext>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    auto ctx = std::make_unique<ActorRuntime>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
 
     EXPECT_EQ(a->mailboxCount(), 0);
     a->receiveMsg(Tick{});
@@ -134,7 +134,7 @@ TEST(Actor, StartTimer){
     TestScheduler sched;
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    auto ctx = std::make_unique<ActorContext>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    auto ctx = std::make_unique<ActorRuntime>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
 
     int id = a->startTimer(Tick{}, 100, false);
     EXPECT_GT(id, 0);
@@ -149,7 +149,7 @@ TEST(Actor, StartTimerRepeating){
     TestScheduler sched;
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    auto ctx = std::make_unique<ActorContext>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    auto ctx = std::make_unique<ActorRuntime>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
 
     int id = a->startTimer(Tick{}, 100, true);
     EXPECT_GT(id, 0);
@@ -160,7 +160,7 @@ TEST(Actor, StartTimerRepeating){
 TEST(Actor, StartTimerNoScheduler){
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    auto ctx = std::make_unique<ActorContext>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    auto ctx = std::make_unique<ActorRuntime>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
 
     int id = a->startTimer(Tick{}, 100, false);
     EXPECT_EQ(id, Fail);
@@ -170,7 +170,7 @@ TEST(Actor, CancelTimer){
     TestScheduler sched;
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    auto ctx = std::make_unique<ActorContext>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    auto ctx = std::make_unique<ActorRuntime>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
 
     int id = a->startTimer(Tick{}, 100, false);
     EXPECT_EQ(a->timerCount(), 1);
@@ -186,7 +186,7 @@ TEST(Actor, DestructorCancelsTimers){
     TestScheduler sched;
     {
         auto actor = std::make_unique<TestActor>("a", 1);
-        auto ctx = std::make_unique<ActorContext>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+        auto ctx = std::make_unique<ActorRuntime>(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
         auto* a = static_cast<TestActor*>(ctx->actor());
 
         a->startTimer(Tick{}, 100, false);

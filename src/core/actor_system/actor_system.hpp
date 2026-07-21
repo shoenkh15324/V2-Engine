@@ -4,11 +4,11 @@
 #include <vector>
 #include <string>
 #include "core/actor_system/runtime/actor_registry.hpp"
-#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/io/event_loop_epoll.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
 #include "core/actor_system/runtime/actor_runtime.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
-#include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/util/debug.hpp"
 #include "core/perf/metrics/metrics.hpp"
@@ -42,19 +42,20 @@ private:
         uint64_t id = nextActorId_++;
         auto actor = std::make_unique<T>(name, id, std::forward<Args>(args)...);
         auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(mailboxSize);
-        auto actorCtx = std::make_unique<ActorContext>(std::move(actor), std::move(mailbox), &dispatcher_, &scheduler_, &actorRegistry_);
-        T* ptr = static_cast<T*>(actorCtx->actor());
+        auto actorRuntime = std::make_unique<ActorRuntime>(std::move(actor), std::move(mailbox), &workDispatcher_, &scheduler_, &actorRegistry_, &eventLoop_);
+        T* ptr = static_cast<T*>(actorRuntime->actor());
         actorRegistry_.add(ptr);
-        actorContexts_.push_back(std::move(actorCtx));
+        actorRuntimes_.push_back(std::move(actorRuntime));
         Metrics::registerActor(id);
-        V2_LOG_INFO("Create %s actor / mailbox: %d", name.c_str(), mailboxSize);
+        V2_LOG_INFO("Create actor / name: %s, id: %d, mailbox: %d", name.c_str(), id, mailboxSize);
         return ptr;
     }
 
-    Dispatcher dispatcher_;
+    WorkDispatcher workDispatcher_;
+    EventLoopEpoll eventLoop_;
     Scheduler scheduler_;
     ActorRegistry actorRegistry_;
     std::vector<std::unique_ptr<Worker>> workers_;
-    std::vector<std::unique_ptr<ActorContext>> actorContexts_;
+    std::vector<std::unique_ptr<ActorRuntime>> actorRuntimes_;
     std::atomic<uint64_t> nextActorId_{0};
 };

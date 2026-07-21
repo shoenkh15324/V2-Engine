@@ -4,7 +4,7 @@
 #include "core/common/time/timer.hpp"
 #include "core/actor_system/runtime/i_scheduler.hpp"
 
-class Dispatcher;
+class IEventLoop;
 
 class Scheduler : public IScheduler{
 public:
@@ -16,7 +16,7 @@ public:
     Scheduler(Scheduler&&) = delete;
     Scheduler& operator=(Scheduler&&) = delete;
 
-    void start(Dispatcher* dispatcher = nullptr);
+    void start(IEventLoop* eventLoop = nullptr);
     void stop();
     int addTimer(Actor* target, Message message, uint64_t timeMs, bool repeating = false) override;
     void cancel(int timerId) override;
@@ -26,5 +26,5 @@ private:
     void unsubscribeTimer();
 
     Timer timer_;
-    Dispatcher* dispatcher_ = nullptr;
+    IEventLoop* eventLoop_ = nullptr;
 };

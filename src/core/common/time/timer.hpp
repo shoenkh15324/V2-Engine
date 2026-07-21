@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-class Timer {
+class Timer{
 public:
     using Clock = std::chrono::steady_clock;
     using Callback = std::function<void(int)>;

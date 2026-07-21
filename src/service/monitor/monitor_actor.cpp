@@ -1,7 +1,7 @@
 #include "monitor_actor.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
-#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include "infra/hal/sys/sys_linux.hpp"
@@ -26,10 +26,10 @@ MonitorActor::~MonitorActor(){
 }
 
 void MonitorActor::subscribeListener(){
-    auto* dispatcher = runtime()->dispatcher();
+    auto* ioLoop = runtime()->eventLoop();
     int listenFd = server_.fd();
     IActorRuntime* ctx = runtime();
-    dispatcher->subscribe(listenFd, [this, ctx, listenFd](){
+    ioLoop->subscribe(listenFd, [this, ctx, listenFd](){
         ConnHandle conn = static_cast<ConnHandle>(server_.accept());
         if(conn >= 0){
             connections_.insert(conn);
@@ -39,9 +39,9 @@ void MonitorActor::subscribeListener(){
 }
 
 void MonitorActor::subscribeClient(ConnHandle conn){
-    auto* dispatcher = runtime()->dispatcher();
+    auto* ioLoop = runtime()->eventLoop();
     IActorRuntime* ctx = runtime();
-    dispatcher->subscribe(conn, [this, ctx, conn](){
+    ioLoop->subscribe(conn, [this, ctx, conn](){
         char buf[64];
         ssize_t n = ::recv(conn, buf, sizeof(buf), MSG_DONTWAIT);
         if(n <= 0 && (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))){
@@ -51,15 +51,15 @@ void MonitorActor::subscribeClient(ConnHandle conn){
 }
 
 void MonitorActor::unsubscribeAll(){
-    auto* dispatcher = runtime() ? runtime()->dispatcher() : nullptr;
-    if(!dispatcher) return;
+    auto* ioLoop = runtime() ? runtime()->eventLoop() : nullptr;
+    if(!ioLoop) return;
     for(ConnHandle conn : connections_){
-        dispatcher->unsubscribe(conn);
+        ioLoop->unsubscribe(conn);
         ::close(conn);
     }
     connections_.clear();
     if(server_.fd() >= 0){
-        dispatcher->unsubscribe(server_.fd());
+        ioLoop->unsubscribe(server_.fd());
     }
 }
 
@@ -164,7 +164,7 @@ void MonitorActor::handle(const Message& msg){
         },
         [this](const MonitorClientDisconnected& msg){
             if(connections_.find(msg.conn) == connections_.end()) return;
-            runtime()->dispatcher()->unsubscribe(msg.conn);
+            runtime()->eventLoop()->unsubscribe(msg.conn);
             server_.closeClient(msg.conn);
             connections_.erase(msg.conn);
             V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", msg.conn);

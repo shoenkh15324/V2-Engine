@@ -7,32 +7,35 @@
 #include "core/actor_system/runtime/i_scheduler.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
 
-class Dispatcher;
+class IWorkDispatcher;
+class IEventLoop;
 
-class ActorContext : public IActorRuntime {
+class ActorRuntime : public IActorRuntime {
 public:
-    ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry);
-    ~ActorContext();
+    ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop = nullptr);
+    ~ActorRuntime();
 
-    ActorContext(const ActorContext&) = delete;
-    ActorContext& operator=(const ActorContext&) = delete;
-    ActorContext(ActorContext&&) = delete;
-    ActorContext& operator=(ActorContext&&) = delete;
+    ActorRuntime(const ActorRuntime&) = delete;
+    ActorRuntime& operator=(const ActorRuntime&) = delete;
+    ActorRuntime(ActorRuntime&&) = delete;
+    ActorRuntime& operator=(ActorRuntime&&) = delete;
 
     void enqueue(Message msg) override;
     int run(int maxBatch);
     Actor* actor() const override { return actor_.get(); }
     IScheduler* scheduler() const override { return scheduler_; }
     IActorRegistry* actorRegistry() const override { return actorRegistry_; }
-    Dispatcher* dispatcher() const override { return dispatcher_; }
-    size_t mailboxCount() const override;
-    size_t mailboxCapacity() const override;
+    IWorkDispatcher* workDispatcher() const override { return workDispatcher_; }
+    IEventLoop* eventLoop() const override { return eventLoop_; }
+    size_t mailboxCount() const override { return mailbox_->count(); }
+    size_t mailboxCapacity() const override { return mailbox_->capacity(); }
 
 private:
     std::unique_ptr<Actor> actor_;
     std::unique_ptr<LockFreeMpscQueue<Message>> mailbox_;
     std::atomic<bool> scheduled_{false};
-    Dispatcher* dispatcher_ = nullptr;
+    IWorkDispatcher* workDispatcher_ = nullptr;
     IScheduler* scheduler_ = nullptr;
     IActorRegistry* actorRegistry_ = nullptr;
+    IEventLoop* eventLoop_ = nullptr;
 };

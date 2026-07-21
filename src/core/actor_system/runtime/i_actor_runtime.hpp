@@ -5,7 +5,8 @@
 class Actor;
 class IScheduler;
 class IActorRegistry;
-class Dispatcher;
+class IWorkDispatcher;
+class IEventLoop;
 
 class IActorRuntime{
 public:
@@ -14,7 +15,8 @@ public:
     virtual Actor* actor() const = 0;
     virtual IScheduler* scheduler() const = 0;
     virtual IActorRegistry* actorRegistry() const = 0;
-    virtual Dispatcher* dispatcher() const = 0;
+    virtual IWorkDispatcher* workDispatcher() const = 0;
+    virtual IEventLoop* eventLoop() const = 0;
     virtual size_t mailboxCount() const = 0;
     virtual size_t mailboxCapacity() const = 0;
 };

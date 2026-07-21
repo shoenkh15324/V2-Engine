@@ -9,10 +9,10 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor_system.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/actor_runtime.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/dispatcher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/work_dispatcher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/io/event_loop_epoll.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/worker.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/worker_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/log/log.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/container/ring_buffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/time/time.cpp
@@ -40,9 +40,7 @@ target_link_libraries(v2_core PUBLIC
     ftxui::ftxui
 )
 
-if(WIN32)
-    #
-elseif(UNIX)
+if(UNIX)
     target_sources(v2_core PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/common/os/epoll.cpp
     )

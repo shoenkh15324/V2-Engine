@@ -1,35 +1,36 @@
 #include "actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/runtime/dispatcher/dispatcher.hpp"
+#include "core/actor_system/runtime/dispatcher/i_work_dispatcher.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 
-ActorContext::ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
+ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
     actor_->setRuntime(this);
-    dispatcher_ = dispatcher;
+    workDispatcher_ = workDispatcher;
     scheduler_ = scheduler;
     actorRegistry_ = actorRegistry;
+    eventLoop_ = eventLoop;
 }
 
-ActorContext::~ActorContext(){
+ActorRuntime::~ActorRuntime(){
     if(actorRegistry_){
         actorRegistry_->remove(actor_.get());
     }
 }
 
-void ActorContext::enqueue(Message msg){
+void ActorRuntime::enqueue(Message msg){
     if(!mailbox_->push(std::move(msg))){
         Metrics::recordEnqueue(actor_->id(), false, 0);
         return;
     }
     Metrics::recordEnqueue(actor_->id(), true, mailbox_->count());
-    if(dispatcher_ && !scheduled_.exchange(true)){
-        dispatcher_->dispatch(this);
+    if(workDispatcher_ && !scheduled_.exchange(true)){
+        workDispatcher_->dispatch(this);
     }
 }
 
-int ActorContext::run(int maxBatch){
+int ActorRuntime::run(int maxBatch){
     auto startTime = Time::now();
     Message msg;
     int processed = 0;
@@ -44,15 +45,7 @@ int ActorContext::run(int maxBatch){
 
     scheduled_ = false;
     if(!mailbox_->empty()){
-        dispatcher_->dispatch(this);
+        workDispatcher_->dispatch(this);
     }
     return processed;
-}
-
-size_t ActorContext::mailboxCount() const {
-    return mailbox_->count();
-}
-
-size_t ActorContext::mailboxCapacity() const {
-    return mailbox_->capacity();
 }
