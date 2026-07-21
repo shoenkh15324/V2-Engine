@@ -2,20 +2,16 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 
-ActorRegistry::ActorRegistry(){
-    self_ = this;
-}
-
 ActorHandle ActorRegistry::findByName(const std::string& name){
     auto it = byName_.find(name);
     if(it == byName_.end()) return ActorHandle();
-    return ActorHandle(it->second.actor->id(), it->second.generation, self_);
+    return ActorHandle(it->second.actor->id(), it->second.generation, this);
 }
 
 ActorHandle ActorRegistry::findById(uint64_t id){
     auto it = byId_.find(id);
     if(it == byId_.end()) return ActorHandle();
-    return ActorHandle(id, it->second.generation, self_);
+    return ActorHandle(id, it->second.generation, this);
 }
 
 Actor* ActorRegistry::resolve(const ActorHandle& handle) const {
@@ -27,7 +23,7 @@ Actor* ActorRegistry::resolve(const ActorHandle& handle) const {
 
 void ActorRegistry::forEachActor(const std::function<void(ActorHandle)>& callback) const {
     for(auto& [id, entry] : byId_){
-        callback(ActorHandle(id, entry.generation, self_));
+        callback(ActorHandle(id, entry.generation, this));
     }
 }
 

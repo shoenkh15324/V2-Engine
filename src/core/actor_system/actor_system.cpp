@@ -46,13 +46,5 @@ void ActorSystem::run(){
 }
 
 void ActorSystem::requestStop(){
-    for(auto& ctx : actorRuntimes_){
-        ctx->actor()->close();
-    }
-    scheduler_.stop();
-    eventLoop_.stop();
-    workDispatcher_.stop();
-    for(auto& w : workers_){
-        w->stop();
-    }
+    stop();
 }

@@ -8,7 +8,7 @@ class Actor;
 
 class ActorRegistry : public IActorRegistry{
 public:
-    ActorRegistry();
+    ActorRegistry() = default;
     ~ActorRegistry() = default;
     
     ActorRegistry(const ActorRegistry&) = delete;
@@ -32,7 +32,6 @@ private:
         uint64_t generation;
     };
 
-    IActorRegistry* self_ = nullptr;
     std::unordered_map<std::string, ActorEntry> byName_;
     std::unordered_map<uint64_t, ActorEntry> byId_;
     std::unordered_map<uint64_t, uint64_t> generations_;
