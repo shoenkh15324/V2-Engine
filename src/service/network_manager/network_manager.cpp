@@ -43,8 +43,7 @@ int NetworkManagerActor::close(){
     if(state_ == Closed) return Ok;
     state_ = Closing;
     //
-    auto ids = timerIds_;
-    for(int id : ids) cancelTimer(id);
+    cancelAllTimers();
     wifi_.close();
     connection_ = nullptr;
     //

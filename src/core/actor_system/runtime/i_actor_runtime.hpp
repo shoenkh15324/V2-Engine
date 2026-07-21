@@ -19,4 +19,9 @@ public:
     virtual IEventLoop* eventLoop() const = 0;
     virtual size_t mailboxCount() const = 0;
     virtual size_t mailboxCapacity() const = 0;
+
+    virtual int addTimer(Actor* target, Message msg, uint64_t delayMs, bool repeating) = 0;
+    virtual void cancelTimer(int timerId) = 0;
+    virtual void cancelAllTimers() = 0;
+    virtual size_t timerCount() const = 0;
 };

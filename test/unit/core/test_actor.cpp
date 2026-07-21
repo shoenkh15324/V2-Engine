@@ -20,7 +20,6 @@ public:
     void handle(const Message&) override { handled = true; }
 
     bool handled = false;
-    size_t timerCount() const { return timerIds_.size(); }
 };
 
 struct TestScheduler : IScheduler{

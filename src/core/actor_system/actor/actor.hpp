@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <unordered_set>
@@ -39,6 +40,8 @@ public:
 
     int startTimer(Message msg, uint64_t delayMs, bool repeating);
     void cancelTimer(int timerId);
+    void cancelAllTimers();
+    size_t timerCount() const;
 
     size_t mailboxCount() const;
     size_t mailboxCapacity() const;
@@ -47,7 +50,7 @@ public:
     uint64_t id() const { return id_; }
     uint64_t generation() const { return generation_; }
     void setGeneration(uint64_t gen){ generation_ = gen; }
-    ActorState getState() const { return state_; }
+    ActorState getState() const { return state_.load(std::memory_order_acquire); }
     bool isEssential() const { return essential_; }
     void setEssential(bool v){ essential_ = v; }
 
@@ -55,8 +58,7 @@ public:
 
 protected:
     void setRuntime(IActorRuntime* r) { runtime_ = r; }
-    ActorState state_{Closed};
-    std::unordered_set<int> timerIds_;
+    std::atomic<ActorState> state_{Closed};
 
 private:
     IActorRuntime* runtime_ = nullptr;

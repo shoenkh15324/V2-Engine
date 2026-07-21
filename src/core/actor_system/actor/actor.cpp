@@ -11,11 +11,7 @@ Actor::Actor(std::string name, uint64_t id) : name_(name), id_(id){
 }
 
 Actor::~Actor(){
-    if(!runtime_ || !runtime_->scheduler()) return;
-    for(int id : timerIds_){
-        runtime_->scheduler()->cancel(id);
-    }
-    timerIds_.clear();
+    // Timer cleanup is now handled by ActorRuntime
 }
 
 void Actor::sendMsg(const std::string& targetName, Message msg){
@@ -37,7 +33,7 @@ int Actor::sendMsgAfter(const std::string& targetName, Message msg, uint64_t del
     if(!target.valid()){
         return Fail;
     }
-    return runtime_->scheduler() ? runtime_->scheduler()->addTimer(target.get(), std::move(msg), delayMs, false) : Fail;
+    return runtime_->addTimer(target.get(), std::move(msg), delayMs, false);
 }
 
 int Actor::sendMsgAfter(uint64_t targetId, Message msg, uint64_t delayMs){
@@ -45,7 +41,7 @@ int Actor::sendMsgAfter(uint64_t targetId, Message msg, uint64_t delayMs){
     if(!target.valid()){
         return Fail;
     }
-    return runtime_->scheduler() ? runtime_->scheduler()->addTimer(target.get(), std::move(msg), delayMs, false) : Fail;
+    return runtime_->addTimer(target.get(), std::move(msg), delayMs, false);
 }
 
 void Actor::receiveMsg(Message msg){
@@ -53,17 +49,19 @@ void Actor::receiveMsg(Message msg){
 }
 
 int Actor::startTimer(Message msg, uint64_t delayMs, bool repeating){
-    auto* scheduler = runtime_->scheduler();
-    if(!scheduler) return Fail;
-    int id = scheduler->addTimer(this, std::move(msg), delayMs, repeating);
-    if(id != Fail) timerIds_.insert(id);
-    return id;
+    return runtime_ ? runtime_->addTimer(this, std::move(msg), delayMs, repeating) : Fail;
 }
 
 void Actor::cancelTimer(int timerId){
-    if(!runtime_->scheduler()) return;
-    runtime_->scheduler()->cancel(timerId);
-    timerIds_.erase(timerId);
+    if(runtime_) runtime_->cancelTimer(timerId);
+}
+
+void Actor::cancelAllTimers(){
+    if(runtime_) runtime_->cancelAllTimers();
+}
+
+size_t Actor::timerCount() const {
+    return runtime_ ? runtime_->timerCount() : 0;
 }
 
 size_t Actor::mailboxCount() const {

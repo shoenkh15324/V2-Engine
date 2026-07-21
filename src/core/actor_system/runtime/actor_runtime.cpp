@@ -4,6 +4,7 @@
 #include "core/actor_system/runtime/dispatcher/i_work_dispatcher.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
+#include "core/common/util/return.hpp"
 
 ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
@@ -15,6 +16,13 @@ ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFre
 }
 
 ActorRuntime::~ActorRuntime(){
+    {
+        std::lock_guard lock(timerMutex_);
+        for(int id : timerIds_){
+            if(scheduler_) scheduler_->cancel(id);
+        }
+        timerIds_.clear();
+    }
     if(actorRegistry_){
         actorRegistry_->remove(actor_.get());
     }
@@ -49,4 +57,33 @@ int ActorRuntime::run(int maxBatch){
         workDispatcher_->dispatch(this);
     }
     return processed;
+}
+
+int ActorRuntime::addTimer(Actor* target, Message msg, uint64_t delayMs, bool repeating){
+    if(!scheduler_) return Fail;
+    std::lock_guard lock(timerMutex_);
+    int id = scheduler_->addTimer(target, std::move(msg), delayMs, repeating);
+    if(id != Fail) timerIds_.insert(id);
+    return id;
+}
+
+void ActorRuntime::cancelTimer(int timerId){
+    if(!scheduler_) return;
+    std::lock_guard lock(timerMutex_);
+    scheduler_->cancel(timerId);
+    timerIds_.erase(timerId);
+}
+
+void ActorRuntime::cancelAllTimers(){
+    if(!scheduler_) return;
+    std::lock_guard lock(timerMutex_);
+    for(int id : timerIds_){
+        scheduler_->cancel(id);
+    }
+    timerIds_.clear();
+}
+
+size_t ActorRuntime::timerCount() const {
+    std::lock_guard lock(timerMutex_);
+    return timerIds_.size();
 }
