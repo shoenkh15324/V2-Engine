@@ -1,7 +1,11 @@
 #include <gtest/gtest.h>
 #include "core/actor_system/runtime/scheduler.hpp"
+#include "core/actor_system/runtime/actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_registry.hpp"
+#include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/messages/tick_messages.hpp"
+#include <memory>
 
 namespace{
 
@@ -22,15 +26,17 @@ TEST(Scheduler, Create){
 
 TEST(Scheduler, AddTimer){
     Scheduler sched;
-    TestActor a("t", 1);
-    int id = sched.addTimer(&a, Tick{}, 100, false);
+    auto actor = std::make_unique<TestActor>("t", 1);
+    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    int id = sched.addTimer(&rt, Tick{}, 100, false);
     EXPECT_GT(id, 0);
 }
 
 TEST(Scheduler, Cancel){
     Scheduler sched;
-    TestActor a("t", 1);
-    int id = sched.addTimer(&a, Tick{}, 100, false);
+    auto actor = std::make_unique<TestActor>("t", 1);
+    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    int id = sched.addTimer(&rt, Tick{}, 100, false);
     EXPECT_GT(id, 0);
     sched.cancel(id);
 }

@@ -18,7 +18,7 @@ public:
 
     void start(IEventLoop* eventLoop = nullptr);
     void stop();
-    int addTimer(Actor* target, Message message, uint64_t timeMs, bool repeating = false) override;
+    int addTimer(IActorRuntime* target, Message message, uint64_t timeMs, bool repeating = false) override;
     void cancel(int timerId) override;
 
 private:

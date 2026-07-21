@@ -1,5 +1,5 @@
 #include "scheduler.hpp"
-#include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/common/log/log.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 
@@ -18,10 +18,10 @@ void Scheduler::stop(){
     timer_.stop();
 }
 
-int Scheduler::addTimer(Actor* target, Message message, uint64_t timeMs, bool repeating){
+int Scheduler::addTimer(IActorRuntime* target, Message message, uint64_t timeMs, bool repeating){
     auto sharedMsg = std::make_shared<Message>(std::move(message));
     return timer_.add(timeMs, repeating, [target, sharedMsg](int){
-        target->receiveMsg(*sharedMsg);
+        target->enqueue(*sharedMsg);
     });
 }
 

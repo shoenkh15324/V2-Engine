@@ -60,9 +60,11 @@ int ActorRuntime::run(int maxBatch){
 }
 
 int ActorRuntime::addTimer(Actor* target, Message msg, uint64_t delayMs, bool repeating){
-    if(!scheduler_) return Fail;
+    if(!scheduler_ || !target) return Fail;
+    IActorRuntime* targetRuntime = target->runtime();
+    if(!targetRuntime) return Fail;
     std::lock_guard lock(timerMutex_);
-    int id = scheduler_->addTimer(target, std::move(msg), delayMs, repeating);
+    int id = scheduler_->addTimer(targetRuntime, std::move(msg), delayMs, repeating);
     if(id != Fail) timerIds_.insert(id);
     return id;
 }

@@ -25,7 +25,7 @@ public:
 struct TestScheduler : IScheduler{
     TestScheduler() = default;
 
-    int addTimer(Actor* target, Message, uint64_t delayMs, bool repeating) override{
+    int addTimer(IActorRuntime* target, Message, uint64_t delayMs, bool repeating) override{
         lastTarget = target;
         lastDelayMs = delayMs;
         lastRepeating = repeating;
@@ -38,7 +38,7 @@ struct TestScheduler : IScheduler{
         cancelCount++;
     }
 
-    Actor* lastTarget = nullptr;
+    IActorRuntime* lastTarget = nullptr;
     uint64_t lastDelayMs = 0;
     bool lastRepeating = false;
     int nextId = 1;
@@ -138,7 +138,7 @@ TEST(Actor, StartTimer){
     int id = a->startTimer(Tick{}, 100, false);
     EXPECT_GT(id, 0);
     EXPECT_EQ(sched.addedCount, 1);
-    EXPECT_EQ(sched.lastTarget, a);
+    EXPECT_EQ(sched.lastTarget, static_cast<IActorRuntime*>(ctx.get()));
     EXPECT_EQ(sched.lastDelayMs, 100);
     EXPECT_EQ(sched.lastRepeating, false);
     EXPECT_EQ(a->timerCount(), 1);
