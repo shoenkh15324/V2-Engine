@@ -3,7 +3,6 @@
 #include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
-#include "core/actor_system/actor_system.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
@@ -14,7 +13,7 @@
 #include <sstream>
 #include <iomanip>
 
-CmdActor::CmdActor(const std::string& name, uint64_t id, ActorSystem* actorSystem) : Actor(std::move(name), id), actorSystem_(actorSystem){
+CmdActor::CmdActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
     //
 }
 
@@ -133,12 +132,20 @@ std::string CmdActor::doActorList(){
 }
 
 std::string CmdActor::doActorToggle(bool enable, const std::string& name){
-    if(!actorSystem_) return "error: actor system unavailable\n";
-    int ret = enable ? actorSystem_->enableActor(name) : actorSystem_->disableActor(name);
-    if(ret == 0) return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
-    if(ret == -1) return "error: not found '" + name + "'\n";
-    if(ret == -2) return "error: '" + name + "' is essential\n";
-    return "error: " + std::string(enable ? "enable" : "disable") + " failed\n";
+    auto* reg = runtime()->actorRegistry();
+    if(!reg) return "error: actor registry unavailable\n";
+    ActorHandle h = reg->findByName(name);
+    if(!h.valid()) return "error: not found '" + name + "'\n";
+    Actor* a = h.get();
+    if(!a) return "error: not found '" + name + "'\n";
+    if(enable && a->isEssential()) return "error: '" + name + "' is essential\n";
+    if(enable){
+        h.send(ActorEnableRequest{});
+    }else{
+        if(a->isEssential()) return "error: '" + name + "' is essential\n";
+        h.send(ActorDisableRequest{});
+    }
+    return "ok: '" + name + "' " + (enable ? "enabling" : "disabling") + "\n";
 }
 
 std::string CmdActor::handlePmu(const std::vector<std::string>& args){

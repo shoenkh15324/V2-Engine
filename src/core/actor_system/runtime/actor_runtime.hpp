@@ -35,6 +35,8 @@ public:
     void cancelAllTimers() override;
     size_t timerCount() const override;
 
+    bool handleLifecycle(const Message& msg);
+
 private:
     std::unique_ptr<Actor> actor_;
     std::unique_ptr<LockFreeMpscQueue<Message>> mailbox_;

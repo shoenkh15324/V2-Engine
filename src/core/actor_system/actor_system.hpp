@@ -35,9 +35,6 @@ public:
     void run();
     void requestStop();
 
-    int enableActor(const std::string& name);
-    int disableActor(const std::string& name);
-
 private:
     template <typename T, typename ... Args>
     T* createActorImpl(const std::string& name, size_t mailboxSize, Args&& ... args){

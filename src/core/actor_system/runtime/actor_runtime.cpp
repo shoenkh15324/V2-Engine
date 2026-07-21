@@ -45,7 +45,9 @@ int ActorRuntime::run(int maxBatch){
     int processed = 0;
     while((maxBatch < 0) || (processed < maxBatch)){
         if(!mailbox_->pop(msg)) break;
-        actor_->handle(msg);
+        if(!handleLifecycle(msg)){
+            actor_->handle(msg);
+        }
         processed++;
     }
     auto endTime = Time::now();
@@ -56,6 +58,22 @@ int ActorRuntime::run(int maxBatch){
         workDispatcher_->dispatch(this);
     }
     return processed;
+}
+
+bool ActorRuntime::handleLifecycle(const Message& msg){
+    if(std::holds_alternative<ActorEnableRequest>(msg)){
+        if(actor_->getState() == Closed){
+            actor_->open();
+        }
+        return true;
+    }
+    if(std::holds_alternative<ActorDisableRequest>(msg)){
+        if(actor_->getState() == Opened && !actor_->isEssential()){
+            actor_->close();
+        }
+        return true;
+    }
+    return false;
 }
 
 int ActorRuntime::addTimer(Actor* target, Message msg, uint64_t delayMs, bool repeating){

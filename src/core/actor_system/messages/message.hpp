@@ -45,6 +45,9 @@ using Message = std::variant<
     // Cmd
     CmdRequest,
     CmdResponse,
+    // Lifecycle
+    ActorEnableRequest,
+    ActorDisableRequest,
     // Network Manager
     NmStatusRequest,
     // Wifi

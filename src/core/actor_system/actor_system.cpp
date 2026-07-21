@@ -49,20 +49,3 @@ void ActorSystem::run(){
 void ActorSystem::requestStop(){
     stop();
 }
-
-int ActorSystem::enableActor(const std::string& name){
-    ActorHandle h = actorRegistry_.findByName(name);
-    if(!h.valid()) return -1;
-    Actor* a = h.get();
-    if(!a) return -1;
-    return a->open() == 0 ? 0 : -3;
-}
-
-int ActorSystem::disableActor(const std::string& name){
-    ActorHandle h = actorRegistry_.findByName(name);
-    if(!h.valid()) return -1;
-    Actor* a = h.get();
-    if(!a) return -1;
-    if(a->isEssential()) return -2;
-    return a->close() == 0 ? 0 : -3;
-}

@@ -11,3 +11,7 @@ struct CmdResponse{
     ConnHandle conn;
     std::string result;
 };
+
+struct ActorEnableRequest{};
+
+struct ActorDisableRequest{};
