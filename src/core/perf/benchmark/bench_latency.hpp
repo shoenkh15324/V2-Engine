@@ -1,7 +1,6 @@
 #pragma once
 #include "i_benchmark.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/time/time.hpp"
 #include <atomic>
 #include <cstdint>
@@ -59,7 +58,6 @@ public:
         ackCounter_.fetch_add(1, std::memory_order_release);
     }
 
-    size_t mailboxCapacity() const { return actorContext()->mailboxCapacity(); }
     uint64_t processed() const { return ackCounter_.load(std::memory_order_relaxed); }
 
 private:

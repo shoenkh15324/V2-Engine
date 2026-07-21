@@ -1,7 +1,6 @@
 #pragma once
 #include "i_benchmark.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/actor/actor_context.hpp"
 #include "core/common/time/time.hpp"
 #include <mutex>
 #include <string>
@@ -40,8 +39,6 @@ public:
         std::lock_guard<std::mutex> lock(mtx_);
         fireTimes_.push_back(Time::nowNs());
     }
-
-    size_t mailboxCapacity() const { return actorContext()->mailboxCapacity(); }
 
 private:
     std::vector<uint64_t>& fireTimes_;

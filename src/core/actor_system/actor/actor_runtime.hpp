@@ -3,13 +3,13 @@
 #include <memory>
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/messages/message.hpp"
+#include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_scheduler.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 
-class Actor;
 class Dispatcher;
 
-class ActorContext{
+class ActorContext : public IActorRuntime {
 public:
     ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry);
     ~ActorContext();
@@ -19,15 +19,14 @@ public:
     ActorContext(ActorContext&&) = delete;
     ActorContext& operator=(ActorContext&&) = delete;
 
-    void enqueue(Message msg);
+    void enqueue(Message msg) override;
     int run(int maxBatch);
-    Actor* actor() const { return actor_.get(); }
-    IScheduler* scheduler() const { return scheduler_; }
-    IActorRegistry* actorRegistry() const { return actorRegistry_; }
-    Dispatcher* dispatcher() const { return dispatcher_; }
-
-    size_t mailboxCount() const;
-    size_t mailboxCapacity() const;
+    Actor* actor() const override { return actor_.get(); }
+    IScheduler* scheduler() const override { return scheduler_; }
+    IActorRegistry* actorRegistry() const override { return actorRegistry_; }
+    Dispatcher* dispatcher() const override { return dispatcher_; }
+    size_t mailboxCount() const override;
+    size_t mailboxCapacity() const override;
 
 private:
     std::unique_ptr<Actor> actor_;

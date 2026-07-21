@@ -1,6 +1,6 @@
 #include "cmd_actor.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/actor/actor_context.hpp"
+#include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
 #include "core/common/log/log.hpp"
@@ -102,7 +102,7 @@ std::string CmdActor::handleActor(const std::vector<std::string>& args){
 }
 
 std::string CmdActor::doActorList(){
-    auto* reg = actorContext()->actorRegistry();
+    auto* reg = runtime()->actorRegistry();
     if(!reg) return "error: actor registry unavailable\n";
     int n = 0;
     reg->forEachActor([&](Actor*){ ++n; });
@@ -129,7 +129,7 @@ std::string CmdActor::doActorList(){
 }
 
 std::string CmdActor::doActorToggle(bool enable, const std::string& name){
-    auto* reg = actorContext()->actorRegistry();
+    auto* reg = runtime()->actorRegistry();
     if(!reg) return "error: actor registry unavailable\n";
     int ret = enable ? reg->enableActor(name) : reg->disableActor(name);
     if(ret == 0) return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
@@ -260,7 +260,7 @@ std::string CmdActor::handleMetrics(const std::vector<std::string>& args){
 std::string CmdActor::formatMetricsSnapshot(){
     auto snap = Metrics::snapshot();
     for(auto& a : snap.actors){
-        Actor* actor = actorContext()->actorRegistry()->findById(a.id);
+        Actor* actor = runtime()->actorRegistry()->findById(a.id);
         a.name = actor ? actor->name() : "unknown";
     }
     std::ostringstream oss;

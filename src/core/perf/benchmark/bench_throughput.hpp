@@ -1,7 +1,6 @@
 #pragma once
 #include "i_benchmark.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/actor/actor_context.hpp"
 #include <atomic>
 #include <cstdint>
 #include <string>
@@ -35,7 +34,6 @@ public:
         processed_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    size_t mailboxCapacity() const { return actorContext()->mailboxCapacity(); }
     uint64_t processed() const { return processed_.load(std::memory_order_relaxed); }
 
 private:

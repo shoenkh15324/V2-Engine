@@ -6,7 +6,7 @@
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
-#include "core/actor_system/actor/actor_context.hpp"
+#include "core/actor_system/actor/actor_runtime.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"

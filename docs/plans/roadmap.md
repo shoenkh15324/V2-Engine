@@ -64,7 +64,6 @@ actor_system/
     │   ├── actor_registry.cpp
     │   ├── scheduler.hpp          # Timer 관리만 담당
     │   ├── scheduler.cpp
-    │   ├── timer_queue.hpp        # 우선순위 큐
     │   │
     │   └── dispatcher/
     │       ├── work_dispatcher.hpp/cpp   # Work 분배만 담당
@@ -76,7 +75,7 @@ actor_system/
     │           └── i_io_event_loop.hpp
     │
     ├── message/
-    │   ├── envelope.hpp           # MessageEnvelope 정의
+    │   ├── message.hpp            # Message 정의
     │   ├── type_id.hpp            # typeId 상수
     │   │
     │   ├── system/                # 코어 메시지

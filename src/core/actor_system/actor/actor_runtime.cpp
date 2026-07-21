@@ -1,4 +1,4 @@
-#include "actor_context.hpp"
+#include "actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/perf/metrics/metrics.hpp"
@@ -6,7 +6,7 @@
 
 ActorContext::ActorContext(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, Dispatcher* dispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
-    actor_->actorCtx_ = this;
+    actor_->setRuntime(this);
     dispatcher_ = dispatcher;
     scheduler_ = scheduler;
     actorRegistry_ = actorRegistry;

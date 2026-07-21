@@ -1,5 +1,6 @@
 #include "monitor_actor.hpp"
-#include "core/actor_system/actor/actor_context.hpp"
+#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
@@ -25,9 +26,9 @@ MonitorActor::~MonitorActor(){
 }
 
 void MonitorActor::subscribeListener(){
-    auto* dispatcher = actorContext()->dispatcher();
+    auto* dispatcher = runtime()->dispatcher();
     int listenFd = server_.fd();
-    ActorContext* ctx = actorContext();
+    IActorRuntime* ctx = runtime();
     dispatcher->subscribe(listenFd, [this, ctx, listenFd](){
         ConnHandle conn = static_cast<ConnHandle>(server_.accept());
         if(conn >= 0){
@@ -38,8 +39,8 @@ void MonitorActor::subscribeListener(){
 }
 
 void MonitorActor::subscribeClient(ConnHandle conn){
-    auto* dispatcher = actorContext()->dispatcher();
-    ActorContext* ctx = actorContext();
+    auto* dispatcher = runtime()->dispatcher();
+    IActorRuntime* ctx = runtime();
     dispatcher->subscribe(conn, [this, ctx, conn](){
         char buf[64];
         ssize_t n = ::recv(conn, buf, sizeof(buf), MSG_DONTWAIT);
@@ -50,7 +51,7 @@ void MonitorActor::subscribeClient(ConnHandle conn){
 }
 
 void MonitorActor::unsubscribeAll(){
-    auto* dispatcher = actorContext() ? actorContext()->dispatcher() : nullptr;
+    auto* dispatcher = runtime() ? runtime()->dispatcher() : nullptr;
     if(!dispatcher) return;
     for(ConnHandle conn : connections_){
         dispatcher->unsubscribe(conn);
@@ -63,7 +64,7 @@ void MonitorActor::unsubscribeAll(){
 }
 
 void MonitorActor::collectActorInfo(std::vector<ActorInfo>& actors){
-    actorContext()->actorRegistry()->forEachActor([&](Actor* a){
+    runtime()->actorRegistry()->forEachActor([&](Actor* a){
         ActorInfo info;
         info.name = a->name();
         info.id = a->id();
@@ -163,7 +164,7 @@ void MonitorActor::handle(const Message& msg){
         },
         [this](const MonitorClientDisconnected& msg){
             if(connections_.find(msg.conn) == connections_.end()) return;
-            actorContext()->dispatcher()->unsubscribe(msg.conn);
+            runtime()->dispatcher()->unsubscribe(msg.conn);
             server_.closeClient(msg.conn);
             connections_.erase(msg.conn);
             V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", msg.conn);

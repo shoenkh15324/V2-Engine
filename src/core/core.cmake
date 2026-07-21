@@ -8,7 +8,7 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_registry.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor_system.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_context.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/actor/actor_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/worker.cpp

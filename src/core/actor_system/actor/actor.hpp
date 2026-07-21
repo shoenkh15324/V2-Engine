@@ -12,6 +12,7 @@ enum ActorState : uint8_t{
     Inherited
 };
 
+class IActorRuntime;
 class ActorContext;
 
 class Actor{
@@ -47,14 +48,15 @@ public:
     bool isEssential() const { return essential_; }
     void setEssential(bool v){ essential_ = v; }
 
-protected:
-    ActorContext* actorContext() const { return actorCtx_; }
+    IActorRuntime* runtime() const { return runtime_; }
 
+protected:
+    void setRuntime(IActorRuntime* r) { runtime_ = r; }
     ActorState state_{Closed};
     std::unordered_set<int> timerIds_;
 
 private:
-    ActorContext* actorCtx_ = nullptr;
+    IActorRuntime* runtime_ = nullptr;
     std::string name_;
     uint64_t id_;
     bool essential_{false};
