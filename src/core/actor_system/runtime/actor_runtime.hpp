@@ -30,9 +30,6 @@ public:
     size_t mailboxCount() const override { return mailbox_->count(); }
     size_t mailboxCapacity() const override { return mailbox_->capacity(); }
 
-    int enableActor(const std::string& name) override;
-    int disableActor(const std::string& name) override;
-
 private:
     std::unique_ptr<Actor> actor_;
     std::unique_ptr<LockFreeMpscQueue<Message>> mailbox_;

@@ -19,7 +19,4 @@ public:
     virtual IEventLoop* eventLoop() const = 0;
     virtual size_t mailboxCount() const = 0;
     virtual size_t mailboxCapacity() const = 0;
-
-    virtual int enableActor(const std::string& name) = 0;
-    virtual int disableActor(const std::string& name) = 0;
 };

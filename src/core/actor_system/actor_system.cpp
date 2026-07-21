@@ -2,6 +2,7 @@
 #include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/dispatcher/worker.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/actor/actor_handle.hpp"
 
 ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs) : workDispatcher_(numWorkers), eventLoop_(epollMaxEvents, epollWaitTimeoutMs){
     Metrics::init(numWorkers);
@@ -47,4 +48,21 @@ void ActorSystem::run(){
 
 void ActorSystem::requestStop(){
     stop();
+}
+
+int ActorSystem::enableActor(const std::string& name){
+    ActorHandle h = actorRegistry_.findByName(name);
+    if(!h.valid()) return -1;
+    Actor* a = h.get();
+    if(!a) return -1;
+    return a->open() == 0 ? 0 : -3;
+}
+
+int ActorSystem::disableActor(const std::string& name){
+    ActorHandle h = actorRegistry_.findByName(name);
+    if(!h.valid()) return -1;
+    Actor* a = h.get();
+    if(!a) return -1;
+    if(a->isEssential()) return -2;
+    return a->close() == 0 ? 0 : -3;
 }

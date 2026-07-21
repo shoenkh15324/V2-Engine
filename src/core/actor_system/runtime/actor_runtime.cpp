@@ -50,22 +50,3 @@ int ActorRuntime::run(int maxBatch){
     }
     return processed;
 }
-
-int ActorRuntime::enableActor(const std::string& name){
-    if(!actorRegistry_) return -1;
-    ActorHandle h = actorRegistry_->findByName(name);
-    if(!h.valid()) return -1;
-    Actor* a = h.get();
-    if(!a) return -1;
-    return a->open() == 0 ? 0 : -3;
-}
-
-int ActorRuntime::disableActor(const std::string& name){
-    if(!actorRegistry_) return -1;
-    ActorHandle h = actorRegistry_->findByName(name);
-    if(!h.valid()) return -1;
-    Actor* a = h.get();
-    if(!a) return -1;
-    if(a->isEssential()) return -2;
-    return a->close() == 0 ? 0 : -3;
-}

@@ -9,9 +9,11 @@
 #include <memory>
 #include <unordered_map>
 
+class ActorSystem;
+
 class CmdActor : public Actor{
 public:
-    CmdActor(const std::string& name, uint64_t id);
+    CmdActor(const std::string& name, uint64_t id, ActorSystem* actorSystem);
     ~CmdActor() override;
 
     CmdActor(const CmdActor&) = delete;
@@ -49,6 +51,7 @@ private:
 
     std::unordered_map<std::string, Handler> handlers_;
     std::unique_ptr<IPmu> pmu_;
+    ActorSystem* actorSystem_ = nullptr;
     WifiScanResult lastScan_;
     WifiStatusResult lastStatus_;
     std::string lastConnectResult_;
