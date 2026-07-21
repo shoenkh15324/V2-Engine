@@ -42,6 +42,10 @@ Phase 5: 벤치마크 인프라 + 보고서
 ## Phase 2: actor_system 리팩토링
 
 > **목표**: 강결합 구조 해소 → Runtime과 Actor 완전 분리, 단방향 의존성, 컴파일 의존성 최소화, 확장 가능한 구조 확보
+> 
+> **진행 상황**:
+> - ✅ `IActorRuntime` 인터페이스 도입 (Actor ↔ ActorContext 순환 의존 제거)
+> - 🔄 Dispatcher를 WorkDispatcher / IOEventLoop / Scheduler로 분리
 
 ### 디렉토리 구조
 
@@ -113,13 +117,134 @@ public:
 
 **개선**: 역할별 분리
 
-| 컴포넌트 | 책임 |
+| 컴포넌트 | 책임 | 파일 |
+|----------|------|------|
+| `WorkDispatcher` | Ready Actor Queue 관리, Worker에게 작업 전달 (MPSC 큐, 세마포어) | `dispatcher/work_dispatcher.hpp/cpp` |
+| `IOEventLoop` | epoll, fd subscribe/unsubscribe, 이벤트 루프 | `dispatcher/io/io_event_loop.hpp/cpp` |
+| `Scheduler` | Timer Queue, Timeout 관리 (IOEventLoop에 의존) | `runtime/scheduler.hpp/cpp` |
+
+**제외 대상** (차후 작업):
+| 컴포넌트 | 설명 |
 |----------|------|
-| `WorkDispatcher` | Ready Actor Queue 관리, Worker에게 작업 전달 |
-| `WorkerPool` | 워커 스레드 풀 관리 |
-| `WorkBalancer` | Load Balancing, Work Stealing |
-| `IOEventLoop` | epoll, socket event, fd monitoring |
-| `Scheduler` | Timer Queue, Timeout 관리 |
+| `WorkerPool` | 워커 스레드 풀 관리 (현재 Worker가 개별 관리) |
+| `WorkBalancer` | Load Balancing, Work Stealing (Phase 4) |
+
+##### WorkDispatcher
+
+```cpp
+class WorkDispatcher {
+public:
+    explicit WorkDispatcher(int workerCount);
+    void dispatch(ActorContext* actorCtx);   // hash(actorId) % workerCount 기반 enqueue
+    ActorContext* acquire(int workerId);      // 세마포어 대기 후 pop
+    void stop();                              // 모든 세마포어 해제로 워커 깨우기
+    bool isRunning() const;
+    int workerCount() const;
+private:
+    int workerCount_;
+    std::vector<std::unique_ptr<LockFreeMpscQueue<ActorContext*>>> queues_;
+    std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
+    std::atomic<bool> running_{false};
+};
+```
+
+##### IOEventLoop
+
+```cpp
+// io/i_io_event_loop.hpp
+class IIOEventLoop {
+public:
+    virtual ~IIOEventLoop() = default;
+    virtual int subscribe(int fd, std::function<void()> handler) = 0;
+    virtual int unsubscribe(int fd) = 0;
+};
+
+// io/io_event_loop.hpp
+class IOEventLoop : public IIOEventLoop {
+public:
+    explicit IOEventLoop(int maxEvents = 64, int waitTimeoutMs = 1000);
+    void start();   // stopFd 생성 + epoll 등록
+    void run();     // epoll_wait 루프 (메인 스레드)
+    void stop();    // stopFd로 종료 신호
+    int subscribe(int fd, std::function<void()> handler) override;
+    int unsubscribe(int fd) override;
+private:
+    Epoll epoll_;
+    int stopFd_ = -1;
+    std::unordered_map<int, std::function<void()>> handlers_;
+    std::vector<epoll_event> epollEvents_;
+    std::atomic<bool> running_{false};
+};
+```
+
+##### Scheduler 의존성 변경
+
+```cpp
+// 변경 전
+class Scheduler {
+    Dispatcher* dispatcher_;  // subscribe/unsubscribe용
+    void start(Dispatcher* dispatcher);
+};
+
+// 변경 후
+class Scheduler {
+    IIOEventLoop* ioLoop_;    // subscribe/unsubscribe용
+    void start(IIOEventLoop* ioLoop);
+};
+```
+
+##### IActorRuntime 인터페이스 변경
+
+```cpp
+// 변경 전
+class IActorRuntime {
+    virtual Dispatcher* dispatcher() const = 0;  // 모든 의존성 노출
+};
+
+// 변경 후
+class IActorRuntime {
+    virtual WorkDispatcher* workDispatcher() const = 0;  // work dispatch만
+    virtual IOEventLoop* ioEventLoop() const = 0;        // I/O 이벤트만
+};
+```
+
+##### Service Actors 변경
+
+```cpp
+// 변경 전
+actorContext()->dispatcher()->subscribe(fd, handler);
+
+// 변경 후
+runtime()->ioEventLoop()->subscribe(fd, handler);
+```
+
+##### 의존성 흐름 (최종)
+
+```
+ActorSystem
+  ├── WorkDispatcher (큐/세마포어만)
+  ├── IOEventLoop (epoll만)
+  ├── Scheduler → IIOEventLoop에 의존
+  ├── Workers[] → WorkDispatcher에만 의존
+  └── ActorContext → WorkDispatcher에만 의존
+```
+
+##### 작업 단계
+
+| 순위 | 작업 | 예상 기간 |
+|------|------|-----------|
+| 1 | WorkDispatcher 추출 (dispatcher에서 큐/세마포어 분리) | 0.5일 |
+| 2 | IOEventLoop 추출 (dispatcher에서 epoll 분리) | 0.5일 |
+| 3 | Scheduler 의존성을 Dispatcher → IOEventLoop로 변경 | 0.5일 |
+| 4 | IActorRuntime 인터페이스에 workDispatcher/ioEventLoop 추가 | 0.5일 |
+| 5 | ActorContext를 WorkDispatcher에만 의존하도록 변경 | 0.5일 |
+| 6 | Service actors 업데이트 (dispatcher() → ioEventLoop()) | 0.5일 |
+| 7 | ActorSystem 구조 변경 (Dispatcher → WorkDispatcher + IOEventLoop) | 0.5일 |
+| 8 | core.cmake 소스 경로 업데이트 | 0.5일 |
+| 9 | 테스트 파일 분리/업데이트 | 0.5일 |
+| 10 | 빌드 + 테스트 검증 | 0.5일 |
+
+**총 예상 기간: 5일**
 
 #### 3. Registry 역할 축소
 
@@ -202,17 +327,17 @@ RuntimeContext
 
 ### 리팩토링 우선순위
 
-| 순위 | 작업 | 예상 기간 |
-|------|------|-----------|
-| 1 | `IActorRuntime` 인터페이스 도입 | 2-3일 |
-| 2 | MessageEnvelope 기반 메시지 시스템 구축 | 3-4일 |
-| 3 | Dispatcher를 WorkDispatcher / IOEventLoop / Scheduler로 분리 | 4-5일 |
-| 4 | Registry를 Lookup 전용으로 축소 | 1-2일 |
-| 5 | ActorSystem이 Actor 생명주기를 단독 관리 | 2-3일 |
-| 6 | PImpl을 적용하여 컴파일 의존성 최소화 | 1-2일 |
-| 7 | Runtime API를 최소화하여 Actor와 Runtime 완전 분리 | 2-3일 |
+| 순위 | 작업 | 상태 | 예상 기간 |
+|------|------|------|-----------|
+| 1 | `IActorRuntime` 인터페이스 도입 | ✅ 완료 | 2-3일 |
+| 2 | Dispatcher를 WorkDispatcher / IOEventLoop / Scheduler로 분리 | 🔄 진행 예정 | 5일 |
+| 3 | MessageEnvelope 기반 메시지 시스템 구축 | | 3-4일 |
+| 4 | Registry를 Lookup 전용으로 축소 | | 1-2일 |
+| 5 | ActorSystem이 Actor 생명주기를 단독 관리 | | 2-3일 |
+| 6 | PImpl을 적용하여 컴파일 의존성 최소화 | | 1-2일 |
+| 7 | Runtime API를 최소화하여 Actor와 Runtime 완전 분리 | | 2-3일 |
 
-**총 예상 기간: 15-22일**
+**총 예상 기간: 16-22일** (IActorRuntime 완료로 1-2일 단축)
 
 ### 변경 파일
 
