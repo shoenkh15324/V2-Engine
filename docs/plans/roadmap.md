@@ -35,23 +35,12 @@ Phase 5: 벤치마크 인프라 + 보고서
 | 액터-워커 악피니티 | `hash(actorId) % workerCount`으로 고정 배정 → 한 액터를 한 워커만 처리 |
 | `inQueue_` 제거 | `ActorRuntime::scheduled_` 원자적 교환으로 dedup 대체 |
 
-**변경 파일**: `lock_free_mpsc_queue.hpp`, `actor_system.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.cpp`, 테스트/벤치마크
-
 ---
 
 ## Phase 2: actor_system 리팩토링
 
 > **목표**: 강결합 구조 해소 → Runtime과 Actor 완전 분리, 단방향 의존성, 컴파일 의존성 최소화, 확장 가능한 구조 확보
-> 
-> **진행 상황**:
-> - ✅ `IActorRuntime` 인터페이스 도입 (Actor ↔ ActorContext 순환 의존 제거)
-> - ✅ Dispatcher를 WorkDispatcher / EventLoopEpoll / Scheduler로 분리
-> - ✅ `IWorkDispatcher`, `IEventLoop` 인터페이스 도입 (의존성 역전)
-> - ✅ `ActorContext` → `ActorRuntime` 리네임
-> - ✅ `ActorHandle` 도입 (generation 기반 safe reference, dangling 방지)
-> - ✅ Registry를 Lookup 전용으로 축소 + enableActor/disableActor를 Runtime으로 이동
-> - ✅ Registry 런타임 시 lock-free 구조 완성
-> - 🔄 PImpl 적용으로 컴파일 의존성 최소화
+
 
 ### 디렉토리 구조
 
@@ -164,6 +153,8 @@ class ActorHandle {
     void send(Message msg);
 };
 ```
+> TODO: actor state를 아토믹에서 그냥 변수로, ActorState 변경 시 상태변화 이벤트가 전파되도록 관련 메시지 추가 및 모니터 엑터에 적용. 액터 타이머 관련 뮤텍스 제거
+
 
 #### 4. PImpl 적용으로 컴파일 의존성 최소화
 
@@ -194,15 +185,15 @@ private:
 **개선**: Runtime은 전달만 담당, 메시지 내용은 각 모듈이 정의
 
 ```cpp
-// message/envelope.hpp
-struct MessageEnvelope {
+// message/message.hpp
+struct Message {
     ActorId sender;
     ActorId receiver;
     uint16_t typeId;
     std::shared_ptr<void> payload;
     
     template<typename T>
-    static MessageEnvelope create(ActorId sender, ActorId receiver, T&& data);
+    static Message create(ActorId sender, ActorId receiver, T&& data);
     
     template<typename T>
     const T* as() const;
@@ -240,30 +231,6 @@ ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 
 **모든 의존성은 인터페이스를 통해 흐르고, 구체 클래스는 ActorSystem에서만 직접 참조합니다.**
 **ActorRegistry는 런타임 시 lock-free, write ops는 start() 전에만 발생합니다.**
-
-### 리팩토링 우선순위
-
-| 순위 | 작업 | 상태 | 기간 |
-|------|------|------|------|
-| 1 | `IActorRuntime` 인터페이스 도입 | ✅ 완료 | 2-3일 |
-| 2 | Dispatcher를 WorkDispatcher / EventLoopEpoll / Scheduler로 분리 | ✅ 완료 | 5일 |
-| 3 | MessageEnvelope 기반 메시지 시스템 구축 | | 3-4일 |
-| 4 | Registry를 Lookup 전용으로 축소 + ActorHandle 도입 | ✅ 완료 | 1-2일 |
-| 5 | ActorSystem이 Actor 생명주기를 단독 관리 | | 2-3일 |
-| 6 | PImpl을 적용하여 컴파일 의존성 최소화 | | 1-2일 |
-| 7 | Runtime API를 최소화하여 Actor와 Runtime 완전 분리 | | 2-3일 |
-
-**총 예상 기간: 14-20일** (Phase 2 완료로 9일 단축)
-
-### 변경 파일
-
-**Phase 2 완료 파일:**
-- **신규**: `i_work_dispatcher.hpp`, `work_dispatcher.hpp/cpp`, `i_event_loop.hpp`, `event_loop_epoll.hpp/cpp`, `i_actor_runtime.hpp`, `i_scheduler.hpp`, `i_actor_registry.hpp`, `actor_handle.hpp/cpp`
-- **수정**: `actor_system.hpp/cpp`, `actor_runtime.hpp/cpp`, `worker.hpp/cpp`, `scheduler.hpp/cpp`, `actor.hpp`, `actor_registry.hpp/cpp`, `cmd_actor.cpp`, `monitor_actor.cpp`, `network_manager.cpp`, `core.cmake`
-- **삭제**: `dispatcher.hpp/cpp`, `i_io_event_loop.hpp`, `io_event_loop.hpp/cpp`, `worker_pool.hpp/cpp`
-
-**Phase 3~5 변경 파일:**
-`actor.hpp/cpp`, `actor_runtime.hpp`, `dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`, `timer.hpp/cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
 
 ---
 
