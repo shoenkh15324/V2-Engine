@@ -34,7 +34,7 @@ void ActorRuntime::enqueue(Message msg){
         return;
     }
     Metrics::recordEnqueue(actor_->id(), true, mailbox_->count());
-    if(workDispatcher_ && !scheduled_.exchange(true)){
+    if(workDispatcher_){
         workDispatcher_->dispatch(this);
     }
 }
@@ -52,8 +52,7 @@ int ActorRuntime::run(int maxBatch){
     uint64_t gapNs = Time::toNs(endTime - startTime);
     Metrics::recordHandle(actor_->id(), processed, gapNs);
 
-    scheduled_ = false;
-    if(!mailbox_->empty()){
+    if(!mailbox_->empty() && workDispatcher_){
         workDispatcher_->dispatch(this);
     }
     return processed;

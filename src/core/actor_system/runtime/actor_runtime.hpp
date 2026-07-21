@@ -40,7 +40,6 @@ public:
 private:
     std::unique_ptr<Actor> actor_;
     std::unique_ptr<LockFreeMpscQueue<Message>> mailbox_;
-    std::atomic<bool> scheduled_{false};
     IWorkDispatcher* workDispatcher_ = nullptr;
     IScheduler* scheduler_ = nullptr;
     IActorRegistry* actorRegistry_ = nullptr;
