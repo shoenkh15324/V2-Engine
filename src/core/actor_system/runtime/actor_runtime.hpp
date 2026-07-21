@@ -25,9 +25,7 @@ public:
     void enqueue(Message msg) override;
     int run(int maxBatch);
     Actor* actor() const override { return actor_.get(); }
-    IScheduler* scheduler() const override { return scheduler_; }
     IActorRegistry* actorRegistry() const override { return actorRegistry_; }
-    IWorkDispatcher* workDispatcher() const override { return workDispatcher_; }
     IEventLoop* eventLoop() const override { return eventLoop_; }
     size_t mailboxCount() const override { return mailbox_->count(); }
     size_t mailboxCapacity() const override { return mailbox_->capacity(); }
