@@ -135,6 +135,7 @@ int MonitorActor::open(){
     startTimer(MonitorPoll{}, config_.pollIntervalMs, true);
     //
     state_ = Opened;
+    V2_LOG_INFO("Monitor Actor opened");
     V2_LOG_INFO("MonitorActor: listening on %s", config_.socketPath.c_str());
     return Ok;
 }
@@ -149,6 +150,7 @@ int MonitorActor::close(){
     if(pmu_){ pmu_->close(); pmu_.reset(); }
     //
     state_ = Closed;
+    V2_LOG_INFO("Monitor Actor closed");
     return Ok;
 }
 

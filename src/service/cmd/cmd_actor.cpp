@@ -41,6 +41,7 @@ int CmdActor::open(){
     if(pmu_) pmu_->open();
     //
     state_ = Opened;
+    V2_LOG_INFO("Cmd Actor opened");
     return 0;
 }
 
@@ -51,6 +52,7 @@ int CmdActor::close(){
     if(pmu_){ pmu_->close(); pmu_.reset(); }
     //
     state_ = Closed;
+    V2_LOG_INFO("Cmd Actor closed");
     return 0;
 }
 

@@ -16,6 +16,7 @@ int TickActor::open(){
     startTimer(Tick{}, tickMs_, true);
     //
     state_ = Opened;
+    V2_LOG_INFO("Tick Actor opened");
     return Ok;
 }
 
@@ -26,6 +27,7 @@ int TickActor::close(){
     cancelAllTimers();
     //
     state_ = Closed;
+    V2_LOG_INFO("Tick Actor closed");
     return Ok;
 }
 

@@ -74,6 +74,7 @@ int IpcServerActor::open(){
     subscribeListener();
     //
     state_ = Opened;
+    V2_LOG_INFO("Ipc Server Actor opened");
     V2_LOG_INFO("IpcServerActor: listening on %s", socketPath_.c_str());
     return Ok;
 }
@@ -86,6 +87,7 @@ int IpcServerActor::close(){
     server_.shutdown();
     //
     state_ = Closed;
+    V2_LOG_INFO("Ipc Server Actor closed");
     return Ok;
 }
 

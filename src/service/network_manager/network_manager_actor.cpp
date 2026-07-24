@@ -36,6 +36,7 @@ int NetworkManagerActor::open(){
     startTimer(Tick{}, wifiSyncIntervalMs_, true);
     //
     state_ = Opened;
+    V2_LOG_INFO("Network Manager Actor opened");
     return Ok;
 }
 
@@ -48,6 +49,7 @@ int NetworkManagerActor::close(){
     connection_ = nullptr;
     //
     state_ = Closed;
+    V2_LOG_INFO("Network Manager Actor closed");
     return Ok;
 }
 

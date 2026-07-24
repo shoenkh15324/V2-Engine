@@ -2,6 +2,7 @@
 #include "dbus_server_handler.hpp"
 #include "dbus_client_handler.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/common/log/log.hpp"
 
 #if V2_PLATFORM_LINUX
 
@@ -34,6 +35,7 @@ int DbusActor::open(){
     }
     //
     state_ = Opened;
+    V2_LOG_INFO("Dbus Actor opened");
     return Ok;
 }
 
@@ -49,6 +51,7 @@ int DbusActor::close(){
     }
     //
     state_ = Closed;
+    V2_LOG_INFO("Dbus Actor closed");
     return Ok;
 }
 
