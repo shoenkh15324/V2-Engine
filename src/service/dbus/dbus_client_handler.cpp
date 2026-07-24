@@ -14,6 +14,7 @@ DbusClientHandler::~DbusClientHandler(){
 void DbusClientHandler::close(){
     signalSubscriptions_.clear();
     proxies_.clear();
+    V2_LOG_INFO("DbusClientHandler closed");
 }
 
 void DbusClientHandler::handleProxyCallRequest(const DbusProxyCallRequest& msg){

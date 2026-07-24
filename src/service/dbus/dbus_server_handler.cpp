@@ -17,6 +17,7 @@ void DbusServerHandler::close(){
         std::lock_guard<std::mutex> lock(mutex_);
         pendingMethodCalls_.clear();
     }
+    V2_LOG_INFO("DbusServerHandler closed");
 }
 
 void DbusServerHandler::handleRegisterMethod(const DbusRegisterMethod& msg){

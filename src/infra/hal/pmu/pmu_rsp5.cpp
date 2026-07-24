@@ -13,11 +13,13 @@ PmuRsp5::~PmuRsp5(){
 
 int PmuRsp5::open(){
     opened_ = true;
+    V2_LOG_INFO("PmuRsp5 opened");
     return Ok;
 }
 
 int PmuRsp5::close(){
     opened_ = false;
+    V2_LOG_INFO("PmuRsp5 closed");
     return Ok;
 }
 

@@ -107,6 +107,7 @@ void UdsServer::shutdown(){
     if(serverFd_ >= 0){
         ::close(serverFd_);
         serverFd_ = -1;
+        V2_LOG_INFO("UDS server closed");
     }
     if(!path_.empty()){
         unlink(path_.c_str());

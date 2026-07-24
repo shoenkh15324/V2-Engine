@@ -1,14 +1,17 @@
 #include "sys_linux.hpp"
+#include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include <fstream>
 #include <ctime>
 
 int SysLinux::open(){
+    V2_LOG_INFO("SysLinux opened");
     return 0;
 }
 
 int SysLinux::close(){
     cpuHistory_.clear();
+    V2_LOG_INFO("SysLinux closed");
     return 0;
 }
 
