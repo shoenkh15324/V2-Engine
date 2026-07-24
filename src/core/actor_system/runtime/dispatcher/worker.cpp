@@ -21,7 +21,7 @@ void Worker::start(){
 
 void Worker::stop(){
     running_ = false;
-    if(thread_.joinable()){
+    if(thread_.joinable() && (std::this_thread::get_id() != thread_.get_id())){
         thread_.join();
     }
 }
