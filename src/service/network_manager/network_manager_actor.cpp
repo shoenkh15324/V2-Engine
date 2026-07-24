@@ -1,4 +1,4 @@
-#include "network_manager.hpp"
+#include "network_manager_actor.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
@@ -22,7 +22,7 @@ int NetworkManagerActor::open(){
     //
     auto dbusHandle = runtime()->actorRegistry()->findByName("dbus_actor");
     auto* dbus = dynamic_cast<DbusActor*>(dbusHandle.get());
-    if(!dbus){ V2_LOG_ERROR("D-Bus actor is not found");
+    if(!dbus || dbus->getState() != Opened){ V2_LOG_ERROR("D-Bus actor is not found");
         state_ = Closed;
         return Fail;
     }
