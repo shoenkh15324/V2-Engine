@@ -1,7 +1,7 @@
 #pragma once
-#include <functional>
-#include <unordered_map>
+#include <array>
 #include <vector>
+#include <functional>
 
 class SignalHandler{
 public:
@@ -9,17 +9,25 @@ public:
 
     static SignalHandler& instance();
 
-    void listen(int signum, Callback cb);
-    void ignore(int signum);
+    int init();
+    int fd() const;
+
+    bool install(int signum, Callback cb);
+    bool uninstall(int signum);
+    void dispatch(int signum);
 
 private:
     SignalHandler() = default;
+    ~SignalHandler();
 
     SignalHandler(const SignalHandler&) = delete;
     SignalHandler& operator=(const SignalHandler&) = delete;
+    SignalHandler(SignalHandler&&) = delete;
+    SignalHandler& operator=(SignalHandler&&) = delete;
 
     static void onSignal(int sig);
+    
     static SignalHandler* sInstance_;
-
-    std::unordered_map<int, std::vector<Callback>> handlers_;
+    std::array<std::vector<Callback>, 65> callbacks_;
+    int pipeFd_[2] = {-1, -1};
 };
