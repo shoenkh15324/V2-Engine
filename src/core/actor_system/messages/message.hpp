@@ -1,5 +1,6 @@
 #pragma once
 #include <variant>
+#include "system_messages.hpp"
 #include "tick_messages.hpp"
 #include "ipc_messages.hpp"
 #include "monitor_messages.hpp"
@@ -18,6 +19,8 @@ template<class... Ts>
 overloaded(Ts...)->overloaded<Ts...>;
 
 using Message = std::variant<
+    // System
+    SignalNotify,
     // Tick
     Tick,
     // Ipc
