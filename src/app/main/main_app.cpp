@@ -3,14 +3,15 @@
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
-#include "core/common/os/signal_handler.hpp"
 #include "core/perf/metrics/metrics.hpp"
+#include "core/common/os/signal_handler.hpp"
+#include "service/system/system_actor.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"
 #include "service/monitor/monitor_actor.hpp"
 #include "service/dbus/dbus_actor.hpp"
 #include "service/device_manager/device_manager_actor.hpp"
-#include "service/network_manager/network_manager.hpp"
+#include "service/network_manager/network_manager_actor.hpp"
 #include "service/cmd/cmd_actor.hpp"
 #include <csignal>
 
@@ -29,11 +30,11 @@ void MainApp::open(){
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
     //
     Metrics::setEnabled(cfg_.enableMetrics);
-    auto& sig = SignalHandler::instance();
-    sig.listen(SIGINT, [this](int){ requestStop(); });
-    sig.listen(SIGTERM, [this](int){ requestStop(); });
+    SystemActor::onSignal(SIGINT, [this](int){ requestStop(); });
+    SystemActor::onSignal(SIGTERM, [this](int){ requestStop(); });
 
     actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
+    actorSystem_->createActor<SystemActor>("system_actor", cfg_.mailboxSize)->setEssential(true);
     actorSystem_->createActor<CmdActor>("cmd_actor", cfg_.mailboxSize)->setEssential(true);
     actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs)->setEssential(false);

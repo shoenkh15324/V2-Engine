@@ -73,9 +73,8 @@ int TuiApp::open(){
     V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
     //
-    auto& sig = SignalHandler::instance();
-    sig.listen(SIGTERM, [this](int){ requestStop(); });
-
+    SignalHandler::instance().init();
+    SignalHandler::instance().install(SIGTERM, [this](int){ requestStop(); });
 #if V2_PLATFORM_LINUX
     if(client_.connect(cfg_.monitorSocketPath) != Ok){ V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
         return Fail;
