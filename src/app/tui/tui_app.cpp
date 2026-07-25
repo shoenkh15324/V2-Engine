@@ -23,9 +23,9 @@ TuiApp::TuiApp(){
     pmuPanelWidget_ = ftxui::Make<PmuPanelWidget>();
 
     actorListWidget_->setOnToggle([this](const std::string& name, bool wasOn){
-        setToast("toggling " + name + "...", 2);
+        setToast("toggle " + name + "...", 2);
         std::thread([this, name, wasOn](){
-            std::string cmd = wasOn ? ("actor -d " + name) : ("actor -e " + name);
+            std::string cmd = wasOn ? ("actor disable " + name) : ("actor enable " + name);
             std::string rsp = sendIpcCommand(cmd);
             screen_->Post([this, rsp]() { setToast(rsp, 3); });
         }).detach();
@@ -74,6 +74,7 @@ int TuiApp::open(){
     V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
     //
     SignalHandler::instance().init();
+    SignalHandler::instance().install(SIGINT, [this](int){ requestStop(); });
     SignalHandler::instance().install(SIGTERM, [this](int){ requestStop(); });
 #if V2_PLATFORM_LINUX
     if(client_.connect(cfg_.monitorSocketPath) != Ok){ V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
