@@ -153,52 +153,8 @@ class ActorHandle {
     void send(Message msg);
 };
 ```
-> TODO: actor state를 아토믹에서 그냥 변수로, ActorState 변경 시 상태변화 이벤트가 전파되도록 관련 메시지 추가 및 모니터 엑터에 적용. 액터 타이머 관련 뮤텍스 제거
+> TODO: actor state를 아토믹에서 그냥 변수로, ActorState 변경 시 상태변화 이벤트가 전파되도록 관련 메시지 추가 및 모니터 엑터에 적용
 
-
-#### 4. PImpl 적용으로 컴파일 의존성 최소화
-
-**현재 문제**: `actor_system.hpp`가 모든 구현체를 include
-
-**개선**: 헤더에 인터페이스만 노출
-
-```cpp
-// actor_system.hpp
-class ActorSystem {
-public:
-    ActorSystem();
-    ~ActorSystem();
-    
-    template<typename T, typename... Args>
-    ActorId spawn(Args&&... args);
-    
-private:
-    class Impl;
-    std::unique_ptr<Impl> impl_;
-};
-```
-
-#### 5. MessageEnvelope 기반 메시지 시스템
-
-**현재 문제**: `std::variant<Msg1, Msg2, ..., Msg28>` — 모든 메시지 헤더가 컴파일됨
-
-**개선**: Runtime은 전달만 담당, 메시지 내용은 각 모듈이 정의
-
-```cpp
-// message/message.hpp
-struct Message {
-    ActorId sender;
-    ActorId receiver;
-    uint16_t typeId;
-    std::shared_ptr<void> payload;
-    
-    template<typename T>
-    static Message create(ActorId sender, ActorId receiver, T&& data);
-    
-    template<typename T>
-    const T* as() const;
-};
-```
 
 ### 의존성 방향 (최종)
 
@@ -267,14 +223,16 @@ ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 | `shared_ptr<Message>` 제거 ✅ | `Scheduler::addTimer()`에서 Message를 `TimerNode` 내에 직접 저장 |
 | `std::function` 제거 ✅ | `Timer::Callback`을 직접 호출 가능한 타입으로 변경 (함수 포인터 + void* 또는 CRTP) |
 
-### 메시지 복사 비용
+### 메시지 시스템 타입 에러제이션
 
-> **문제**: `sizeof(Message)` = **~208바이트** (기존 추정 120-160) — MPSC 큐 push 시 매번 inline 이동
+> **문제**: `std::variant<Msg1, ..., Msg28>` — 모든 메시지 헤더가 컴파일되고, `sizeof(Message)` = 208바이트
 
 | 작업 | 상세 |
 |------|------|
-| Message 크기 확인 | `sizeof(Message)` = 208바이트 확인 (`DbusProxyCallRequest` 7개 `std::string` 기준) |
-| Pimpl 또는 힙 할당 | 큰 variant는 `unique_ptr`로 감싸서 push 시 포인터 복사만 |
+| MessageEnvelope 도입 | `shared_ptr<void>` + `uint16_t typeId` 기반 타입 에러제이션 |
+| `type_id.hpp` | 메시지 타입별 컴파일 타임 ID 생성 유틸 |
+| `handle()` 패턴 변경 | `std::visit` → `as<T>()` 캐스팅 기반 핸들링 |
+| 기존 variant 마이그레이션 | 28개 메시지 타입을 MessageEnvelope로 전환 |
 
 ### 전역 로깅 뮤텍스 제거
 
