@@ -244,28 +244,28 @@ ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 
 | 작업 | 상세 |
 |------|------|
-| 생성자 문자열 이동 | `Actor::Actor(name)` → `name_(std::move(name))` 불필요한 복사 제거 |
+| 생성자 문자열 이동 ✅ | `Actor::Actor(name)` → `name_(std::move(name))` 불필요한 복사 제거 (`c1e091b`) |
 
-### 캐시 라인 패딩
+### 캐시 라인 패딩 ✅
 
 > **문제**: 빈번한 원자적 접근 필드가 인접 필드와 같은 캐시 라인에 위치 → false sharing
 
 | 작업 | 상세 |
 |------|------|
-| `ActorRuntime::scheduled_` | 프로듀서 쓰기 / 워커 읽기 간 캐시 라인 분리 (`alignas(64)`) |
-| `ActorMetrics` | 6개 atomic을 48바이트에 패킹 → `alignas(64)`로 분리 (`metrics.hpp:8-14`) |
-| `WorkerMetrics` / `DispatcherMetrics` | 인접 atomic 패딩 추가 (`metrics.hpp:46-80`) |
-| `kCacheLine` 상수 공유 | `lock_free_mpsc_queue.hpp` → `common/`으로 이동, 전역 사용 |
+| `ActorRuntime::scheduled_` ✅ | 프로듀서 쓰기 / 워커 읽기 간 캐시 라인 분리 (`alignas(64)`) |
+| `ActorMetrics` ✅ | 6개 atomic을 48바이트에 패킹 → `alignas(64)`로 분리 (`metrics.hpp:8-14`) |
+| `WorkerMetrics` / `DispatcherMetrics` ✅ | 인접 atomic 패딩 추가 (`metrics.hpp:46-80`) |
+| `kCacheLine` 상수 공유 ✅ | `lock_free_mpsc_queue.hpp` → `common/`으로 이동, 전역 사용 |
 
-### 타이머 메모리 할당 제거
+### 타이머 메모리 할당 제거 ✅
 
 > **문제**: `Scheduler::addTimer()` 호출당 3~4회 힙 할당 (`shared_ptr<Message>`, 람다 캡처, `TimerNode`, `std::function`)
 
 | 작업 | 상세 |
 |------|------|
-| `shared_ptr<TimerNode>` 제거 | `TimerNode`를 풀 할당 또는 스택 배치로 변경 |
-| `shared_ptr<Message>` 제거 | `Scheduler::addTimer()`에서 Message를 `TimerNode` 내에 직접 저장 |
-| `std::function` 제거 | `Timer::Callback`을 직접 호출 가능한 타입으로 변경 (함수 포인터 + void* 또는 CRTP) |
+| `shared_ptr<TimerNode>` 제거 ✅ | `TimerNode`를 풀 할당 또는 스택 배치로 변경 |
+| `shared_ptr<Message>` 제거 ✅ | `Scheduler::addTimer()`에서 Message를 `TimerNode` 내에 직접 저장 |
+| `std::function` 제거 ✅ | `Timer::Callback`을 직접 호출 가능한 타입으로 변경 (함수 포인터 + void* 또는 CRTP) |
 
 ### 메시지 복사 비용
 

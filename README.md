@@ -1,14 +1,14 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.7.2-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.8.3-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
-<h1 align="center">V2 Engine</h1>
+<h1 align="center">V<sup>2</sup> Engine</h1>
 <p align="center">
-  <b>경량 C++20 액터 모델 기반 서비스 프레임워크</b><br>
-  락프리 MPSC 메일박스 + 이벤트 루프 기반 협력적 스케줄링
+  <b>Visionary Vision Engine</b><br>
+  액터 모델 기반 런타임 프레임워크
 </p>
 
 ---
@@ -29,14 +29,15 @@
 
 ## 🎯 왜 V2 Engine 인가?
 
-기존 서비스 데몬은 **복잡한 스레드 동기화, 공유 메모리 경쟁, 콜백 지옥**에 시달리기 쉽습니다.
-V2 Engine은 **액터 모델**을 채택하여:
+V² Engine은 "기능을 많이 제공하는 프레임워크"보다, **오랫동안 유지보수할 수 있는 런타임**을 목표로 설계되었습니다. 서비스 프로그램은 시간이 지날수록 기능보다 구조가 더 중요해집니다. 스레드가 늘어나고, 비동기 작업이 추가되며, 디바이스가 연결될수록 복잡성은 빠르게 증가합니다.
 
-- 모든 컴포넌트는 **독립된 액터**로 동작
-- 액터 간 통신은 **메시지 전달**만 사용 (뮤텍스 최소화)
-- **락프리 MPSC 메일박스**로 높은 Throughput 달성
-- **비동기 이벤트 루프** 위에서 협력적 스케줄링
-- IPC, D-Bus, I2C 디바이스, 모니터링, TUI를 **하나의 프레임워크**에서 제공
+V² Engine은 이러한 복잡성을 줄이기 위해 액터 모델을 중심으로 런타임을 구성했습니다. 각 컴포넌트는 독립적으로 동작하며, 상태를 공유하기보다 메시지를 교환하고, 동시성은 런타임이 관리하도록 설계했습니다.
+
+V² Engine은 다음 원칙을 기반으로 합니다.
+
+- 모든 컴포넌트는 **독립된 액터**로 동작합니다.
+- 액터 간 상태 공유 대신 **메시지 전달**을 사용합니다.
+- **비동기 이벤트 루프**에서 협력적으로 스케줄링됩니다.
 
 ---
 
@@ -69,7 +70,7 @@ sys.run();
 $ v2 info
 
   ▶ V2 Engine
-    version: 0.7.2
+    version: 0.8.0
     uptime:  0d 00h 14m 32s
 ```
 
@@ -181,7 +182,7 @@ v2 -m
 | **std::variant 메시지** | `std::visit` 기반 타입-safe 메시지, 상속/형변환 제로 |
 | **epoll 이벤트 루프** | timer FD, stop FD, transport I/O 통합 (`Dispatcher`) |
 | **세마포어 스케줄링** | `std::counting_semaphore` (C++20) 기반 worker 획득/해제 |
-| **타이머** | `timerfd_create()` + priority queue, one-shot/repeating |
+| **타이머** | `timerfd_create()` + priority queue, 풀 할당 + 함수 포인터 콜백, one-shot/repeating |
 | **JSON Lines 직렬화** | `nlohmann/json` 매크로 기반 메시지 marshal/unmarshal |
 | **액터 생명주기** | `Closed → Opening → Opened → Closing`, essential 플래그 지원, null-safe 소멸 |
 | **SignalHandler** | SIGINT/SIGTERM 등록으로 graceful shutdown |
@@ -278,8 +279,10 @@ Commands:
 | **최저 P50** | **378 ns** | workers=1 |
 | **최저 P99** | **641 ns** | workers=1 |
 | **최대 동시 push** | **7.97M msgs/sec** | 프로듀서 2개 |
-| **타이머 정확도** | **100%** | 모든 간격 |
-| **타이머 드리프트** | **0.02%** | interval=50ms |
+| **타이머 정확도** | **98%+** | 100ms 간격, ±2ms jitter |
+| **타이머 Add** | **775 ns** | 단일 타이머 추가 |
+| **타이머 AddMany** | **20.6M/s** | 256개 배치 추가 |
+| **타이머 Dispatch** | **15.3M/s** | 256개 배치 디스패치 |
 
 ### 벤치마크 목록
 
@@ -314,16 +317,15 @@ src/
 │   └── tick/                 #   주기적 틱 (TickActor)
 ├── core/                     # 액터 시스템 + 공통 유틸
 │   ├── actor_system/         #   액터 런타임
-│   │   ├── actor/            #     Actor base, ActorContext, Registry
-│   │   ├── runtime/          #     Dispatcher, Scheduler, Worker, Mailbox
-│   │   └── messages/         #     모든 메시지 타입 정의
+│   │   ├── actor/            #     Actor base, ActorHandle (generation 기반 safe reference)
+│   │   ├── runtime/          #     ActorRuntime, Scheduler, WorkDispatcher, EventLoopEpoll
+│   │   └── message/          #     Message 정의, TypeId
 │   └── common/               #   공통 유틸
 │       ├── config/           #     Runtime/Platform 설정
-│       ├── container/        #     RingBuffer
+│       ├── container/        #     RingBuffer, LockFreeMpscQueue
 │       ├── log/              #     로깅
-│       ├── os/               #     Epoll, Semaphore, SignalHandler
-│       ├── time/             #     Timer, Time, Sleep
-│       └── util/             #     Debug, Return
+│       ├── time/             #     Timer (풀 할당), Time, Sleep
+│       └── util/             #     Debug, Return, Metrics
 └── infra/                    # 전송 계층 + HAL
     ├── transport/            #   UDS Server/Client
     └── hal/                  #   I2C (Linux), PMU (RPi vcgencmd), ISys (procfs), Dummy (테스트)
