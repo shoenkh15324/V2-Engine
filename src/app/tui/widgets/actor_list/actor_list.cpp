@@ -15,7 +15,7 @@ static ftxui::CheckboxOption makeCheckboxOpt() {
     auto opt = ftxui::CheckboxOption::Simple();
     opt.transform = [](const ftxui::EntryState& s) -> ftxui::Element {
         using namespace ftxui;
-        return text(s.state ? "[■]" : "[□]") | color(cDim());
+        return text(s.state ? "[■]" : "[ ]") | color(cDim());
     };
     return opt;
 }
