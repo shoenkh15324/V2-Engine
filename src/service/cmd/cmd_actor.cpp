@@ -147,7 +147,7 @@ std::string CmdActor::doActorToggle(bool enable, const std::string& name){
         if(a->isEssential()) return "error: '" + name + "' is essential\n";
         h.send(ActorDisableRequest{});
     }
-    return "ok: '" + name + "' " + (enable ? "enabling" : "disabling") + "\n";
+    return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
 }
 
 std::string CmdActor::handlePmu(const std::vector<std::string>& args){
