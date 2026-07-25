@@ -2,6 +2,12 @@
 #include "core/common/time/timer.hpp"
 #include <vector>
 #include <cstdint>
+#include <atomic>
+
+struct BenchCount{ std::atomic<int>* v; };
+
+static void noOp(int, void*){}
+static void incCount(int, void* ctx){ ++*static_cast<BenchCount*>(ctx)->v; }
 
 // -- TimerAddOne ------------------------------------------------------------
 // Adds a single timer into a heap that already has `prefill` timers in it.
@@ -14,9 +20,9 @@ static void TimerAddOne(benchmark::State& state){
         Timer t;
         t.start();
         for(int i = 0; i < prefill; ++i){
-            t.add(1000000, false, [](int){});
+            t.add(1000000, false, noOp, nullptr);
         }
-        t.add(1000000, false, [](int){});
+        t.add(1000000, false, noOp, nullptr);
         t.stop();
     }
     state.SetItemsProcessed(state.iterations());
@@ -42,7 +48,7 @@ static void TimerCancelOne(benchmark::State& state){
         t.start();
         int id;
         for(int i = 0; i < prefill; i++){
-            id = t.add(1000000, false, [](int){});
+            id = t.add(1000000, false, noOp, nullptr);
         }
         t.cancel(id);
         t.stop();
@@ -68,9 +74,10 @@ static void TimerDispatchMany(benchmark::State& state){
     for(auto _ : state){
         Timer t;
         t.start();
-        int count = 0;
+        std::atomic<int> count{0};
+        BenchCount ctx{&count};
         for(int i = 0; i < n; ++i){
-            t.add(0, false, [&count](int){ ++count; });
+            t.add(0, false, incCount, &ctx);
         }
         t.handleTimerEvent();
         t.stop();
@@ -85,7 +92,7 @@ BENCHMARK(TimerDispatchMany)
     ->Arg(256);
 
 // -- TimerCheckPending ------------------------------------------------------
-// Registers a single repeating timer (1µs delay) and calls handleTimerEvent()
+// Registers a single repeating timer (1us delay) and calls handleTimerEvent()
 // before it expires. The timer stays in the heap; only the
 // "top-of-heap not yet due" fast path is exercised.
 // This measures the cost of a no-op dispatch check.
@@ -94,8 +101,9 @@ static void TimerCheckPending(benchmark::State& state){
     for(auto _ : state){
         Timer t;
         t.start();
-        int count = 0;
-        t.add(1, true, [&count](int){ ++count; });
+        std::atomic<int> count{0};
+        BenchCount ctx{&count};
+        t.add(1, true, incCount, &ctx);
         t.handleTimerEvent();
         t.stop();
     }
@@ -114,7 +122,7 @@ static void TimerClearMany(benchmark::State& state){
         Timer t;
         t.start();
         for(int i = 0; i < n; ++i){
-            t.add(1000000, false, [](int){});
+            t.add(1000000, false, noOp, nullptr);
         }
         t.clear();
         t.stop();
@@ -140,7 +148,7 @@ static void TimerAddMany(benchmark::State& state){
         Timer t;
         t.start();
         for(int i = 0; i < n; ++i){
-            t.add(1000000, false, [](int){});
+            t.add(1000000, false, noOp, nullptr);
         }
         t.stop();
     }
@@ -170,7 +178,7 @@ static void TimerMixedWorkload(benchmark::State& state){
         for(int i = 0; i < addCount; ++i){
             const bool repeating = (i % 20 == 0);
             const uint64_t delay = (i % 5 == 0) ? 0 : 1000000;
-            ids.push_back(t.add(delay, repeating, [](int){}));
+            ids.push_back(t.add(delay, repeating, noOp, nullptr));
         }
         for(int i = 0; i < cancelCount && i < static_cast<int>(ids.size()); ++i){
             t.cancel(ids[i]);
@@ -195,7 +203,7 @@ static void TimerCheckIdle(benchmark::State& state){
     for(auto _ : state){
         Timer t;
         t.start();
-        t.add(1000000, false, [](int){});
+        t.add(1000000, false, noOp, nullptr);
         t.handleTimerEvent();
         t.stop();
     }

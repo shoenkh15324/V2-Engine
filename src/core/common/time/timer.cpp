@@ -25,38 +25,41 @@ Timer::~Timer(){
     stop();
 }
 
-int Timer::add(uint64_t delayMs, bool repeating, Callback cb){
-    auto timerNode = std::make_shared<TimerNode>();
+int Timer::add(uint64_t delayMs, bool repeating, Callback cb, void* payload){
     auto now = Clock::now();
-    timerNode->id = nextId_++;
-    timerNode->expiry = now + std::chrono::milliseconds(delayMs);
-    timerNode->interval = std::chrono::milliseconds(delayMs);
-    timerNode->repeating = repeating;
-    timerNode->cb = std::move(cb);
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        bool needReschedule = heap_.empty() || (timerNode->expiry < heap_.top()->expiry);
-        heap_.push(timerNode);
-        timers_[timerNode->id] = timerNode;
-        if(needReschedule) scheduleNextTimer(now);
-    }
-    return timerNode->id;
+    std::lock_guard<std::mutex> lock(mutex_);
+    int idx = allocNode();
+    auto& node = pool_[idx];
+    node.id = nextId_++;
+    node.expiry = now + std::chrono::milliseconds(delayMs);
+    node.interval = std::chrono::milliseconds(delayMs);
+    node.repeating = repeating;
+    node.cb = cb;
+    node.payload = payload;
+    bool needReschedule = heap_.empty() || (node.expiry < pool_[heap_.top()].expiry);
+    heap_.push(idx);
+    timers_[node.id] = idx;
+    if(needReschedule) scheduleNextTimer(now);
+    return node.id;
 }
 
 void Timer::cancel(int id){
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = timers_.find(id);
     if(it == timers_.end()) return;
-    it->second->alive = false;
+    int idx = it->second;
+    pool_[idx].alive = false;
     timers_.erase(it);
-    while(!heap_.empty() && !heap_.top()->alive){
+    while(!heap_.empty() && !pool_[heap_.top()].alive){
         heap_.pop();
     }
 }
 
 void Timer::clear(){
     std::lock_guard<std::mutex> lock(mutex_);
-    heap_ = {};
+    heap_ = decltype(heap_){compare_};
+    pool_.clear();
+    freeList_.clear();
     timers_.clear();
     scheduleNextTimer(Clock::now());
 }
@@ -74,7 +77,7 @@ void Timer::start(){
     #endif
         while(running_){
             std::unique_lock<std::mutex> lock(mutex_);
-            while(!heap_.empty() && !heap_.top()->alive){
+            while(!heap_.empty() && !pool_[heap_.top()].alive){
                 heap_.pop();
             }
             if(heap_.empty()){
@@ -82,8 +85,8 @@ void Timer::start(){
                 continue;
             }
             auto now = Clock::now();
-            if(heap_.top()->expiry > now){
-                cv_.wait_until(lock, heap_.top()->expiry);
+            if(pool_[heap_.top()].expiry > now){
+                cv_.wait_until(lock, pool_[heap_.top()].expiry);
                 continue;
             }
             lock.unlock();
@@ -131,28 +134,61 @@ void Timer::handleTimerEvent(){
     excuteExpiredTimers();
 }
 
+bool Timer::isRepeating(int id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = timers_.find(id);
+    if(it == timers_.end()) return false;
+    return pool_[it->second].repeating;
+}
+
+bool Timer::isAlive(int id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = timers_.find(id);
+    return it != timers_.end() && pool_[it->second].alive;
+}
+
+int Timer::allocNode(){
+    if(!freeList_.empty()){
+        int idx = freeList_.back();
+        freeList_.pop_back();
+        pool_[idx] = TimerNode{};
+        return idx;
+    }
+    pool_.emplace_back();
+    return static_cast<int>(pool_.size()) - 1;
+}
+
+void Timer::freeNode(int idx){
+    pool_[idx] = TimerNode{};
+    freeList_.push_back(idx);
+}
+
 void Timer::excuteExpiredTimers(){
-    std::vector<TimerPtr> ready;
+    std::vector<int> ready; // 인덱스 목록
     auto now = Clock::now();
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        while(!heap_.empty() && (heap_.top()->expiry <= now)){
-            auto timerNode = heap_.top();
+        while(!heap_.empty() && (pool_[heap_.top()].expiry <= now)){
+            int idx = heap_.top();
             heap_.pop();
-            if(!timerNode->alive) continue;
-            ready.push_back(timerNode);
+            if(!pool_[idx].alive) continue;
+            ready.push_back(idx);
         }
     }
-    for(auto& timerNode : ready){ timerNode->cb(timerNode->id); }
+    for(int idx : ready){
+        pool_[idx].cb(pool_[idx].id, pool_[idx].payload);
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        for(auto& timerNode : ready){
-            if(timerNode->repeating && timerNode->alive){
-                timerNode->expiry += timerNode->interval;
-                heap_.push(timerNode);
+        for(auto& idx : ready){
+            if(pool_[idx].repeating && pool_[idx].alive){
+                pool_[idx].expiry += pool_[idx].interval;
+                heap_.push(idx);
             }else{
-                timers_.erase(timerNode->id);
+                timers_.erase(pool_[idx].id);
+                freeNode(idx); // 풀로 반환
             }
+
         }
         scheduleNextTimer(now);
     }
@@ -163,11 +199,11 @@ void Timer::scheduleNextTimer(const Clock::time_point& now){
     if(timerFd_ < 0) return;
     itimerspec spec{};
     if(!heap_.empty()){
-        while(!heap_.empty() && !heap_.top()->alive){
+        while(!heap_.empty() && !pool_[heap_.top()].alive){
             heap_.pop();
         }
         if(!heap_.empty()){
-            auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(heap_.top()->expiry - now).count();
+            auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(pool_[heap_.top()].expiry - now).count();
             if(ns < 0){
                 spec.it_value.tv_sec = 0;
                 spec.it_value.tv_nsec = 1;
