@@ -4,14 +4,15 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include "core/common/container/cache_line.hpp"
 
 struct ActorMetrics{
-    std::atomic<uint64_t> enqueued{0}; // Num of enqueue calls
-    std::atomic<uint64_t> processed{0}; // Num of handle processing
-    std::atomic<uint64_t> dropped{0}; // Mailbox pool drop
-    std::atomic<uint64_t> handleTimeNs{0}; // Handle() accumulated time
-    std::atomic<uint64_t> batches{0}; // Num of run() calls
-    std::atomic<size_t> peakDepth{0}; // Max depth of mailbox
+    alignas(kCacheLine) std::atomic<uint64_t> enqueued{0}; // Num of enqueue calls
+    alignas(kCacheLine) std::atomic<uint64_t> processed{0}; // Num of handle processing
+    alignas(kCacheLine) std::atomic<uint64_t> dropped{0}; // Mailbox pool drop
+    alignas(kCacheLine) std::atomic<uint64_t> handleTimeNs{0}; // Handle() accumulated time
+    alignas(kCacheLine) std::atomic<uint64_t> batches{0}; // Num of run() calls
+    alignas(kCacheLine) std::atomic<size_t> peakDepth{0}; // Max depth of mailbox
 
     struct Snapshot{
         uint64_t enqueued;
@@ -44,10 +45,10 @@ struct ActorMetrics{
 };
 
 struct WorkerMetrics{
-    std::atomic<uint64_t> batches{0}; // Num of cycle about acquire ->run
-    std::atomic<uint64_t> busyTimeNs{0}; // Time of actorCtx->run()
-    std::atomic<uint64_t> idleTimeNs{0}; // Wait time of semaphore acquire 
-    std::atomic<uint64_t> messages{0}; // Total number of processed messages
+    alignas(kCacheLine) std::atomic<uint64_t> batches{0}; // Num of cycle about acquire ->run
+    alignas(kCacheLine) std::atomic<uint64_t> busyTimeNs{0}; // Time of actorCtx->run()
+    alignas(kCacheLine) std::atomic<uint64_t> idleTimeNs{0}; // Wait time of semaphore acquire 
+    alignas(kCacheLine) std::atomic<uint64_t> messages{0}; // Total number of processed messages
 
     struct Snapshot{
         uint64_t batches;
@@ -74,10 +75,10 @@ struct WorkerMetrics{
 };
 
 struct DispatcherMetrics{
-    std::atomic<uint64_t> dispatchCount{0}; // Num of dispatch() calls
-    std::atomic<uint64_t> acquireCount{0}; // Num of acquire() calls
-    std::atomic<uint64_t> deduplicated{0}; // Num of duplicate rejections
-    std::atomic<size_t> readyQueuePeak{0}; // Max depth of ready queue
+    alignas(kCacheLine) std::atomic<uint64_t> dispatchCount{0}; // Num of dispatch() calls
+    alignas(kCacheLine) std::atomic<uint64_t> acquireCount{0}; // Num of acquire() calls
+    alignas(kCacheLine) std::atomic<uint64_t> deduplicated{0}; // Num of duplicate rejections
+    alignas(kCacheLine) std::atomic<size_t> readyQueuePeak{0}; // Max depth of ready queue
 
     struct Snapshot{
         uint64_t dispatchCount;
