@@ -37,10 +37,10 @@ public:
 
 private:
     template <typename T, typename ... Args>
-    T* createActorImpl(const std::string& name, size_t mailboxSize, Args&& ... args){
+    T* createActorImpl(std::string name, size_t mailboxSize, Args&& ... args){
         V2_ASSERT((std::is_base_of_v<Actor, T>), "T must derive from Actor");
         uint64_t id = nextActorId_++;
-        auto actor = std::make_unique<T>(name, id, std::forward<Args>(args)...);
+        auto actor = std::make_unique<T>(std::move(name), id, std::forward<Args>(args)...);
         auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(mailboxSize);
         auto actorRuntime = std::make_unique<ActorRuntime>(std::move(actor), std::move(mailbox), &workDispatcher_, &scheduler_, &actorRegistry_, &eventLoop_);
         T* ptr = static_cast<T*>(actorRuntime->actor());

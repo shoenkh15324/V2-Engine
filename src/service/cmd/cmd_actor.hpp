@@ -11,7 +11,7 @@
 
 class CmdActor : public Actor{
 public:
-    CmdActor(const std::string& name, uint64_t id);
+    CmdActor(std::string name, uint64_t id);
     ~CmdActor() override;
 
     CmdActor(const CmdActor&) = delete;

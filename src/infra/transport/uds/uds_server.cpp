@@ -26,7 +26,7 @@ UdsServer& UdsServer::operator=(UdsServer&& other) noexcept{
     return *this;
 }
 
-int UdsServer::start(const std::string& path, int backlog){
+int UdsServer::start(std::string path, int backlog){
     unlink(path.c_str());
     serverFd_ = socket(AF_UNIX, SOCK_STREAM, 0);
     if(serverFd_ < 0){ V2_LOG_ERROR("socket() failed");
@@ -43,8 +43,8 @@ int UdsServer::start(const std::string& path, int backlog){
         close(serverFd_);
         return Fail;
     }
-    path_ = path;
     V2_LOG_INFO("UDS listening on %s", path.c_str());
+    path_ = std::move(path);
     return Ok;
 }
 

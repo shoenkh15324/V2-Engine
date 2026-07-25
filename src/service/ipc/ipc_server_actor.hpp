@@ -8,7 +8,7 @@
 
 class IpcServerActor : public Actor{
 public:
-    IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog = 5, int recvBufferSize = 4096);
+    IpcServerActor(std::string name, uint64_t id, std::string socketPath, int backlog = 5, int recvBufferSize = 4096);
     ~IpcServerActor() override;
     
     IpcServerActor(const IpcServerActor&) = delete;

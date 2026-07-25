@@ -8,7 +8,7 @@
 
 class NetworkManagerActor : public Actor{
 public:
-    NetworkManagerActor(const std::string& name, uint64_t id);
+    NetworkManagerActor(std::string name, uint64_t id);
     ~NetworkManagerActor() override;
 
     NetworkManagerActor(const NetworkManagerActor&) = delete;

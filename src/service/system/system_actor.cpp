@@ -6,7 +6,7 @@
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include <unistd.h>
 
-SystemActor::SystemActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){}
+SystemActor::SystemActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
 
 int SystemActor::open(){
     if(state_ != Closed) close();

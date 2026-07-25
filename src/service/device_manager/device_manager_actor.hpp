@@ -4,7 +4,7 @@
 
 class DeviceManagerActor : public Actor{
 public:
-    DeviceManagerActor(const std::string& name, uint64_t id);
+    DeviceManagerActor(std::string name, uint64_t id);
     ~DeviceManagerActor() override;
 
     DeviceManagerActor(const DeviceManagerActor&) = delete;

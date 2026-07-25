@@ -39,14 +39,8 @@ struct LatencyParams{
 
 class LatencyBenchActor : public Actor{
 public:
-    LatencyBenchActor(const std::string& name, uint64_t id,
-                      std::vector<uint64_t>& latencies,
-                      std::vector<int64_t>& sendTimestamps,
-                      std::atomic<uint64_t>& ackCounter)
-        : Actor(name, id),
-          latencies_(latencies),
-          sendTimestamps_(sendTimestamps),
-          ackCounter_(ackCounter){}
+    LatencyBenchActor(std::string name, uint64_t id, std::vector<uint64_t>& latencies, std::vector<int64_t>& sendTimestamps, std::atomic<uint64_t>& ackCounter)
+        : Actor(std::move(name), id), latencies_(latencies), sendTimestamps_(sendTimestamps), ackCounter_(ackCounter){}
 
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }

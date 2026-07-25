@@ -21,7 +21,7 @@ struct MonitorConfig{
 
 class MonitorActor : public Actor{
 public:
-    MonitorActor(const std::string& name, uint64_t id, MonitorConfig config);
+    MonitorActor(std::string name, uint64_t id, MonitorConfig config);
     ~MonitorActor() override;
 
     MonitorActor(const MonitorActor&) = delete;

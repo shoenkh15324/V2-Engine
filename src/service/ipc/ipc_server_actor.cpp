@@ -12,9 +12,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-IpcServerActor::IpcServerActor(const std::string& name, uint64_t id, const std::string& socketPath, int backlog, int recvBufferSize) : Actor(std::move(name), id), socketPath_(socketPath), backlog_(backlog), recvBufferSize_(recvBufferSize){
-    //
-}
+IpcServerActor::IpcServerActor(std::string name, uint64_t id, std::string socketPath, int backlog, int recvBufferSize)
+ : Actor(std::move(name), id), socketPath_(std::move(socketPath)), backlog_(backlog), recvBufferSize_(recvBufferSize){}
 
 IpcServerActor::~IpcServerActor(){
     unsubscribeAll();

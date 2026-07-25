@@ -8,7 +8,7 @@
 
 #if V2_PLATFORM_LINUX
 
-NetworkManagerActor::NetworkManagerActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
+NetworkManagerActor::NetworkManagerActor(std::string name, uint64_t id) : Actor(std::move(name), id){
     //
 }
 

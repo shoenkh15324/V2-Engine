@@ -6,13 +6,9 @@
 #include "core/actor_system/runtime/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 
-Actor::Actor(std::string name, uint64_t id) : name_(name), id_(id){
-    //
-}
+Actor::Actor(std::string name, uint64_t id) : name_(std::move(name)), id_(id){}
 
-Actor::~Actor(){
-    // Timer cleanup is now handled by ActorRuntime
-}
+Actor::~Actor(){}
 
 void Actor::sendMsg(const std::string& targetName, Message msg){
     ActorHandle target = runtime_->actorRegistry()->findByName(targetName);

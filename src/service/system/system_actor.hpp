@@ -7,7 +7,7 @@ class SystemActor : public Actor {
 public:
     using Callback = std::function<void(int)>;
 
-    SystemActor(const std::string& name, uint64_t id);
+    SystemActor(std::string name, uint64_t id);
     ~SystemActor() override = default;
 
     SystemActor(const SystemActor&) = delete;

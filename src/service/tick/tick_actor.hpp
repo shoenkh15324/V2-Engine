@@ -4,7 +4,7 @@
 
 class TickActor : public Actor{
 public:
-    TickActor(const std::string& name, uint64_t id, uint64_t tickMs);
+    TickActor(std::string name, uint64_t id, uint64_t tickMs);
 
     TickActor(const TickActor&) = delete;
     TickActor& operator=(const TickActor&) = delete;

@@ -17,7 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-MonitorActor::MonitorActor(const std::string& name, uint64_t id, MonitorConfig config)
+MonitorActor::MonitorActor(std::string name, uint64_t id, MonitorConfig config)
     : Actor(std::move(name), id), config_(std::move(config)){
 }
 

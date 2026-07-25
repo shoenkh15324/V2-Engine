@@ -14,7 +14,7 @@ class DbusClientHandler;
 
 class DbusActor : public Actor{
 public:
-    DbusActor(const std::string& name, uint64_t id, const std::string& dbusName, const std::string& dbusObjectPath, const std::string& dbusInterfaceName);
+    DbusActor(std::string name, uint64_t id, std::string dbusName, std::string dbusObjectPath, std::string dbusInterfaceName);
     ~DbusActor() override;
 
     DbusActor(const DbusActor&) = delete;

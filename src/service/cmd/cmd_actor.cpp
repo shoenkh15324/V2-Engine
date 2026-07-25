@@ -13,7 +13,7 @@
 #include <sstream>
 #include <iomanip>
 
-CmdActor::CmdActor(const std::string& name, uint64_t id) : Actor(std::move(name), id){
+CmdActor::CmdActor(std::string name, uint64_t id) : Actor(std::move(name), id){
     //
 }
 

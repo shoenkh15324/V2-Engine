@@ -2,9 +2,7 @@
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 
-DeviceManagerActor::DeviceManagerActor(const std::string& name, uint64_t id) : Actor(name, id){
-    //
-}
+DeviceManagerActor::DeviceManagerActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
 
 DeviceManagerActor::~DeviceManagerActor(){
     close();

@@ -30,8 +30,7 @@ struct SchedulerParams{
 
 class TimerBenchActor : public Actor{
 public:
-    TimerBenchActor(const std::string& name, uint64_t id, std::vector<uint64_t>& fireTimes)
-        : Actor(name, id), fireTimes_(fireTimes){}
+    TimerBenchActor(std::string name, uint64_t id, std::vector<uint64_t>& fireTimes) : Actor(std::move(name), id), fireTimes_(fireTimes){}
 
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }

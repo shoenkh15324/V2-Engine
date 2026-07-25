@@ -6,8 +6,8 @@
 
 #if V2_PLATFORM_LINUX
 
-DbusActor::DbusActor(const std::string& name, uint64_t id, const std::string& dbusName, const std::string& dbusObjectPath, const std::string& dbusInterfaceName)
-    : Actor(std::move(name), id), busName_(dbusName), objectPath_(dbusObjectPath), interfaceName_(dbusInterfaceName){
+DbusActor::DbusActor(std::string name, uint64_t id, std::string dbusName, std::string dbusObjectPath, std::string dbusInterfaceName)
+    : Actor(std::move(name), id), busName_(std::move(dbusName)), objectPath_(std::move(dbusObjectPath)), interfaceName_(std::move(dbusInterfaceName)){
 }
 
 DbusActor::~DbusActor(){

@@ -15,7 +15,7 @@ public:
     UdsServer(UdsServer&&) noexcept;
     UdsServer& operator=(UdsServer&&) noexcept;
 
-    int start(const std::string& path, int backlog);
+    int start(std::string path, int backlog);
     int accept();                   
     int send(int fd, const void* data, size_t size);
     int recv(int fd, void* data, size_t size);

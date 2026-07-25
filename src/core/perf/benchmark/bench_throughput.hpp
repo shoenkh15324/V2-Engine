@@ -24,8 +24,7 @@ struct ThroughputParams{
 
 class BenchActor : public Actor{
 public:
-    BenchActor(const std::string& name, uint64_t id, std::atomic<uint64_t>& counter)
-        : Actor(name, id), counter_(counter){}
+    BenchActor(std::string name, uint64_t id, std::atomic<uint64_t>& counter) : Actor(std::move(name), id), counter_(counter){}
 
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }
