@@ -67,3 +67,17 @@ size_t Actor::mailboxCount() const {
 size_t Actor::mailboxCapacity() const {
     return runtime_ ? runtime_->mailboxCapacity() : 0;
 }
+
+void Actor::setState(ActorState newState){
+    if(state_ == newState) return;
+    ActorState oldState = state_;
+    state_ = newState;
+    if(runtime_){
+        ActorStateChanged event;
+        event.actorId = id_;
+        event.actorName = name_;
+        event.oldState = static_cast<uint8_t>(oldState);
+        event.newState = static_cast<uint8_t>(newState);
+        runtime_->enqueue(std::move(event));
+    }
+}

@@ -174,6 +174,9 @@ void MonitorActor::handle(const Message& msg){
             connections_.erase(msg.conn);
             V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", msg.conn);
         },
+        [](const ActorStateChanged& msg){
+            V2_LOG_INFO("Actor state changed: %s (id=%lu) %d -> %d", msg.actorName.c_str(), msg.actorId, msg.oldState, msg.newState);
+        },
         [](const auto&){}
     }, msg);
 }

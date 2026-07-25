@@ -21,6 +21,7 @@ overloaded(Ts...)->overloaded<Ts...>;
 using Message = std::variant<
     // System
     SignalNotify,
+    ActorStateChanged,
     // Tick
     Tick,
     // Ipc

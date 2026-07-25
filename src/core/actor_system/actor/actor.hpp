@@ -1,5 +1,4 @@
 #pragma once
-#include <atomic>
 #include <cstdint>
 #include <string>
 #include <unordered_set>
@@ -50,7 +49,7 @@ public:
     uint64_t id() const { return id_; }
     uint64_t generation() const { return generation_; }
     void setGeneration(uint64_t gen){ generation_ = gen; }
-    ActorState getState() const { return state_.load(std::memory_order_acquire); }
+    ActorState getState() const { return state_; }
     bool isEssential() const { return essential_; }
     void setEssential(bool v){ essential_ = v; }
 
@@ -58,7 +57,8 @@ public:
 
 protected:
     void setRuntime(IActorRuntime* r) { runtime_ = r; }
-    std::atomic<ActorState> state_{Closed};
+    void setState(ActorState newState);
+    ActorState state_{Closed};
 
 private:
     IActorRuntime* runtime_ = nullptr;
