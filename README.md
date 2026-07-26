@@ -70,7 +70,7 @@ sys.run();
 $ v2 info
 
   ▶ V2 Engine
-    version: 0.9.3
+    version: 0.9.7
     uptime:  0d 00h 14m 32s
 ```
 
