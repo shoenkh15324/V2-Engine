@@ -71,10 +71,10 @@ public:
         }else{
             mem = allocateLarge(sizeof(T), alignof(T));
         }
+        
         if(!mem){
             AllocPolicy::onAllocFailed();
         }
-
         DebugPolicy::onAllocate(mem, sizeof(T));
         return ::new (mem) T(std::forward<Args>(args)...);
     }
@@ -82,12 +82,10 @@ public:
     template<typename T>
     void deallocate(T* ptr){
         if(!ptr) return;
-        constexpr bool small = sizeof(T) <= SizeClass::kMaxAllocSize;
         ptr->~T();
-
         DebugPolicy::onDeallocate(ptr, sizeof(T));
 
-        if constexpr (small){
+        if constexpr ((sizeof(T) <= SizeClass::kMaxAllocSize) && (alignof(T) <= alignof(std::max_align_t))){
             tlCache_.deallocate(ptr, sizeof(T));
         }else{
             deallocateLarge(ptr, alignof(T));
@@ -110,7 +108,7 @@ public:
         return total;
     }
 
-    std::array<Slab*, SizeClass::kNumSizeClasses> slabPtrs() const noexcept {
+    std::array<Slab*, SizeClass::kNumSizeClasses> slabPtrs() noexcept {
         return slabPointers();
     }
 
@@ -134,10 +132,10 @@ private:
         }
     }
 
-    std::array<Slab*, SizeClass::kNumSizeClasses> slabPointers() const noexcept {
+    std::array<Slab*, SizeClass::kNumSizeClasses> slabPointers() noexcept {
         std::array<Slab*, SizeClass::kNumSizeClasses> ptrs{};
         for(std::size_t i = 0; i < SizeClass::kNumSizeClasses; ++i){
-            ptrs[i] = const_cast<Slab*>(&slabs_[i]);
+            ptrs[i] = &slabs_[i];
         }
         return ptrs;
     }

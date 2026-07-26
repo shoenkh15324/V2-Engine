@@ -54,16 +54,13 @@ private:
     void* fetchFromCentral(std::size_t idx){
         assert(slabs_[idx] != nullptr);
         std::size_t batch = SizeClass::batchSize(idx);
-
         void* buf[kMaxBatchSize];
         std::size_t fetched = slabs_[idx]->fetchBatch(buf, batch);
 
         if(fetched == 0) return nullptr;
-
         for(std::size_t i = 1; i < fetched; ++i){
             caches_[idx].freeList.push(buf[i]);
         }
-
         return buf[0];
     }
 
@@ -71,7 +68,7 @@ private:
         assert(slabs_[idx] != nullptr);
         auto& cache = caches_[idx];
         std::size_t batch = SizeClass::batchSize(idx);
-        std::size_t returnCount = cache.freeList.count() < batch ? cache.freeList.count() : batch;
+        std::size_t returnCount = (cache.freeList.count() < batch) ? cache.freeList.count() : batch;
 
         void* buf[kMaxBatchSize];
         for(std::size_t i = 0; i < returnCount; ++i){ 

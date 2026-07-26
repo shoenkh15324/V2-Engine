@@ -50,7 +50,7 @@ public:
         assert(batchSize > 0);
         std::lock_guard<std::mutex> guard(mutex_);
         std::size_t fetched = 0;
-        for(auto it = partialChunks_.begin(); it != partialChunks_.end() && fetched < batchSize;){
+        for(auto it = partialChunks_.begin(); it != partialChunks_.end() && (fetched < batchSize);){
             Chunk* chunk = *it++;
             ChunkState before = chunk->state();
             fetched += chunk->allocateBatch(out + fetched, batchSize - fetched);
@@ -93,7 +93,7 @@ private:
     Chunk* addChunk(){
         auto chunk = std::make_unique<Chunk>(blockSize_);
         Chunk* raw = chunk.get();
-        chunkMap_.emplace(reinterpret_cast<std::uintptr_t>(raw->begin()), raw);
+        chunkMap_.emplace(reinterpret_cast<std::uintptr_t>(raw->begin()), raw); // 주소를 key로 저장
         chunks_.push_back(std::move(chunk));
         return raw;
     }

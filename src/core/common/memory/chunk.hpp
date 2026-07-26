@@ -76,14 +76,14 @@ public:
         return (offset % blockSize_) == 0;
     }
 
-    uint8_t* begin() const noexcept { return memory_; }
-    uint8_t* end() const noexcept { return memory_ + kChunkSize; }
     ChunkState state() const noexcept{
         if(usedCount_ == 0) return ChunkState::Empty;
         if(usedCount_ == totalBlocks_) return ChunkState::Full;
         return ChunkState::Partial;
     }
 
+    uint8_t* begin() const noexcept { return memory_; }
+    uint8_t* end() const noexcept { return memory_ + kChunkSize; }
     bool full() const noexcept { return freeList_.empty(); }
     bool empty() const noexcept { return freeList_.count() == totalBlocks_; }
     std::size_t usedBlocks() const noexcept { return usedCount_; }
