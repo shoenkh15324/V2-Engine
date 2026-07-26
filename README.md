@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.8.3-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.9.7-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
@@ -70,7 +70,7 @@ sys.run();
 $ v2 info
 
   ▶ V2 Engine
-    version: 0.8.0
+    version: 0.9.3
     uptime:  0d 00h 14m 32s
 ```
 
@@ -186,6 +186,7 @@ v2 -m
 | **JSON Lines 직렬화** | `nlohmann/json` 매크로 기반 메시지 marshal/unmarshal |
 | **액터 생명주기** | `Closed → Opening → Opened → Closing`, essential 플래그 지원, null-safe 소멸 |
 | **SignalHandler** | SIGINT/SIGTERM 등록으로 graceful shutdown |
+| **MemoryPool** | TCMalloc-inspired slab 할당기, ThreadLocalCache 기반 락프리 fast path, 정책 기반 확장 구조 |
 
 ### 메일박스 구현
 
@@ -323,6 +324,7 @@ src/
 │   └── common/               #   공통 유틸
 │       ├── config/           #     Runtime/Platform 설정
 │       ├── container/        #     RingBuffer, LockFreeMpscQueue
+│       ├── memory/           #     MemoryPool, Slab, Chunk, FreeList, SizeClass, ThreadLocalCache
 │       ├── log/              #     로깅
 │       ├── time/             #     Timer (풀 할당), Time, Sleep
 │       └── util/             #     Debug, Return, Metrics

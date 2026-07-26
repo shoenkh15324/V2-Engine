@@ -223,6 +223,34 @@ ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 | `shared_ptr<Message>` 제거 ✅ | `Scheduler::addTimer()`에서 Message를 `TimerNode` 내에 직접 저장 |
 | `std::function` 제거 ✅ | `Timer::Callback`을 직접 호출 가능한 타입으로 변경 (함수 포인터 + void* 또는 CRTP) |
 
+### Slab 기반 메모리 풀 ✅
+
+> **목표**: TCMalloc/jemalloc 컨셉 기반 계층형 할당기로 작은 객체의 힙 할당 비용 제거
+
+| 작업 | 상세 |
+|------|------|
+| `FreeList` | Intrusive singly-linked list, O(1) push/pop, 블록 내부에 `next` 포인터 저장 |
+| `Chunk` | 4KB 정렬 메모리 블록을 blockSize로 분할, 내부 FreeList 관리 |
+| `Slab` | SizeClass별 Chunk 컬렉션 관리, mutex 기반 스레드 안전, partial chunk 추적 |
+| `SizeClass` | 9개 size class 테이블 (8B~2048B), batchSize별 배치 할당 |
+| `ThreadLocalCache` | per-thread FreeList, batch fetch/return로 중앙 락 비용 최소화 |
+| `MemoryPoolT` | Policy-based singleton, `allocate<T>()`/`deallocate<T>()` 템플릿 API |
+| Over-aligned 지원 | `alignof(T) > max_align_t` 시 `::operator new` fallback |
+| Large 할당 | `sizeof(T) > 2048` 시 일반 heap fallback |
+| DEBUG 정책 | `PoisonDebugPolicy` — deallocate 시 `0xCD` 패턴 덮어쓰기 (use-after-free 탐지) |
+| Noexcept 정책 | `NoexceptAllocPolicy` — 할당 실패 시 `std::abort()` (임베디드용) |
+
+**파일**: `core/common/memory/{free_list, chunk, size_class, slab, thread_local_cache, memory_pool}.hpp`
+
+**구조**:
+```
+MemoryPool (Singleton)
+  └── ThreadLocalCache (per-thread, lock-free fast path)
+        └── Slab (per-SizeClass, mutex)
+              └── Chunk (4KB, blockSize 단위 분할)
+                    └── FreeList (intrusive linked list)
+```
+
 ### 메시지 시스템 타입 에러제이션
 
 > **문제**: `std::variant<Msg1, ..., Msg28>` — 모든 메시지 헤더가 컴파일되고, `sizeof(Message)` = 208바이트
