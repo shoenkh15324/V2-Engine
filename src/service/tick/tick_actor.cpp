@@ -4,6 +4,7 @@
 #include "core/common/time/time.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/scheduler.hpp"
+#include "core/actor_system/messages/tick_messages.hpp"
 
 TickActor::TickActor(std::string name, uint64_t id, uint64_t tickMs) : Actor(std::move(name), id), tickMs_(tickMs){
     //
@@ -13,7 +14,7 @@ int TickActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    startTimer(Tick{}, tickMs_, true);
+    startTimer(Message::make(Tick{}), tickMs_, true);
     //
     state_ = Opened;
     V2_LOG_INFO("Tick Actor opened");
@@ -33,8 +34,7 @@ int TickActor::close(){
 
 void TickActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    std::visit(overloaded{
-        [](const Tick&){ V2_LOG_INFO("Timer expired! / Time: %ld", Time::nowMs()); },
-        [](const auto&){}
-    }, msg);
+    if(msg.id() == MessageId::Tick){
+        V2_LOG_INFO("Timer expired! / Time: %ld", Time::nowMs());
+    }
 }

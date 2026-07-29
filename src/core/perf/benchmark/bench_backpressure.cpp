@@ -57,7 +57,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         for(int64_t i = 0; i < totalToSend; i++){
             bool ok = (actor->mailboxCount() < cap);
             if(ok){
-                actor->receiveMsg(Tick{});
+                actor->receiveMsg(Message::make(Tick{}));
                 sent.fetch_add(1, std::memory_order_relaxed);
             }else{
                 dropped.fetch_add(1, std::memory_order_relaxed);
@@ -96,7 +96,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         auto floodStart = Time::now();
         for(int64_t i = 0; i < totalToSend; i++){
             if(actor->mailboxCount() < cap){
-                actor->receiveMsg(Tick{});
+                actor->receiveMsg(Message::make(Tick{}));
                 sent.fetch_add(1, std::memory_order_relaxed);
             }else{
                 dropped.fetch_add(1, std::memory_order_relaxed);
@@ -136,7 +136,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         size_t fillTarget = cap * 80 / 100;
         auto floodStart = Time::now();
         for(size_t i = 0; i < fillTarget; i++){
-            actor->receiveMsg(Tick{});
+            actor->receiveMsg(Message::make(Tick{}));
             sent.fetch_add(1, std::memory_order_relaxed);
         }
 
@@ -145,7 +145,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         for(int64_t i = fillTarget; i < totalToSend; i++){
             bool ok = (actor->mailboxCount() < cap);
             if(ok){
-                actor->receiveMsg(Tick{});
+                actor->receiveMsg(Message::make(Tick{}));
                 sent.fetch_add(1, std::memory_order_relaxed);
             }else{
                 dropped.fetch_add(1, std::memory_order_relaxed);

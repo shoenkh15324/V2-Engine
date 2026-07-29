@@ -1,17 +1,24 @@
 #pragma once
 #include "core/common/config/platform_config.h"
 #include <string>
+#include "type_id.hpp"
 
 struct CmdRequest{
+    static constexpr MessageId kId = MessageId::CmdRequest;
     ConnHandle conn;
     std::string cmd;
 };
 
 struct CmdResponse{
+    static constexpr MessageId kId = MessageId::CmdResponse;
     ConnHandle conn;
     std::string result;
 };
 
-struct ActorEnableRequest{};
+struct ActorEnableRequest{
+    static constexpr MessageId kId = MessageId::ActorEnableRequest;
+};
 
-struct ActorDisableRequest{};
+struct ActorDisableRequest{
+    static constexpr MessageId kId = MessageId::ActorDisableRequest;
+};

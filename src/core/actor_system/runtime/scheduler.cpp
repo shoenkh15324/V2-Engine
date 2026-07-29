@@ -5,7 +5,7 @@
 
 void Scheduler::timerCallback(int /*id*/, void* ctx){
     auto* tctx = static_cast<TimerCtx*>(ctx);
-    tctx->target->enqueue(tctx->msg);
+    tctx->target->enqueue(tctx->msg.clone());
 }
 
 Scheduler::~Scheduler(){

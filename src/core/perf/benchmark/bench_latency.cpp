@@ -46,7 +46,7 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
         auto st = Time::now();
         for(int i = 0; i < iters; i++){
             sendTs[i] = Time::nowNs();
-            act->receiveMsg(Tick{});
+            act->receiveMsg(Message::make(Tick{}));
             auto waitStart = Time::now();
             while(ack.load(std::memory_order_acquire) < static_cast<uint64_t>(i + 1)){
                 if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
@@ -74,7 +74,7 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
 
     for(int i = 0; i < p.iterations; i++){
         sendTimestamps[i] = Time::nowNs();
-        actor->receiveMsg(Tick{});
+        actor->receiveMsg(Message::make(Tick{}));
         auto waitStart = Time::now();
         while(ackCounter.load(std::memory_order_acquire) < static_cast<uint64_t>(i + 1)){
             if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;

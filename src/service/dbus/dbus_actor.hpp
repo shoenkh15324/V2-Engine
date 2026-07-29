@@ -3,6 +3,7 @@
 #include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
+#include "core/actor_system/messages/dbus_messages.hpp"
 #include <memory>
 
 #if V2_PLATFORM_LINUX

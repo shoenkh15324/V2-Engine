@@ -26,9 +26,9 @@ void DbusClientHandler::handleProxyCallRequest(const DbusProxyCallRequest& msg){
 
         std::string result;
         invoker.storeResultsTo(result);
-        actor_.sendMsg(msg.requesterActorName, DbusProxyCallResult{msg.callId, result, false});
+        actor_.sendMsg(msg.requesterActorName, Message::make(DbusProxyCallResult{msg.callId, result, false}));
     }catch(const sdbus::Error& e){ V2_LOG_ERROR("D-Bus proxy call failed: {}", e.what());
-        actor_.sendMsg(msg.requesterActorName, DbusProxyCallResult{msg.callId, e.what(), true});
+        actor_.sendMsg(msg.requesterActorName, Message::make(DbusProxyCallResult{msg.callId, e.what(), true}));
     }
 }
 
@@ -53,7 +53,7 @@ void DbusClientHandler::handleSubscribeSignal(const DbusSubscribeSignal& msg){
                 .signalName = signalName,
                 .args = args,
             };
-            actor_.sendMsg(subscriber, std::move(event));
+            actor_.sendMsg(subscriber, Message::make(std::move(event)));
         });
         signalSubscriptions_[key] = {msg.subscriberActorName, std::move(proxy)};
         V2_LOG_INFO("Subscribed to D-Bus signal: %s", key);

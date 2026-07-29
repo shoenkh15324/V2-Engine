@@ -31,35 +31,42 @@ int DeviceManagerActor::close(){
 
 void DeviceManagerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Device Manager is not opened"); return; }
-    std::visit(overloaded{
-        [this](const DeviceRegister& msg){
-            for(const auto& d : devices_){
-                if(d.name == msg.name){ V2_LOG_WARN("Device '%s' already registered", msg.name.c_str());
-                    return;
-                }
+    switch(msg.id()){
+    case MessageId::DeviceRegister:{
+        const auto& m = msg.as<DeviceRegister>();
+        for(const auto& d : devices_){
+            if(d.name == m.name){ V2_LOG_WARN("Device '%s' already registered", m.name.c_str());
+                return;
             }
-            devices_.push_back({msg.name, msg.type, msg.bus});
-            V2_LOG_INFO("Device registered: %s (type=%d, bus=%d)", msg.name.c_str(), static_cast<int>(msg.type), msg.bus);
-        },
-        [this](const DeviceUnregister& msg){
-            for(auto it = devices_.begin(); it != devices_.end(); ++it){
-                if(it->name == msg.name){
-                    devices_.erase(it);
-                    V2_LOG_INFO("Device unregistered: %s", msg.name.c_str());
-                    return;
-                }
+        }
+        devices_.push_back({m.name, m.type, m.bus});
+        V2_LOG_INFO("Device registered: %s (type=%d, bus=%d)", m.name.c_str(), static_cast<int>(m.type), m.bus);
+        break;
+    }
+    case MessageId::DeviceUnregister:{
+        const auto& m = msg.as<DeviceUnregister>();
+        for(auto it = devices_.begin(); it != devices_.end(); ++it){
+            if(it->name == m.name){
+                devices_.erase(it);
+                V2_LOG_INFO("Device unregistered: %s", m.name.c_str());
+                return;
             }
-            V2_LOG_WARN("Device '%s' not found", msg.name.c_str());
-        },
-        [this](const DeviceEnumerate& msg){
-            DeviceList rsp;
-            for(const auto& d : devices_){
-                rsp.names.push_back(d.name);
-                rsp.types.push_back(static_cast<uint8_t>(d.type));
-                rsp.buses.push_back(d.bus);
-            }
-            sendMsg(msg.requesterName, std::move(rsp));
-        },
-        [](const auto&){}
-    }, msg);
+        }
+        V2_LOG_WARN("Device '%s' not found", m.name.c_str());
+        break;
+    }
+    case MessageId::DeviceEnumerate:{
+        const auto& m = msg.as<DeviceEnumerate>();
+        DeviceList rsp;
+        for(const auto& d : devices_){
+            rsp.names.push_back(d.name);
+            rsp.types.push_back(static_cast<uint8_t>(d.type));
+            rsp.buses.push_back(d.bus);
+        }
+        sendMsg(m.requesterName, Message::make(std::move(rsp)));
+        break;
+    }
+    default:
+        break;
+    }
 }

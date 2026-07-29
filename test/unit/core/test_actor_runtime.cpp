@@ -51,15 +51,15 @@ TEST(ActorRuntime, CreateWithRegistry){
 
 TEST(ActorRuntime, Enqueue){
     ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
-    ctx.enqueue(Tick{});
+    ctx.enqueue(Message::make(Tick{}));
     EXPECT_EQ(ctx.mailboxCount(), 1);
 }
 
 TEST(ActorRuntime, EnqueueMultiple){
     ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
-    ctx.enqueue(Tick{});
-    ctx.enqueue(Tick{});
-    ctx.enqueue(Tick{});
+    ctx.enqueue(Message::make(Tick{}));
+    ctx.enqueue(Message::make(Tick{}));
+    ctx.enqueue(Message::make(Tick{}));
     EXPECT_EQ(ctx.mailboxCount(), 3);
 }
 
@@ -75,7 +75,7 @@ TEST(ActorRuntime, RunEmpty){
 TEST(ActorRuntime, RunSingle){
     ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
-    ctx.enqueue(Tick{});
+    ctx.enqueue(Message::make(Tick{}));
     ctx.run(-1);
     EXPECT_EQ(a->handleCount, 1);
     EXPECT_EQ(ctx.mailboxCount(), 0);
@@ -84,9 +84,9 @@ TEST(ActorRuntime, RunSingle){
 TEST(ActorRuntime, RunMultiple){
     ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
-    ctx.enqueue(Tick{});
-    ctx.enqueue(Tick{});
-    ctx.enqueue(Tick{});
+    ctx.enqueue(Message::make(Tick{}));
+    ctx.enqueue(Message::make(Tick{}));
+    ctx.enqueue(Message::make(Tick{}));
     ctx.run(-1);
     EXPECT_EQ(a->handleCount, 3);
 }
@@ -97,7 +97,7 @@ TEST(ActorRuntime, RunMaxBatch){
     auto* a = static_cast<TestActor*>(ctx.actor());
 
     for(int i = 0; i < 5; i++){
-        ctx.enqueue(Tick{});
+        ctx.enqueue(Message::make(Tick{}));
     }
     ctx.run(2);
     EXPECT_EQ(a->handleCount, 2);
@@ -110,7 +110,7 @@ TEST(ActorRuntime, RunAll){
     auto* a = static_cast<TestActor*>(ctx.actor());
 
     for(int i = 0; i < 5; i++){
-        ctx.enqueue(Tick{});
+        ctx.enqueue(Message::make(Tick{}));
     }
     ctx.run(-1);
     EXPECT_EQ(a->handleCount, 5);

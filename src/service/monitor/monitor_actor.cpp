@@ -1,4 +1,6 @@
 #include "monitor_actor.hpp"
+#include "core/actor_system/messages/monitor_messages.hpp"
+#include "core/actor_system/messages/system_messages.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
@@ -34,7 +36,7 @@ void MonitorActor::subscribeListener(){
         ConnHandle conn = static_cast<ConnHandle>(server_.accept());
         if(conn >= 0){
             connections_.insert(conn);
-            ctx->enqueue(MonitorNewConnection{conn});
+            ctx->enqueue(Message::make(MonitorNewConnection{conn}));
         }
     });
 }
@@ -46,7 +48,7 @@ void MonitorActor::subscribeClient(ConnHandle conn){
         char buf[64];
         ssize_t n = ::recv(conn, buf, sizeof(buf), MSG_DONTWAIT);
         if(n <= 0 && (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))){
-            ctx->enqueue(MonitorClientDisconnected{conn});
+            ctx->enqueue(Message::make(MonitorClientDisconnected{conn}));
         }
     });
 }
@@ -132,7 +134,7 @@ int MonitorActor::open(){
     if(pmu_) pmu_->open();
 
     subscribeListener();
-    startTimer(MonitorPoll{}, config_.pollIntervalMs, true);
+    startTimer(Message::make(MonitorPoll{}), config_.pollIntervalMs, true);
     //
     state_ = Opened;
     V2_LOG_INFO("Monitor Actor opened");
@@ -156,29 +158,37 @@ int MonitorActor::close(){
 
 void MonitorActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    std::visit(overloaded{
-        [this](const MonitorPoll&){
-            MonitorSnapshot snap;
-            prepareSnapshot(snap);
-            broadcastSnapshot(snap);
-        },
-        [this](const MonitorNewConnection& msg){
-            V2_LOG_INFO("MonitorActor: client connected (conn=%d)", msg.conn);
-            connections_.insert(msg.conn);
-            subscribeClient(msg.conn);
-        },
-        [this](const MonitorClientDisconnected& msg){
-            if(connections_.find(msg.conn) == connections_.end()) return;
-            runtime()->eventLoop()->unsubscribe(msg.conn);
-            server_.closeClient(msg.conn);
-            connections_.erase(msg.conn);
-            V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", msg.conn);
-        },
-        [](const ActorStateChanged& msg){
-            V2_LOG_INFO("Actor state changed: %s (id=%lu) %d -> %d", msg.actorName.c_str(), msg.actorId, msg.oldState, msg.newState);
-        },
-        [](const auto&){}
-    }, msg);
+    switch(msg.id()){
+    case MessageId::MonitorPoll:{
+        MonitorSnapshot snap;
+        prepareSnapshot(snap);
+        broadcastSnapshot(snap);
+        break;
+    }
+    case MessageId::MonitorNewConnection:{
+        const auto& m = msg.as<MonitorNewConnection>();
+        V2_LOG_INFO("MonitorActor: client connected (conn=%d)", m.conn);
+        connections_.insert(m.conn);
+        subscribeClient(m.conn);
+        break;
+    }
+    case MessageId::MonitorClientDisconnected:{
+        const auto& m = msg.as<MonitorClientDisconnected>();
+        if(connections_.find(m.conn) == connections_.end()) return;
+        runtime()->eventLoop()->unsubscribe(m.conn);
+        server_.closeClient(m.conn);
+        connections_.erase(m.conn);
+        V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", m.conn);
+        break;
+    }
+    case MessageId::ActorStateChanged:{
+        const auto& m = msg.as<ActorStateChanged>();
+        V2_LOG_INFO("Actor state changed: %s (id=%lu) %d -> %d", m.actorName.c_str(), m.actorId, m.oldState, m.newState);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 #endif

@@ -25,10 +25,7 @@ public:
     }
 
     void handle(const Message& msg) override{
-        std::visit(overloaded{
-            [this](const Tick&){ tickCount++; },
-            [](const auto&){}
-        }, msg);
+        if(msg.id() == MessageId::Tick) tickCount++;
     }
 
     int openCount = 0;
@@ -49,7 +46,7 @@ TEST(ActorSystemIntegration, FullLifeCycle){
 
     // sendMsg: actor_a -> actor_a (self)
     // dispatcher dispatch → worker acquire → ActorContext::run → handle(Tick)
-    a->sendMsg("actor_a", Tick{});
+    a->sendMsg("actor_a", Message::make(Tick{}));
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_GE(a->tickCount, 1);
 
@@ -66,7 +63,7 @@ TEST(ActorSystemIntegration, SendBetweenActors){
 
     sys.start();
 
-    a->sendMsg("receiver", Tick{});
+    a->sendMsg("receiver", Message::make(Tick{}));
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_EQ(b->tickCount, 1);
     EXPECT_EQ(a->tickCount, 0);
@@ -82,7 +79,7 @@ TEST(ActorSystemIntegration, MultipleMessages){
 
     sys.start();
     for(int i = 0; i < 10; i++){
-        a->sendMsg("b", Tick{});
+        a->sendMsg("b", Message::make(Tick{}));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     EXPECT_EQ(b->tickCount, 10);

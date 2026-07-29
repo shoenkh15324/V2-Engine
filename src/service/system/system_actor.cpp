@@ -4,6 +4,7 @@
 #include "core/common/os/signal_handler.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
+#include "core/actor_system/messages/system_messages.hpp"
 #include <unistd.h>
 
 SystemActor::SystemActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
@@ -21,7 +22,7 @@ int SystemActor::open(){
             int sig;
             ssize_t n = ::read(signalPipeFd_, &sig, sizeof(sig));
             if(n == sizeof(sig)){
-                ctx->enqueue(SignalNotify{sig});
+                ctx->enqueue(Message::make(SignalNotify{sig}));
             }
         });
     }
@@ -47,12 +48,13 @@ int SystemActor::close(){
 
 void SystemActor::handle(const Message& msg){
     if(state_ < Opened) return;
-    std::visit(overloaded{
-        [this](const SignalNotify& msg){
-            SignalHandler::instance().dispatch(msg.signum);
-        },
-        [](const auto&){}
-    }, msg);
+    switch(msg.id()){
+    case MessageId::SignalNotify:
+        SignalHandler::instance().dispatch(msg.as<SignalNotify>().signum);
+        break;
+    default:
+        break;
+    }
 }
 
 void SystemActor::onSignal(int signum, Callback cb){

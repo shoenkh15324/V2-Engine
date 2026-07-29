@@ -50,7 +50,7 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
         sys.start();
         auto st = Time::now();
         for(int i = 0; i < iterations; i++){
-            acts[i % actors]->receiveMsg(Tick{});
+            acts[i % actors]->receiveMsg(Message::make(Tick{}));
         }
         auto waitStart = Time::now();
         while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(iterations)){

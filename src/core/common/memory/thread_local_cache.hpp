@@ -77,6 +77,7 @@ private:
 
         std::size_t returned = slabs_[idx]->returnBatch(buf, returnCount);
         assert(returned == returnCount);
+        (void)returned;
     }
 
     bool initialized_ = false;

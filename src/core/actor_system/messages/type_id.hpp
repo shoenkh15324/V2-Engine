@@ -1,18 +1,49 @@
 #pragma once
 #include <cstdint>
-#include <atomic>
 
-using TypeId = uint16_t;
-
-namespace detail{
-    inline TypeId nextTypeId(){
-        static std::atomic<TypeId> counter{0};
-        return counter.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-} // namespace detail
-
-template<typename T>
-TypeId typeId(){
-    static const TypeId id = detail::nextTypeId();
-    return id;
-}
+enum class MessageId : uint32_t {
+// System
+    SignalNotify = 1,
+    ActorStateChanged,
+    // Tick
+    Tick,
+    // Ipc
+    IpcNewConnection,
+    IpcDataReceived,
+    // Monitor
+    MonitorPoll,
+    MonitorNewConnection,
+    MonitorClientDisconnected,
+    // Dbus
+    DbusRegisterMethod,
+    DbusUnregisterMethod,
+    DbusRegisterResult,
+    DbusIncomingMethodCall,
+    DbusMethodCallResult,
+    DbusProxyCallRequest,
+    DbusProxyCallResult,
+    DbusSubscribeSignal,
+    DbusSignalEvent,
+    // Device Manager
+    DeviceRegister,
+    DeviceUnregister,
+    DeviceEnumerate,
+    DeviceList,
+    // Cmd
+    CmdRequest,
+    CmdResponse,
+    // Lifecycle
+    ActorEnableRequest,
+    ActorDisableRequest,
+    // Network Manager
+    NmStatusRequest,
+    // Wifi
+    WifiScanRequest,
+    WifiScanResult,
+    WifiConnectRequest,
+    WifiConnectResult,
+    WifiDisconnectRequest,
+    WifiDisconnectResult,
+    WifiStatusResult,
+    WifiAutoReconnectRequest
+};

@@ -50,7 +50,7 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
         for(int i = 0; i < numProducers; i++){
             producers.emplace_back([&]{
                 for(int64_t j = 0; j < msgsPerProducer; j++){
-                    actor->receiveMsg(Tick{});
+                    actor->receiveMsg(Message::make(Tick{}));
                 }
             });
         }

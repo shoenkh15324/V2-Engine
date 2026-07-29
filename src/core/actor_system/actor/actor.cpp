@@ -5,6 +5,7 @@
 #include "core/actor_system/runtime/i_scheduler.hpp"
 #include "core/actor_system/runtime/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
+#include "core/actor_system/messages/system_messages.hpp"
 
 Actor::Actor(std::string name, uint64_t id) : name_(std::move(name)), id_(id){}
 
@@ -78,6 +79,6 @@ void Actor::setState(ActorState newState){
         event.actorName = name_;
         event.oldState = static_cast<uint8_t>(oldState);
         event.newState = static_cast<uint8_t>(newState);
-        runtime_->enqueue(std::move(event));
+        runtime_->enqueue(Message::make(std::move(event)));
     }
 }

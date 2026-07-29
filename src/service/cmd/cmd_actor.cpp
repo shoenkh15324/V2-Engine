@@ -58,17 +58,32 @@ int CmdActor::close(){
 
 void CmdActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    std::visit(overloaded{
-        [this](const CmdRequest& msg){
-            auto response = dispatch(msg.cmd);
-            sendMsg("ipc_server", CmdResponse{msg.conn, std::move(response)});
-        },
-        [this](const WifiScanResult& msg){ lastScan_ = msg; },
-        [this](const WifiStatusResult& msg){ lastStatus_ = msg; },
-        [this](const WifiConnectResult& msg){ lastConnectResult_ = msg.result ? "Connected successfully" : "Failed" + msg.errorMsg; },
-        [this](const WifiDisconnectResult& msg){ lastDisconnectResult_ = msg.result ? "Disconnected successfully" : "Failed to disconnect"; },
-        [](const auto&){}
-    }, msg);
+    switch(msg.id()){
+    case MessageId::CmdRequest:{
+        const auto& m = msg.as<CmdRequest>();
+        auto response = dispatch(m.cmd);
+        sendMsg("ipc_server", Message::make(CmdResponse{m.conn, std::move(response)}));
+        break;
+    }
+    case MessageId::WifiScanResult:
+        lastScan_ = msg.as<WifiScanResult>();
+        break;
+    case MessageId::WifiStatusResult:
+        lastStatus_ = msg.as<WifiStatusResult>();
+        break;
+    case MessageId::WifiConnectResult:{
+        const auto& m = msg.as<WifiConnectResult>();
+        lastConnectResult_ = m.result ? "Connected successfully" : "Failed" + m.errorMsg;
+        break;
+    }
+    case MessageId::WifiDisconnectResult:{
+        const auto& m = msg.as<WifiDisconnectResult>();
+        lastDisconnectResult_ = m.result ? "Disconnected successfully" : "Failed to disconnect";
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 std::string CmdActor::dispatch(const std::string& cmd){
@@ -142,10 +157,10 @@ std::string CmdActor::doActorToggle(bool enable, const std::string& name){
     if(!a) return "error: not found '" + name + "'\n";
     if(enable && a->isEssential()) return "error: '" + name + "' is essential\n";
     if(enable){
-        h.send(ActorEnableRequest{});
+        h.send(Message::make(ActorEnableRequest{}));
     }else{
         if(a->isEssential()) return "error: '" + name + "' is essential\n";
-        h.send(ActorDisableRequest{});
+        h.send(Message::make(ActorDisableRequest{}));
     }
     return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
 }
@@ -176,7 +191,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     if(args.empty()) return "error: missing subcommand\n";
     auto& cmd = args[0];
     if(cmd == "scan"){
-        sendMsg("network_manager", WifiScanRequest{});
+        sendMsg("network_manager", Message::make(WifiScanRequest{}));
         return "Scanning...\n";
     }
     if(cmd == "list"){
@@ -185,11 +200,11 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     }
     if(cmd == "connect"){
         if(args.size() < 2) return "error: wifi connect <ssid> [password]\n";
-        sendMsg("network_manager", WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
+        sendMsg("network_manager", Message::make(WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""}));
         return "Connecting to '" + args[1] + "'...\n";
     }
     if(cmd == "disconnect"){
-        sendMsg("network_manager", WifiDisconnectRequest{});
+        sendMsg("network_manager", Message::make(WifiDisconnectRequest{}));
         return "Disconnecting...\n";
     }
     if(cmd == "status"){
@@ -198,7 +213,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     if(cmd == "autoconnect"){
         if(args.size() < 2) return "error: wifi autoconnect <on|off>\n";
         bool enable = (args[1] == "on");
-        sendMsg("network_manager", WifiAutoReconnectRequest{enable});
+        sendMsg("network_manager", Message::make(WifiAutoReconnectRequest{enable}));
         return enable ? "Auto-reconnect enabled\n" : "Auto-reconnect disabled\n";
     }
     return "error: unknown wifi subcommand '" + cmd + "'\n";

@@ -1,5 +1,6 @@
 #include "ipc_server_actor.hpp"
 #include "core/actor_system/messages/cmd_messages.hpp"
+#include "core/actor_system/messages/ipc_messages.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/common/log/log.hpp"
@@ -29,7 +30,7 @@ void IpcServerActor::subscribeListener(){
         ConnHandle conn = static_cast<ConnHandle>(server_.accept());
         if(conn >= 0){
             connections_.insert(conn);
-            ctx->enqueue(IpcNewConnection{conn});
+            ctx->enqueue(Message::make(IpcNewConnection{conn}));
         }
     });
 }
@@ -38,7 +39,7 @@ void IpcServerActor::subscribeClient(ConnHandle conn){
     auto* ioLoop = runtime()->eventLoop();
     IActorRuntime* ctx = runtime();
     ioLoop->subscribe(conn, [ctx, this, conn](){
-        ctx->enqueue(IpcDataReceived{conn});
+        ctx->enqueue(Message::make(IpcDataReceived{conn}));
     });
 }
 
@@ -57,7 +58,7 @@ void IpcServerActor::unsubscribeAll(){
 
 int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
     V2_LOG_INFO("IpcServerActor: command received (conn=%d) [%s]", conn, cmd.c_str());
-    sendMsg("cmd_actor", CmdRequest{conn, cmd});
+    sendMsg("cmd_actor", Message::make(CmdRequest{conn, cmd}));
     return Ok;
 }
 
@@ -92,40 +93,47 @@ int IpcServerActor::close(){
 
 void IpcServerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    std::visit(overloaded{
-        [this](const IpcNewConnection& msg){
-            V2_LOG_INFO("IpcServerActor: client connected (conn=%d)", msg.conn);
-            subscribeClient(msg.conn);
-        },
-        [this](const IpcDataReceived& msg){
-            std::vector<uint8_t> buf(recvBufferSize_);
-            ssize_t n = ::recv(msg.conn, buf.data(), buf.size(), MSG_DONTWAIT);
-            if(n > 0){
-                V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, msg.conn);
-                std::string cmd(reinterpret_cast<char*>(buf.data()), n);
-                if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
-                handleCommand(msg.conn, cmd);
-                runtime()->eventLoop()->unsubscribe(msg.conn);
-            }else if(n == 0){
-                V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", msg.conn);
-                runtime()->eventLoop()->unsubscribe(msg.conn);
-                server_.closeClient(msg.conn);
-                connections_.erase(msg.conn);
-            }else if(errno != EAGAIN && errno != EWOULDBLOCK){
-                //V2_LOG_ERROR("IpcServerActor: recv error (conn=%d) errno=%d", msg.conn, errno);
-            }else{
-               V2_LOG_ERROR("IpcServerActor: recv error (conn=%d) errno=%d", msg.conn, errno);
-            }
-        },
-        [this](const CmdResponse& msg){
-            V2_LOG_INFO("IpcServerActor: response received for conn=%d", msg.conn);
-            server_.send(msg.conn, msg.result.data(), msg.result.size());
-            runtime()->eventLoop()->unsubscribe(msg.conn);
-            connections_.erase(msg.conn);
-            server_.closeClient(msg.conn);
-        },
-        [](const auto&){}
-    }, msg);
+    switch(msg.id()){
+    case MessageId::IpcNewConnection:{
+        const auto& m = msg.as<IpcNewConnection>();
+        V2_LOG_INFO("IpcServerActor: client connected (conn=%d)", m.conn);
+        subscribeClient(m.conn);
+        break;
+    }
+    case MessageId::IpcDataReceived:{
+        const auto& m = msg.as<IpcDataReceived>();
+        std::vector<uint8_t> buf(recvBufferSize_);
+        ssize_t n = ::recv(m.conn, buf.data(), buf.size(), MSG_DONTWAIT);
+        if(n > 0){
+            V2_LOG_INFO("IpcServerActor: received %zd bytes from conn=%d", n, m.conn);
+            std::string cmd(reinterpret_cast<char*>(buf.data()), n);
+            if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
+            handleCommand(m.conn, cmd);
+            runtime()->eventLoop()->unsubscribe(m.conn);
+        }else if(n == 0){
+            V2_LOG_INFO("IpcServerActor: client disconnected (conn=%d)", m.conn);
+            runtime()->eventLoop()->unsubscribe(m.conn);
+            server_.closeClient(m.conn);
+            connections_.erase(m.conn);
+        }else if(errno != EAGAIN && errno != EWOULDBLOCK){
+            //V2_LOG_ERROR("IpcServerActor: recv error (conn=%d) errno=%d", m.conn, errno);
+        }else{
+           V2_LOG_ERROR("IpcServerActor: recv error (conn=%d) errno=%d", m.conn, errno);
+        }
+        break;
+    }
+    case MessageId::CmdResponse:{
+        const auto& m = msg.as<CmdResponse>();
+        V2_LOG_INFO("IpcServerActor: response received for conn=%d", m.conn);
+        server_.send(m.conn, m.result.data(), m.result.size());
+        runtime()->eventLoop()->unsubscribe(m.conn);
+        connections_.erase(m.conn);
+        server_.closeClient(m.conn);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 #endif

@@ -5,6 +5,7 @@
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
+#include "core/actor_system/messages/cmd_messages.hpp"
 
 ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
@@ -61,19 +62,20 @@ int ActorRuntime::run(int maxBatch){
 }
 
 bool ActorRuntime::handleLifecycle(const Message& msg){
-    if(std::holds_alternative<ActorEnableRequest>(msg)){
+    switch(msg.id()){
+    case MessageId::ActorEnableRequest:
         if(actor_->getState() == Closed){
             actor_->open();
         }
         return true;
-    }
-    if(std::holds_alternative<ActorDisableRequest>(msg)){
+    case MessageId::ActorDisableRequest:
         if(actor_->getState() == Opened && !actor_->isEssential()){
             actor_->close();
         }
         return true;
+    default:
+        return false;
     }
-    return false;
 }
 
 int ActorRuntime::addTimer(Actor* target, Message msg, uint64_t delayMs, bool repeating){

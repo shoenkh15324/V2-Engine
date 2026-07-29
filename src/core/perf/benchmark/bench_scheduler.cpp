@@ -45,7 +45,7 @@ BenchmarkResult SchedulerBenchmark::run(const Args& args){
             actorSystem.run();
         });
 
-        actor->startTimer(Tick{}, p.intervalMs, true);
+        actor->startTimer(Message::make(Tick{}), p.intervalMs, true);
         Sleep::sleepMs(durationMs);
 
         actorSystem.requestStop();

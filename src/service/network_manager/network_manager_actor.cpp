@@ -1,4 +1,7 @@
 #include "network_manager_actor.hpp"
+#include "core/actor_system/messages/tick_messages.hpp"
+#include "core/actor_system/messages/network_manager/network_manager_messages.hpp"
+#include "core/actor_system/messages/network_manager/wifi_messages.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
@@ -33,7 +36,7 @@ int NetworkManagerActor::open(){
         V2_LOG_WARN("WiFi init retry %d/5...", i + 1);
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
-    startTimer(Tick{}, wifiSyncIntervalMs_, true);
+    startTimer(Message::make(Tick{}), wifiSyncIntervalMs_, true);
     //
     state_ = Opened;
     V2_LOG_INFO("Network Manager Actor opened");
@@ -55,36 +58,39 @@ int NetworkManagerActor::close(){
 
 void NetworkManagerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    std::visit(overloaded{
-        [this](const Tick&){
-            wifi_.syncDeviceState();
-            if(wifi_.consumeScanRefreshPending()){
-                wifi_.refreshAps();
-                sendMsg("cmd_actor", WifiScanResult{wifi_.lastScanResults()});
-            }
-            // Auto Reconnection
-            wifi_.autoReconnect();
-            reportStatus();
-        },
-        [this](const WifiScanRequest&){
-            wifi_.requestScan();
-        },
-        [this](const WifiConnectRequest& msg){
-            bool ok = wifi_.addAndActivateConnection(msg.ssid, msg.password);
-            sendMsg("cmd_actor", WifiConnectResult{ok, ok ? "" : "Invalid state or device"});
-        },
-        [this](const WifiDisconnectRequest&){
-            bool ok = wifi_.disconnectDevice();
-            sendMsg("cmd_actor", WifiDisconnectResult{ok});
-        },
-        [this](const WifiAutoReconnectRequest& msg){
-            wifi_.setAutoReconnect(msg.enable);
-        },
-        [this](const NmStatusRequest&){
-            reportStatus();
-        },
-        [](const auto&){}
-    }, msg);
+    switch(msg.id()){
+    case MessageId::Tick:
+        wifi_.syncDeviceState();
+        if(wifi_.consumeScanRefreshPending()){
+            wifi_.refreshAps();
+            sendMsg("cmd_actor", Message::make(WifiScanResult{wifi_.lastScanResults()}));
+        }
+        wifi_.autoReconnect();
+        reportStatus();
+        break;
+    case MessageId::WifiScanRequest:
+        wifi_.requestScan();
+        break;
+    case MessageId::WifiConnectRequest:{
+        const auto& m = msg.as<WifiConnectRequest>();
+        bool ok = wifi_.addAndActivateConnection(m.ssid, m.password);
+        sendMsg("cmd_actor", Message::make(WifiConnectResult{ok, ok ? "" : "Invalid state or device"}));
+        break;
+    }
+    case MessageId::WifiDisconnectRequest:{
+        bool ok = wifi_.disconnectDevice();
+        sendMsg("cmd_actor", Message::make(WifiDisconnectResult{ok}));
+        break;
+    }
+    case MessageId::WifiAutoReconnectRequest:
+        wifi_.setAutoReconnect(msg.as<WifiAutoReconnectRequest>().enable);
+        break;
+    case MessageId::NmStatusRequest:
+        reportStatus();
+        break;
+    default:
+        break;
+    }
 }
 
 void NetworkManagerActor::reportStatus(){
@@ -104,7 +110,7 @@ void NetworkManagerActor::reportStatus(){
             r.ipAddress = wifi_.readIp4Address();
         }
     }
-    sendMsg("cmd_actor", std::move(r));
+    sendMsg("cmd_actor", Message::make(std::move(r)));
 }
 
 #endif // V2_PLATFORM_LINUX

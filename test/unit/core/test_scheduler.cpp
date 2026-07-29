@@ -28,7 +28,7 @@ TEST(Scheduler, AddTimer){
     Scheduler sched;
     auto actor = std::make_unique<TestActor>("t", 1);
     ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
-    int id = sched.addTimer(&rt, Tick{}, 100, false);
+    int id = sched.addTimer(&rt, Message::make(Tick{}), 100, false);
     EXPECT_GT(id, 0);
 }
 
@@ -36,7 +36,7 @@ TEST(Scheduler, Cancel){
     Scheduler sched;
     auto actor = std::make_unique<TestActor>("t", 1);
     ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
-    int id = sched.addTimer(&rt, Tick{}, 100, false);
+    int id = sched.addTimer(&rt, Message::make(Tick{}), 100, false);
     EXPECT_GT(id, 0);
     sched.cancel(id);
 }

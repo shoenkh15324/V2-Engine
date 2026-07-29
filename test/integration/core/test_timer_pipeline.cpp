@@ -15,10 +15,7 @@ public:
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }
     void handle(const Message& msg) override {
-        std::visit(overloaded{
-            [this](const Tick&){ tickCount++; },
-            [](const auto&){}
-        }, msg);
+        if(msg.id() == MessageId::Tick) tickCount++;
     }
 
     std::atomic<int> tickCount{0};
@@ -34,7 +31,7 @@ TEST(TimerPipeline, SendMsgAfter){
 
     std::thread t([&](){ sys.run(); });
 
-    a->sendMsgAfter("b", Tick{}, 10);
+    a->sendMsgAfter("b", Message::make(Tick{}), 10);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_EQ(b->tickCount, 1);
 
@@ -50,9 +47,9 @@ TEST(TimerPipeline, SendMsgAfterMultiple){
 
     std::thread t([&](){ sys.run(); });
 
-    a->sendMsgAfter("b", Tick{}, 10);
-    a->sendMsgAfter("b", Tick{}, 20);
-    a->sendMsgAfter("b", Tick{}, 30);
+    a->sendMsgAfter("b", Message::make(Tick{}), 10);
+    a->sendMsgAfter("b", Message::make(Tick{}), 20);
+    a->sendMsgAfter("b", Message::make(Tick{}), 30);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(60));
     EXPECT_EQ(b->tickCount, 3);
@@ -68,7 +65,7 @@ TEST(TimerPipeline, StartTimerRepeating){
 
     std::thread t([&](){ sys.run(); });
 
-    a->startTimer(Tick{}, 20, true);
+    a->startTimer(Message::make(Tick{}), 20, true);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(70));
     EXPECT_GE(a->tickCount, 3);
@@ -84,7 +81,7 @@ TEST(TimerPipeline, CancelTimer){
 
     std::thread t([&](){ sys.run(); });
 
-    int id = a->startTimer(Tick{}, 20, true);
+    int id = a->startTimer(Message::make(Tick{}), 20, true);
     a->cancelTimer(id);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(60));
