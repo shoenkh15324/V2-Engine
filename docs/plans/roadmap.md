@@ -6,8 +6,8 @@
 
 ```
 Phase 1: 성능 병목 제거 ✅ 완료
-Phase 2: actor_system 리팩토링 🔄 진행 중
-Phase 3: 메모리/전송 최적화
+Phase 2: actor_system 리팩토링 ✅ 완료
+Phase 3: 메모리/전송 최적화 🔄 진행 중
 Phase 4: 아키텍처 고도화
 Phase 5: 벤치마크 인프라 + 보고서
 ```
@@ -77,7 +77,7 @@ actor_system/
     │
     └── message/
         ├── message.hpp
-        └── type_id.hpp
+        └── message_traits.hpp
 ```
 
 ### 핵심 아키텍처 변경
@@ -251,16 +251,20 @@ MemoryPool (Singleton)
                     └── FreeList (intrusive linked list)
 ```
 
-### 메시지 시스템 타입 에러제이션
+### 메시지 시스템 타입 에러제이션 ✅
 
-> **문제**: `std::variant<Msg1, ..., Msg28>` — 모든 메시지 헤더가 컴파일되고, `sizeof(Message)` = 208바이트
+> **문제**: `std::variant<Msg1, ..., Msg33>` — 모든 메시지 헤더가 컴파일되고, `sizeof(Message)` = 208바이트
+>
+> **해결**: SBO (Small Buffer Optimization, 64바이트) + MemoryPool 기반 커스텀 타입 에러제이션 클래스 `Message` 도입.
+> `sizeof(Message)` = 72바이트로 감소. 작은 메시지는 stack/queue slot에 inline 저장, 큰 메시지는 MemoryPool에 할당.
+> `MessageId` enum + `static constexpr kId`로 타입 식별, `switch + as<T>()`로 디스패치.
 
 | 작업 | 상세 |
 |------|------|
-| MessageEnvelope 도입 | `shared_ptr<void>` + `uint16_t typeId` 기반 타입 에러제이션 |
-| `type_id.hpp` | 메시지 타입별 컴파일 타임 ID 생성 유틸 |
-| `handle()` 패턴 변경 | `std::visit` → `as<T>()` 캐스팅 기반 핸들링 |
-| 기존 variant 마이그레이션 | 28개 메시지 타입을 MessageEnvelope로 전환 |
+| `Message` 클래스 도입 ✅ | SBO (≤64B) + MemoryPool fallback, placement new 저장 |
+| `MessageId` enum ✅ | 33개 메시지 타입 ID 정의 (`message_traits.hpp`) |
+| `switch + as<T>()` 패턴 ✅ | 각 Actor `handle()`에서 switch-on-id로 타입 복원 |
+| `LockFreeMpscQueue<Message>` ✅ | variant 제거, 72B 고정 슬롯으로 queue slot 크기 65% 감소 |
 
 ### 전역 로깅 뮤텍스 제거
 

@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.9.7-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.10.7-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
@@ -70,7 +70,7 @@ sys.run();
 $ v2 info
 
   ▶ V2 Engine
-    version: 0.9.7
+    version: 0.10.7
     uptime:  0d 00h 14m 32s
 ```
 
@@ -179,7 +179,7 @@ v2 -m
 | 기능 | 설명 |
 |------|------|
 | **액터 모델** | 경량 액터 + 락프리 MPSC 메일박스 (`LockFreeMailbox`), 협력적 스케줄링 |
-| **std::variant 메시지** | `std::visit` 기반 타입-safe 메시지, 상속/형변환 제로 |
+| **Type-erased SBO 메시지** | SBO (≤64B) + MemoryPool 기반 타입-safe 메시지, `switch + as<T>()` 디스패치 |
 | **epoll 이벤트 루프** | timer FD, stop FD, transport I/O 통합 (`Dispatcher`) |
 | **세마포어 스케줄링** | `std::counting_semaphore` (C++20) 기반 worker 획득/해제 |
 | **타이머** | `timerfd_create()` + priority queue, 풀 할당 + 함수 포인터 콜백, one-shot/repeating |
