@@ -164,7 +164,12 @@ void Timer::freeNode(int idx){
 }
 
 void Timer::excuteExpiredTimers(){
-    std::vector<int> ready; // 인덱스 목록
+    struct ReadyNode{
+        int64_t id;
+        Callback cb;
+        void* payload;
+    };
+    std::vector<ReadyNode> ready; // 인덱스 목록
     auto now = Clock::now();
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -172,25 +177,28 @@ void Timer::excuteExpiredTimers(){
             int idx = heap_.top();
             heap_.pop();
             if(!pool_[idx].alive) continue;
-            ready.push_back(idx);
+            ready.push_back({pool_[idx].id, pool_[idx].cb, pool_[idx].payload});
         }
     }
-    for(int idx : ready){
-        pool_[idx].cb(pool_[idx].id, pool_[idx].payload);
+    for(auto& rn : ready){ // 콜백: pool과 무관한 로컬 데이터로 호출
+        rn.cb(rn.id, rn.payload);
     }
-    {
+    { // 재조회: id로 timers_ lookup (cancel/add로 인한 pool 재할당 안전)
         std::lock_guard<std::mutex> lock(mutex_);
-        for(auto& idx : ready){
+        for(auto& rn : ready){
+            auto it = timers_.find(rn.id);
+            if(it == timers_.end()) continue; // 콜백 중에 cancel됨
+            int idx = it->second;
             if(pool_[idx].repeating && pool_[idx].alive){
                 pool_[idx].expiry += pool_[idx].interval;
                 heap_.push(idx);
-            }else{
-                timers_.erase(pool_[idx].id);
-                freeNode(idx); // 풀로 반환
+            } else {
+                timers_.erase(rn.id);
+                freeNode(idx);
             }
-
         }
         scheduleNextTimer(now);
+
     }
 }
 
