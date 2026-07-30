@@ -50,6 +50,8 @@ int WifiHandler::close(){
     conn_.activePath.clear();
     dbus_.devicePath.clear();
     dbus_.deviceProxy.reset();
+    dbus_.connection = nullptr;
+    dbus_.nmProxy = nullptr;
     conn_.state = WifiState::Disconnected;
     V2_LOG_INFO("WifiHandler closed");
     return Ok;

@@ -26,17 +26,24 @@ int NetworkManagerActor::open(){
     auto dbusHandle = runtime()->actorRegistry()->findByName("dbus_actor");
     auto* dbus = dynamic_cast<DbusActor*>(dbusHandle.get());
     if(!dbus || dbus->getState() != Opened){ V2_LOG_ERROR("D-Bus actor is not found");
+        connection_ = nullptr;
+        nmProxy_.reset();
         state_ = Closed;
         return Fail;
     }
     connection_ = &dbus->connection();
     nmProxy_ = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath("/org/freedesktop/NetworkManager"));
+    
+    bool wifiOk = false;
     for(int i = 0; i < 4; ++i){
-        if(wifi_.open(*connection_, *nmProxy_) == Ok) break;
+        if(wifi_.open(*connection_, *nmProxy_) == Ok){
+            wifiOk = true;
+            break;
+        }
         V2_LOG_WARN("WiFi init retry {}/5...", i + 1);
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
-    startTimer(Message::make(Tick{}), wifiSyncIntervalMs_, true);
+    if(wifiOk) startTimer(Message::make(Tick{}), wifiSyncIntervalMs_, true);
     //
     state_ = Opened;
     V2_LOG_INFO("Network Manager Actor opened");
@@ -50,6 +57,7 @@ int NetworkManagerActor::close(){
     cancelAllTimers();
     wifi_.close();
     connection_ = nullptr;
+    nmProxy_.reset();
     //
     state_ = Closed;
     V2_LOG_INFO("Network Manager Actor closed");
