@@ -5,6 +5,8 @@
 #include <chrono>
 
 namespace{
+    static constexpr int kLogFlushBufSize = 512;
+
     thread_local std::string gBuf;
     FILE* gLogFile = nullptr;
     std::atomic<LogLevel> gLevel{LogLevel::Info};
@@ -29,7 +31,10 @@ void logFlush(){
     fwrite(gBuf.data(), 1, gBuf.size(), stderr);
     {
         std::lock_guard lock(gMutex);
-        if(gLogFile) fwrite(gBuf.data(), 1, gBuf.size(), gLogFile);
+        if(gLogFile){
+            fwrite(gBuf.data(), 1, gBuf.size(), gLogFile);
+            fflush(gLogFile);
+        }
     }
     gBuf.clear();
 }
@@ -47,7 +52,7 @@ void logPrint(LogLevel level, const char* file, int line, const char* func, std:
     std::format_to(std::back_inserter(gBuf), "{}:{} ({}) ", file, line, func);
     gBuf += msg;
     gBuf += '\n';
-    if(gBuf.size() >= 4096) logFlush();
+    if(gBuf.size() >= kLogFlushBufSize) logFlush();
 }
 
 namespace{ auto _ = (atexit(logFlush), 0); }
