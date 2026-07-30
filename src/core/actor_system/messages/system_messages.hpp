@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
-#include "type_id.hpp"
+#include "message_traits.hpp"
 
 struct SignalNotify{
     static constexpr MessageId kId = MessageId::SignalNotify;

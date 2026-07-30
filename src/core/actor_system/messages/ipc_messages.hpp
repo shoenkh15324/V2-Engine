@@ -1,6 +1,6 @@
 #pragma once
 #include "core/common/config/platform_config.h"
-#include "type_id.hpp"
+#include "message_traits.hpp"
 
 struct IpcNewConnection{
     static constexpr MessageId kId = MessageId::IpcNewConnection;

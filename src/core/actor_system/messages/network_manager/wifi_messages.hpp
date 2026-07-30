@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "core/actor_system/messages/type_id.hpp"
+#include "core/actor_system/messages/message_traits.hpp"
 
 enum class WifiState : uint8_t{
     Disconnected = 0,

@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <utility>
 #include <type_traits>
-#include "type_id.hpp"
+#include "message_traits.hpp"
 #include "core/common/memory/memory_pool.hpp"
 
 class Message{

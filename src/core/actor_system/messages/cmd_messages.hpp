@@ -1,7 +1,7 @@
 #pragma once
 #include "core/common/config/platform_config.h"
 #include <string>
-#include "type_id.hpp"
+#include "message_traits.hpp"
 
 struct CmdRequest{
     static constexpr MessageId kId = MessageId::CmdRequest;

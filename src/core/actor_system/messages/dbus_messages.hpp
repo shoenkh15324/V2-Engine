@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 #include "core/common/config/platform_config.h"
-#include "type_id.hpp"
+#include "message_traits.hpp"
 
 struct DbusRegisterMethod{
     static constexpr MessageId kId = MessageId::DbusRegisterMethod;
