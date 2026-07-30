@@ -5,8 +5,8 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
-#include <sys/eventfd.h>
 #include <unistd.h>
+#include <sys/eventfd.h>
 #include <sys/prctl.h>
 
 EventLoopEpoll::EventLoopEpoll(int maxEvents, int waitTimeoutMs)
@@ -30,7 +30,10 @@ void EventLoopEpoll::start(){
 
 void EventLoopEpoll::run(){
     pthread_setname_np(pthread_self(), "v2-main");
+    threadId_ = std::this_thread::get_id();
+
     while(running_){
+        drainPendingOps(); // epoll_wait 전에 pending ops 처리
         int n = epoll_.wait(epollEvents_.data(), maxEvents_, waitTimeoutMs_);
         if(n < 0){
             if(errno == EINTR) continue;
@@ -62,19 +65,48 @@ void EventLoopEpoll::stop(){
 }
 
 int EventLoopEpoll::subscribe(WatchedFd fd, Handler handler){
-    handlers_[fd] = std::move(handler);
-    epoll_event ev{};
-    ev.events = EPOLLIN;
-    ev.data.fd = fd;
-    if(epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, fd, &ev) < 0){
-        handlers_.erase(fd);
-        return Fail;
+    if(std::this_thread::get_id() == threadId_){
+        handlers_[fd] = std::move(handler);
+        epoll_event ev{};
+        ev.events = EPOLLIN;
+        ev.data.fd = fd;
+        if(epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, fd, &ev) < 0){
+            handlers_.erase(fd);
+            return Fail;
+        }
+        return Ok;
     }
+    post([this, fd, handler = std::move(handler)]() mutable {
+        subscribe(fd, std::move(handler));
+    });
     return Ok;
 }
 
 int EventLoopEpoll::unsubscribe(WatchedFd fd){
-    handlers_.erase(fd);
-    epoll_ctl(epoll_.fd(), EPOLL_CTL_DEL, fd, nullptr);
+    if(std::this_thread::get_id() == threadId_){
+        handlers_.erase(fd);
+        epoll_ctl(epoll_.fd(), EPOLL_CTL_DEL, fd, nullptr);
+        return Ok;
+    }
+    post([this, fd](){
+        unsubscribe(fd);
+    });
     return Ok;
+}
+
+void EventLoopEpoll::post(std::function<void()> op){
+    while(!pendingOps_.push(std::move(op))){ // 큐가 가득 차면 busy-wait
+        std::this_thread::yield();
+    }
+    // event loop 깨우기 (stopFd 재사용)
+    uint64_t one = 1;
+    auto _ = ::write(stopFd_, &one, sizeof(one));
+    (void)_;
+}
+
+void EventLoopEpoll::drainPendingOps(){
+    std::function<void()> op;
+    while(pendingOps_.pop(op)){
+        op();
+    }
 }
