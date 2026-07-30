@@ -47,7 +47,7 @@ private:
         actorRegistry_.add(ptr);
         actorRuntimes_.push_back(std::move(actorRuntime));
         Metrics::registerActor(id);
-        V2_LOG_INFO("Create actor / name: {}, id: {}, mailbox: {}", name, id, mailboxSize);
+        V2_LOG_INFO("Create actor / name: {}, id: {}, mailbox: {}", name.c_str(), id, mailboxSize);
         return ptr;
     }
 
