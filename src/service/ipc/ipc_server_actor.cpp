@@ -115,10 +115,10 @@ void IpcServerActor::handle(const Message& msg){
             runtime()->eventLoop()->unsubscribe(m.conn);
             server_.closeClient(m.conn);
             connections_.erase(m.conn);
-        }else if(errno != EAGAIN && errno != EWOULDBLOCK){
-            //V2_LOG_ERROR("IpcServerActor: recv error (conn={}) errno={}", m.conn, errno);
+        }else if(errno == EAGAIN && errno == EWOULDBLOCK){
+            // Not an error — no more data, ignore
         }else{
-           V2_LOG_ERROR("IpcServerActor: recv error (conn={}) errno={}", m.conn, errno);
+            //V2_LOG_ERROR("IpcServerActor: recv error (conn={}) errno={}", m.conn, errno);
         }
         break;
     }
