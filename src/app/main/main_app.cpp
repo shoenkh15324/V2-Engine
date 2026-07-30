@@ -24,13 +24,11 @@ MainApp::~MainApp(){
 void MainApp::open(){
     V2_LOG_INFO("{} App Open", name_.c_str());
     V2_LOG_INFO("{} App Bulid Data: {}", name_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("{} App Version: {}", name_.c_str(), V2_ENGINE_VERSION);
-
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_main.json");
 
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
     setLogAppName(std::move(name_));
-    setLogFile("v2_engine.log");
+    setLogFile("log/v2_main.log");
     
     Metrics::setEnabled(cfg_.enableMetrics);
     SystemActor::onSignal(SIGINT, [this](int){ requestStop(); });

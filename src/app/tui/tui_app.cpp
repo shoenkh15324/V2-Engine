@@ -67,13 +67,11 @@ TuiApp::~TuiApp(){
 
 int TuiApp::open(){
     V2_LOG_INFO("{} App Open", appName_.c_str());
-    V2_LOG_INFO("{} App Bulid Data: {}", appName_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("{} App Version: {}", appName_.c_str(), V2_ENGINE_VERSION);
-
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_tui.json");
+    
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
     setLogAppName(std::move(appName_));
-    setLogFile("v2_engine.log");
+    setLogFile("log/v2_tui.log");
 
     SignalHandler::instance().init();
     SignalHandler::instance().install(SIGINT, [this](int){ requestStop(); });
