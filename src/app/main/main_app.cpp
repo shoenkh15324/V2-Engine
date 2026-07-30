@@ -22,13 +22,16 @@ MainApp::~MainApp(){
 }
 
 void MainApp::open(){
+    V2_LOG_INFO("{} App Open", name_.c_str());
+    V2_LOG_INFO("{} App Bulid Data: {}", name_.c_str(), Time::nowDateString().c_str());
+    V2_LOG_INFO("{} App Version: {}", name_.c_str(), V2_ENGINE_VERSION);
+
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_main.json");
+
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
     setLogAppName(std::move(name_));
-    V2_LOG_INFO("%s App Open", name_.c_str());
-    V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
-    //
+    setLogFile("v2_engine.log");
+    
     Metrics::setEnabled(cfg_.enableMetrics);
     SystemActor::onSignal(SIGINT, [this](int){ requestStop(); });
     SystemActor::onSignal(SIGTERM, [this](int){ requestStop(); });
@@ -56,7 +59,7 @@ void MainApp::requestStop(){
 
 void MainApp::run(){
     isRunning_.store(true);
-    V2_LOG_INFO("%s App Run", name_.c_str());
+    V2_LOG_INFO("{} App Run", name_.c_str());
     if(actorSystem_) actorSystem_->run();
     while(isRunning_.load()){
         Sleep::sleepMs(cfg_.mainLoopSleepMs);
@@ -64,7 +67,7 @@ void MainApp::run(){
 }
 
 void MainApp::close(){
-    V2_LOG_INFO("%s App Close", name_.c_str());
+    V2_LOG_INFO("{} App Close", name_.c_str());
     isRunning_.store(false);
     if(actorSystem_) actorSystem_->stop();
     actorSystem_.reset();

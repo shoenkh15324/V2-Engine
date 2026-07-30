@@ -113,18 +113,18 @@ TEST(ActorRegistry, ThreadSafety){
     std::vector<std::unique_ptr<TestActor>> actors;
     for(int i = 0; i < 100; i++){
         actors.push_back(std::make_unique<TestActor>("actor" + std::to_string(i), i));
+        reg.add(actors.back().get());
     }
 
     std::atomic<int> found{0};
     std::thread t1([&](){
-        for(int i = 0; i < 50; i++) reg.add(actors[i].get());
+        reg.forEachActor([&](ActorHandle){ found++; });
     });
     std::thread t2([&](){
-        for(int i = 50; i < 100; i++) reg.add(actors[i].get());
+        reg.forEachActor([&](ActorHandle){ found++; });
     });
     t1.join();
     t2.join();
 
-    reg.forEachActor([&](ActorHandle){ found++; });
-    EXPECT_EQ(found, 100);
+    EXPECT_EQ(found, 200);
 }

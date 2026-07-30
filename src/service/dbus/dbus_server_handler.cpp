@@ -22,7 +22,7 @@ void DbusServerHandler::close(){
 
 void DbusServerHandler::handleRegisterMethod(const DbusRegisterMethod& msg){
     auto key = msg.interfaceName + "." + msg.methodName;
-    if(methods_.count(key)){ V2_LOG_WARN("D-Bus method already registered: %s", key);
+    if(methods_.count(key)){ V2_LOG_WARN("D-Bus method already registered: {}", key);
         return;
     }
     try{
@@ -40,7 +40,7 @@ void DbusServerHandler::handleRegisterMethod(const DbusRegisterMethod& msg){
                 std::string args;
                 try{
                     call >> args;
-                }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to deserialize D-Bus call args: %s", e.what());
+                }catch(const sdbus::Error& e){ V2_LOG_ERROR("Failed to deserialize D-Bus call args: {}", e.what());
                     auto reply = call.createErrorReply(sdbus::Error(e.getName(), e.getMessage()));
                     reply.send();
                     return;
@@ -64,18 +64,18 @@ void DbusServerHandler::handleRegisterMethod(const DbusRegisterMethod& msg){
             obj->addVTable(std::move(methodItem)).forInterface(sdbus::InterfaceName(iface));
         }
         methods_[key] = RegisteredMethod{msg.ownerActorName, std::move(obj)};
-        V2_LOG_INFO("Registered D-Bus method: %s", key);
+        V2_LOG_INFO("Registered D-Bus method: {}", key);
     }catch(const sdbus::Error& e){
-        V2_LOG_ERROR("Failed to register D-Bus method %s: %s", key, e.what());
+        V2_LOG_ERROR("Failed to register D-Bus method {}: {}", key, e.what());
     }
 }
 
 void DbusServerHandler::handleUnregisterMethod(const DbusUnregisterMethod& msg){
     auto key = msg.interfaceName + "." + msg.methodName;
     if(methods_.erase(key) > 0){ 
-        V2_LOG_INFO("Unregistered D-Bus method: %s", key);
+        V2_LOG_INFO("Unregistered D-Bus method: {}", key);
     }else{
-        V2_LOG_WARN("D-Bus method not found for unregister: %s", key);
+        V2_LOG_WARN("D-Bus method not found for unregister: {}", key);
     }
 }
 
@@ -84,7 +84,7 @@ void DbusServerHandler::handleMethodCallResult(const DbusMethodCallResult& msg){
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = pendingMethodCalls_.find(msg.callId);
-        if(it == pendingMethodCalls_.end()){ V2_LOG_WARN("Pending call not found: %s", msg.callId);
+        if(it == pendingMethodCalls_.end()){ V2_LOG_WARN("Pending call not found: {}", msg.callId);
             return;
         }
         call = std::move(it->second);
@@ -100,7 +100,7 @@ void DbusServerHandler::handleMethodCallResult(const DbusMethodCallResult& msg){
             reply.send();
         }
     }catch(const sdbus::Error& e){
-        V2_LOG_ERROR("Failed to send D-Bus reply: %s", e.what());
+        V2_LOG_ERROR("Failed to send D-Bus reply: {}", e.what());
     }
 }
 

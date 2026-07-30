@@ -57,19 +57,23 @@ CliApp::~CliApp(){
 }
 
 int CliApp::open(){
+    V2_LOG_INFO("{} App Open", appName_.c_str());
+    V2_LOG_INFO("{} App Build Data: {}", appName_.c_str(), Time::nowDateString().c_str());
+    V2_LOG_INFO("{} App Version: {}", appName_.c_str(), V2_ENGINE_VERSION);
+
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_cli.json");
+
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
-    setLogAppName(appName_);
-    V2_LOG_INFO("%s App Open", appName_.c_str());
-    V2_LOG_INFO("%s App Build Data: %s", appName_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("%s App Version: %s", appName_.c_str(), V2_ENGINE_VERSION);
+    setLogAppName(std::move(appName_));
+    setLogFile("v2_engine.log");
+
 #if V2_PLATFORM_LINUX
-    if(client_.connect(cfg_.ipcSocketPath) != Ok){ V2_LOG_ERROR("%s App: failed to connect to main app", appName_.c_str());
+    if(client_.connect(cfg_.ipcSocketPath) != Ok){ V2_LOG_ERROR("{} App: failed to connect to main app", appName_.c_str());
         return Fail;
     }
-    V2_LOG_INFO("%s App: connected to main app", appName_.c_str());
+    V2_LOG_INFO("{} App: connected to main app", appName_.c_str());
 #else
-    V2_LOG_ERROR("%s App: CLI not supported on Windows yet", appName_.c_str());
+    V2_LOG_ERROR("{} App: CLI not supported on Windows yet", appName_.c_str());
     return Fail;
 #endif
     return Ok;
@@ -79,7 +83,7 @@ int CliApp::close(){
 #if V2_PLATFORM_LINUX
     client_.shutdown();
 #endif
-    V2_LOG_INFO("%s App Close", appName_.c_str());
+    V2_LOG_INFO("{} App Close", appName_.c_str());
     return Ok;
 }
 
@@ -275,16 +279,16 @@ int CliApp::launchTui(char** argv){
 void CliApp::sendToDaemon(const std::string& cmd){
 #if V2_PLATFORM_LINUX
     if(client_.send(cmd.data(), cmd.size()) != Ok){
-        V2_LOG_ERROR("%s App: send failed", appName_.c_str());
+        V2_LOG_ERROR("{} App: send failed", appName_.c_str());
         return;
     }
-    V2_LOG_INFO("%s App: sending command [%s]", appName_.c_str(), cmd.c_str());
+    V2_LOG_INFO("{} App: sending command [{}]", appName_.c_str(), cmd.c_str());
     std::vector<char> buf(cfg_.ipcRecvBufferSize);
     int n = client_.recv(buf.data(), buf.size());
     if(n > 0){
         std::string resp(buf.data(), n);
         std::cout << resp << std::flush;
-        V2_LOG_INFO("%s App: received response [%s]", appName_.c_str(), resp.c_str());
+        V2_LOG_INFO("{} App: received response [{}]", appName_.c_str(), resp.c_str());
     }
 #else
     (void)cmd;

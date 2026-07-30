@@ -23,7 +23,7 @@ void ActorSystem::start(){
     scheduler_.start(&eventLoop_);
     for(auto& ctx : actorRuntimes_){
         int ret = ctx->actor()->open();
-        if(ret != Ok) V2_LOG_ERROR("Actor %s failed to open", ctx->actor()->name().c_str());
+        if(ret != Ok) V2_LOG_ERROR("Actor {} failed to open", ctx->actor()->name().c_str());
     }
     for(auto& w : workers_){
         w->start();

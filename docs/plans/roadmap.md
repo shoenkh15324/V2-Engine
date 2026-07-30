@@ -266,13 +266,17 @@ MemoryPool (Singleton)
 | `switch + as<T>()` 패턴 ✅ | 각 Actor `handle()`에서 switch-on-id로 타입 복원 |
 | `LockFreeMpscQueue<Message>` ✅ | variant 제거, 72B 고정 슬롯으로 queue slot 크기 65% 감소 |
 
-### 전역 로깅 뮤텍스 제거
+### 전역 로깅 뮤텍스 제거 ✅
 
 > **문제**: `logPrint()`가 모든 워커 스레드를 하나의 `gMutex`로 직렬화
 
 | 작업 | 상세 |
 |------|------|
-| Lock-free 로깅 | `log.cpp`의 전역 `std::mutex` → 락프리 링 버퍼 + 전용 라이터 스레드 또는 per-thread 로깅 |
+| `thread_local` 버퍼 ✅ | per-thread 버퍼에 누적, 4KB 임계치 도달 시만 flush |
+| `std::format` 전환 ✅ | printf `%s`/`%d` → `{}`, 컴파일 타임 포맷 검증, `.c_str()` 제거 |
+| `gLevel` → `std::atomic` ✅ | 멀티스레드 안전성 확보 |
+| `atexit` flush ✅ | 프로그램 종료 시 main thread 버퍼 drain |
+| stderr lock-free + 파일 mutex ✅ | POSIX stderr는 별도 락 불필요, 파일만 `std::mutex`로 보호 (flush 시에만) |
 
 ### 메모리 순서 최적화
 

@@ -16,7 +16,7 @@ Timer::Timer(){
 #if V2_PLATFORM_LINUX
     timerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if(timerFd_ < 0){
-        V2_LOG_ERROR("timerfd_create() failed, errno=%d", errno);
+        V2_LOG_ERROR("timerfd_create() failed, errno={}", errno);
     }
 #endif
 }

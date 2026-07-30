@@ -106,7 +106,7 @@ int MonitorActor::open(){
     state_ = Opening;
     //
     if(server_.start(config_.socketPath, config_.backlog) != Ok){
-        V2_LOG_ERROR("MonitorActor: failed to start UDS server on %s", config_.socketPath.c_str());
+        V2_LOG_ERROR("MonitorActor: failed to start UDS server on {}", config_.socketPath.c_str());
         state_ = Closed;
         return Fail;
     }
@@ -138,7 +138,7 @@ int MonitorActor::open(){
     //
     state_ = Opened;
     V2_LOG_INFO("Monitor Actor opened");
-    V2_LOG_INFO("MonitorActor: listening on %s", config_.socketPath.c_str());
+    V2_LOG_INFO("MonitorActor: listening on {}", config_.socketPath.c_str());
     return Ok;
 }
 
@@ -167,7 +167,7 @@ void MonitorActor::handle(const Message& msg){
     }
     case MessageId::MonitorNewConnection:{
         const auto& m = msg.as<MonitorNewConnection>();
-        V2_LOG_INFO("MonitorActor: client connected (conn=%d)", m.conn);
+        V2_LOG_INFO("MonitorActor: client connected (conn={})", m.conn);
         connections_.insert(m.conn);
         subscribeClient(m.conn);
         break;
@@ -178,12 +178,12 @@ void MonitorActor::handle(const Message& msg){
         runtime()->eventLoop()->unsubscribe(m.conn);
         server_.closeClient(m.conn);
         connections_.erase(m.conn);
-        V2_LOG_INFO("MonitorActor: client disconnected (conn=%d)", m.conn);
+        V2_LOG_INFO("MonitorActor: client disconnected (conn={})", m.conn);
         break;
     }
     case MessageId::ActorStateChanged:{
         const auto& m = msg.as<ActorStateChanged>();
-        V2_LOG_INFO("Actor state changed: %s (id=%lu) %d -> %d", m.actorName.c_str(), m.actorId, m.oldState, m.newState);
+        V2_LOG_INFO("Actor state changed: {} (id={}) {} -> {}", m.actorName.c_str(), m.actorId, m.oldState, m.newState);
         break;
     }
     default:

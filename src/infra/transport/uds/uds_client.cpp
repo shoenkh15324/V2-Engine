@@ -35,12 +35,12 @@ int UdsClient::connect(const std::string& path){
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-    if(::connect(clientFd_, (sockaddr*)&addr, sizeof(addr)) < 0){ V2_LOG_ERROR("connect(%s) failed", path.c_str());
+    if(::connect(clientFd_, (sockaddr*)&addr, sizeof(addr)) < 0){ V2_LOG_ERROR("connect({}) failed", path.c_str());
         ::close(clientFd_);
         clientFd_ = -1;
         return Fail;
     }
-    V2_LOG_INFO("UDS connected to %s", path.c_str());
+    V2_LOG_INFO("UDS connected to {}", path.c_str());
     return Ok;
 }
 

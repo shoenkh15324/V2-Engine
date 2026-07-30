@@ -36,29 +36,29 @@ int I2c::open(int busNumber){
     if((n < 0) || (static_cast<size_t>(n) >= sizeof(path))) return InvalidArg;
 
     fd_ = ::open(path, O_RDWR);
-    if(fd_ < 0){ V2_LOG_ERROR("Failed to open %s: %s", path, strerror(errno));
+    if(fd_ < 0){ V2_LOG_ERROR("Failed to open {}: {}", path, strerror(errno));
         return Fail;
     }
     unsigned long funcs = 0;
-    if(ioctl(fd_, I2C_FUNCS, &funcs) < 0){ V2_LOG_ERROR("I2C_FUNCS failed on %s: %s", path, strerror(errno));
+    if(ioctl(fd_, I2C_FUNCS, &funcs) < 0){ V2_LOG_ERROR("I2C_FUNCS failed on {}: {}", path, strerror(errno));
         ::close(fd_);
         fd_ = -1;
         return Fail;
     }
-    if(!(funcs & I2C_FUNC_I2C)){ V2_LOG_ERROR("%s does not support I2C protocol", path);
+    if(!(funcs & I2C_FUNC_I2C)){ V2_LOG_ERROR("{} does not support I2C protocol", path);
         ::close(fd_);
         fd_ = -1;
         return Fail;
     }
     busNum_ = busNumber;
-    V2_LOG_INFO("I2C bus %d opened (fd=%d)", busNum_, fd_);
+    V2_LOG_INFO("I2C bus {} opened (fd={})", busNum_, fd_);
     return Ok;
 }
 
 int I2c::close(){
     if(fd_ >= 0){
         ::close(fd_);
-        V2_LOG_INFO("I2C bus %d closed", busNum_);
+        V2_LOG_INFO("I2C bus {} closed", busNum_);
         fd_ = -1;
         busNum_ = -1;
     }
@@ -100,7 +100,7 @@ int I2c::transfer(uint16_t addr, const void* wbuf, size_t wlen, void* rbuf, size
     struct i2c_rdwr_ioctl_data data;
     data.msgs = msgs;
     data.nmsgs = static_cast<uint32_t>(count);
-    if(ioctl(fd_, I2C_RDWR, &data) < 0){ V2_LOG_ERROR("I2C_RDWR failed (addr=0x%02x): %s", addr, strerror(errno));
+    if(ioctl(fd_, I2C_RDWR, &data) < 0){ V2_LOG_ERROR("I2C_RDWR failed (addr=0x{:02x}): {}", addr, strerror(errno));
         return Fail;
     }
     return static_cast<int>(wlen + rlen);

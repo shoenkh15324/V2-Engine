@@ -66,23 +66,25 @@ TuiApp::~TuiApp(){
 }
 
 int TuiApp::open(){
+    V2_LOG_INFO("{} App Open", appName_.c_str());
+    V2_LOG_INFO("{} App Bulid Data: {}", appName_.c_str(), Time::nowDateString().c_str());
+    V2_LOG_INFO("{} App Version: {}", appName_.c_str(), V2_ENGINE_VERSION);
+
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_tui.json");
     setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
-    setLogAppName(std::move(name_));
-    V2_LOG_INFO("%s App Open", name_.c_str());
-    V2_LOG_INFO("%s App Bulid Data: %s", name_.c_str(), Time::nowDateString().c_str());
-    V2_LOG_INFO("%s App Version: %s", name_.c_str(), V2_ENGINE_VERSION);
-    //
+    setLogAppName(std::move(appName_));
+    setLogFile("v2_engine.log");
+
     SignalHandler::instance().init();
     SignalHandler::instance().install(SIGINT, [this](int){ requestStop(); });
     SignalHandler::instance().install(SIGTERM, [this](int){ requestStop(); });
 #if V2_PLATFORM_LINUX
-    if(client_.connect(cfg_.monitorSocketPath) != Ok){ V2_LOG_ERROR("%s App: failed to connect to main app", name_.c_str());
+    if(client_.connect(cfg_.monitorSocketPath) != Ok){ V2_LOG_ERROR("{} App: failed to connect to main app", appName_.c_str());
         return Fail;
     }
-    V2_LOG_INFO("%s App: connected to main app", name_.c_str());
+    V2_LOG_INFO("{} App: connected to main app", appName_.c_str());
 #else
-    V2_LOG_ERROR("%s App: Main not supported on Windows yet", name_.c_str());
+    V2_LOG_ERROR("{} App: Main not supported on Windows yet", appName_.c_str());
     return Fail;
 #endif
     screen_ = std::make_unique<ftxui::App>(ftxui::App::Fullscreen());
@@ -96,7 +98,7 @@ int TuiApp::open(){
 void TuiApp::run(){
     isRunning_.store(true);
 #if V2_PLATFORM_LINUX
-    V2_LOG_INFO("%s App Run", name_.c_str());
+    V2_LOG_INFO("{} App Run", appName_.c_str());
     if(screen_){
         screen_->Loop(root_);
     }
@@ -110,7 +112,7 @@ int TuiApp::close(){
     if(recvThread_.joinable()) recvThread_.join();
 #endif
     screen_.reset();
-    V2_LOG_INFO("%s App Close", name_.c_str());
+    V2_LOG_INFO("{} App Close", appName_.c_str());
     return Ok;
 }
 
@@ -137,7 +139,7 @@ void TuiApp::recvLoop(){
                         std::lock_guard<std::mutex> lock(mutex_);
                         snapshot_ = std::move(snap);
                     }catch(const nlohmann::json::exception& e){
-                        V2_LOG_ERROR("TuiApp: failed to parse snapshot: %s", e.what());
+                        V2_LOG_ERROR("TuiApp: failed to parse snapshot: {}", e.what());
                     }
                 }
             }

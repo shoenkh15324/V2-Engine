@@ -1,20 +1,23 @@
 #pragma once
-#include <cstdint>
 #include <string>
+#include <format>
+#include <cstdint>
+#include <string_view>
 
-enum class LogLevel{
+enum class LogLevel : uint8_t {
     Verbose = 0,
     Info = 1,
     Warn = 2,
     Error = 3,
 };
 
-LogLevel getLogLevel();
 void setLogLevel(LogLevel level);
-void setLogAppName(const std::string& name);
-void logPrint(LogLevel level, const char* file, int line, const char* func, const char* fmt, ...);
+LogLevel getLogLevel();
+void setLogFile(std::string_view path);
+void setLogAppName(std::string_view name);
+void logPrint(LogLevel level, const char* file, int line, const char* func, std::string msg);
 
-#define V2_LOG(...) logPrint(LogLevel::Verbose, __FILE__, __LINE__, __func__, __VA_ARGS__);
-#define V2_LOG_INFO(...) logPrint(LogLevel::Info, __FILE__, __LINE__, __func__, __VA_ARGS__);
-#define V2_LOG_WARN(...) logPrint(LogLevel::Warn, __FILE__, __LINE__, __func__, __VA_ARGS__);
-#define V2_LOG_ERROR(...) logPrint(LogLevel::Error, __FILE__, __LINE__, __func__, __VA_ARGS__);
+#define V2_LOG(...) logPrint(LogLevel::Verbose, __FILE__, __LINE__, __func__, std::format(__VA_ARGS__));
+#define V2_LOG_INFO(...) logPrint(LogLevel::Info, __FILE__, __LINE__, __func__, std::format(__VA_ARGS__));
+#define V2_LOG_WARN(...) logPrint(LogLevel::Warn, __FILE__, __LINE__, __func__, std::format(__VA_ARGS__));
+#define V2_LOG_ERROR(...) logPrint(LogLevel::Error, __FILE__, __LINE__, __func__, std::format(__VA_ARGS__));

@@ -46,7 +46,7 @@ private:
     MonitorSnapshot snapshot_;
     mutable std::mutex mutex_;
     std::thread recvThread_;
-    std::string name_ = "Tui";
+    std::string appName_ = "Tui";
     std::atomic<bool> isRunning_{false};
     std::unique_ptr<ftxui::App> screen_;
     ftxui::Component root_;

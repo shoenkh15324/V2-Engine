@@ -39,7 +39,7 @@ int Epoll::add(int fd, uint32_t events, void* ptr){
     epoll_event ev{};
     ev.events = events;
     ev.data.ptr = ptr;
-    if(epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) < 0){ V2_LOG_ERROR("epoll_ctl ADD fd=%d failed, errno=%d", fd, errno);
+    if(epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) < 0){ V2_LOG_ERROR("epoll_ctl ADD fd={} failed, errno={}", fd, errno);
         return Fail;
     }
     return Ok;
@@ -49,14 +49,14 @@ int Epoll::mod(int fd, uint32_t events, void* ptr){
     epoll_event ev{};
     ev.events = events;
     ev.data.ptr = ptr;
-    if(epoll_ctl(epollFd_, EPOLL_CTL_MOD, fd, &ev) < 0){ V2_LOG_ERROR("epoll_ctl MOD fd=%d failed, errno=%d", fd, errno);
+    if(epoll_ctl(epollFd_, EPOLL_CTL_MOD, fd, &ev) < 0){ V2_LOG_ERROR("epoll_ctl MOD fd={} failed, errno={}", fd, errno);
         return Fail;
     }
     return Ok;
 }
 
 int Epoll::del(int fd){
-    if(epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) < 0){ V2_LOG_ERROR("epoll_ctl DEL fd=%d failed, errno=%d", fd, errno);
+    if(epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) < 0){ V2_LOG_ERROR("epoll_ctl DEL fd={} failed, errno={}", fd, errno);
         return Fail;
     }
     return Ok;
@@ -67,7 +67,7 @@ int Epoll::wait(epoll_event* events, int maxEvents, int timeoutMs){
     do{
         n = epoll_wait(epollFd_, events, maxEvents, timeoutMs);
     }while(n < 0 && errno == EINTR);
-    if(n < 0){ V2_LOG_ERROR("epoll_wait() failed, errno=%d", errno);
+    if(n < 0){ V2_LOG_ERROR("epoll_wait() failed, errno={}", errno);
         return Fail;
     }
     return n;

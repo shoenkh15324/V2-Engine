@@ -35,7 +35,7 @@ int UdsServer::start(std::string path, int backlog){
     sockaddr_un addr{.sun_family = AF_UNIX,};
     strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-    if(bind(serverFd_, (sockaddr*)&addr, sizeof(addr)) < 0){ V2_LOG_ERROR("bind(%s) failed", path.c_str());
+    if(bind(serverFd_, (sockaddr*)&addr, sizeof(addr)) < 0){ V2_LOG_ERROR("bind({}) failed", path.c_str());
         close(serverFd_);
         return Fail;
     }
@@ -43,7 +43,7 @@ int UdsServer::start(std::string path, int backlog){
         close(serverFd_);
         return Fail;
     }
-    V2_LOG_INFO("UDS listening on %s", path.c_str());
+    V2_LOG_INFO("UDS listening on {}", path.c_str());
     path_ = std::move(path);
     return Ok;
 }

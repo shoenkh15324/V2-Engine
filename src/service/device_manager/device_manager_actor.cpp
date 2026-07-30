@@ -35,12 +35,12 @@ void DeviceManagerActor::handle(const Message& msg){
     case MessageId::DeviceRegister:{
         const auto& m = msg.as<DeviceRegister>();
         for(const auto& d : devices_){
-            if(d.name == m.name){ V2_LOG_WARN("Device '%s' already registered", m.name.c_str());
+            if(d.name == m.name){ V2_LOG_WARN("Device '{}' already registered", m.name.c_str());
                 return;
             }
         }
         devices_.push_back({m.name, m.type, m.bus});
-        V2_LOG_INFO("Device registered: %s (type=%d, bus=%d)", m.name.c_str(), static_cast<int>(m.type), m.bus);
+        V2_LOG_INFO("Device registered: {} (type={}, bus={})", m.name.c_str(), static_cast<int>(m.type), m.bus);
         break;
     }
     case MessageId::DeviceUnregister:{
@@ -48,11 +48,11 @@ void DeviceManagerActor::handle(const Message& msg){
         for(auto it = devices_.begin(); it != devices_.end(); ++it){
             if(it->name == m.name){
                 devices_.erase(it);
-                V2_LOG_INFO("Device unregistered: %s", m.name.c_str());
+                V2_LOG_INFO("Device unregistered: {}", m.name.c_str());
                 return;
             }
         }
-        V2_LOG_WARN("Device '%s' not found", m.name.c_str());
+        V2_LOG_WARN("Device '{}' not found", m.name.c_str());
         break;
     }
     case MessageId::DeviceEnumerate:{

@@ -33,7 +33,7 @@ int NetworkManagerActor::open(){
     nmProxy_ = sdbus::createProxy(*connection_, sdbus::ServiceName("org.freedesktop.NetworkManager"), sdbus::ObjectPath("/org/freedesktop/NetworkManager"));
     for(int i = 0; i < 4; ++i){
         if(wifi_.open(*connection_, *nmProxy_) == Ok) break;
-        V2_LOG_WARN("WiFi init retry %d/5...", i + 1);
+        V2_LOG_WARN("WiFi init retry {}/5...", i + 1);
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
     startTimer(Message::make(Tick{}), wifiSyncIntervalMs_, true);
