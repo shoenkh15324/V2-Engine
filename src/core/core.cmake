@@ -13,6 +13,7 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/work_dispatcher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/io/event_loop_epoll.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/scheduler.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/supervisor/supervisor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/actor_system/runtime/dispatcher/worker.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/log/log.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/container/ring_buffer.cpp

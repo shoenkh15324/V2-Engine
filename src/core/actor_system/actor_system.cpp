@@ -3,6 +3,8 @@
 #include "core/actor_system/runtime/dispatcher/worker.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
+#include "core/actor_system/runtime/supervisor/supervisor.hpp"
+#include "core/actor_system/messages/system_messages.hpp"
 
 ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs) : workDispatcher_(numWorkers), eventLoop_(epollMaxEvents, epollWaitTimeoutMs){
     Metrics::init(numWorkers);
@@ -10,6 +12,18 @@ ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int e
     for(int i = 0; i < numWorkers; i++){
         workers_.push_back(std::make_unique<Worker>(&workDispatcher_, i, maxBatch));
     }
+    supervisor_.setRestartAll([this]() -> int {
+        int count = 0;
+        actorRegistry_.forEachActor([&](ActorHandle h){
+            Actor* a = h.get();
+            if(!a || !a->runtime()) return;
+            ActorRestartRequest req;
+            req.reason = "one-for-all restart";
+            a->runtime()->enqueue(Message::make(std::move(req)));
+            ++count;
+        });
+        return count;
+    });
 }
 
 ActorSystem::~ActorSystem(){

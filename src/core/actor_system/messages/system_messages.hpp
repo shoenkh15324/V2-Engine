@@ -15,3 +15,8 @@ struct ActorStateChanged{
     uint8_t oldState;
     uint8_t newState;
 };
+
+struct ActorRestartRequest{
+    static constexpr MessageId kId = MessageId::ActorRestartRequest;
+    std::string reason;
+};

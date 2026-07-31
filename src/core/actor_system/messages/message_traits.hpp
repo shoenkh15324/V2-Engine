@@ -35,6 +35,7 @@ enum class MessageId : uint32_t {
     // Lifecycle
     ActorEnableRequest,
     ActorDisableRequest,
+    ActorRestartRequest,
     // Network Manager
     NmStatusRequest,
     // Wifi
