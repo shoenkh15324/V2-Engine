@@ -31,10 +31,10 @@ ActorRuntime::~ActorRuntime(){
 
 void ActorRuntime::enqueue(Message msg){
     if(!mailbox_->push(std::move(msg))){
-        Metrics::recordEnqueue(actor_->id(), false, 0);
+        if(Metrics::isEnabled()) Metrics::recordEnqueue(actor_->id(), false, 0);
         return;
     }
-    Metrics::recordEnqueue(actor_->id(), true, mailbox_->count());
+    if(Metrics::isEnabled()) Metrics::recordEnqueue(actor_->id(), true, mailbox_->count());
     if(workDispatcher_){
         workDispatcher_->dispatch(this);
     }
@@ -53,7 +53,7 @@ int ActorRuntime::run(int maxBatch){
     }
     auto endTime = Time::now();
     uint64_t gapNs = Time::toNs(endTime - startTime);
-    Metrics::recordHandle(actor_->id(), processed, gapNs);
+    if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), processed, gapNs);
 
     if(!mailbox_->empty() && workDispatcher_){
         workDispatcher_->dispatch(this);

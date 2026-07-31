@@ -48,6 +48,6 @@ void Worker::runLoop(){
 
         uint64_t gapIdleNs = Time::toNs(idleEndTime - idleStartTime);
         uint64_t gapBusyNs = Time::toNs(busyEndTime - busyStartTime);
-        Metrics::recordBatch(id_, processed, gapBusyNs, gapIdleNs);
+        if(Metrics::isEnabled()) Metrics::recordBatch(id_, processed, gapBusyNs, gapIdleNs);
     }
 }

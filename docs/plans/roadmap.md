@@ -285,22 +285,22 @@ MemoryPool (Singleton)
 | `atexit` flush ✅ | 프로그램 종료 시 main thread 버퍼 drain |
 | stderr lock-free + 파일 mutex ✅ | POSIX stderr는 별도 락 불필요, 파일만 `std::mutex`로 보호 (flush 시에만) |
 
-### 메모리 순서 최적화 🔄
+### 메모리 순서 최적화 ✅
 
 > **문제**: 핫 패스 원자들이 기본 `seq_cst` 사용 → ARM에서 불필요한 `DMB ISH` 배리어
 
 | 작업 | 상세 |
 |------|------|
-| `running_` 플래그 | Dispatcher, Worker, EventLoopEpoll, MainApp, TuiApp load → relaxed, store → release |
+| `running_` 플래그 ✅ | Dispatcher, Worker, EventLoopEpoll, MainApp, TuiApp load → relaxed, store → release |
 
-### 메트릭 핫 패스 최적화 🔄
+### 메트릭 핫 패스 최적화 ✅
 
 > **문제**: `count()`가 metrics 활성화 여부와 무관하게 매 메시지마다 두 번의 atomic 로드 수행
 
 | 작업 | 상세 |
 |------|------|
-| 지연 `count()` | `Metrics::recordDispatch/recordEnqueue` 내부에서만 `count()` 호출하도록 변경 |
-| 메트릭 비활성화 시 zero-overhead | `isEnabled()` 체크를 호출 전으로 이동, 비활성화 시 atomic 로드 0회 |
+| 지연 `count()` ✅ | `Metrics::recordDispatch/recordEnqueue` 내부에서만 `count()` 호출하도록 변경 |
+| 메트릭 비활성화 시 zero-overhead ✅ | `isEnabled()` 체크를 호출 전으로 이동, 비활성화 시 atomic 로드 0회 |
 
 **변경 파일**: `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp`, `timer.hpp/cpp`, `scheduler.cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
 

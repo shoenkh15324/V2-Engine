@@ -29,7 +29,7 @@ void WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
     uint64_t actorId = actorRuntime->actor()->id();
     int workerId = static_cast<int>(actorId % workerCount_);
     queues_[workerId]->push(std::move(actorRuntime));
-    Metrics::recordDispatch(false, queues_[workerId]->count());
+    if(Metrics::isEnabled()) Metrics::recordDispatch(false, queues_[workerId]->count());
     semas_[workerId]->release();
 }
 
@@ -37,6 +37,6 @@ ActorRuntime* WorkDispatcher::acquire(int workerId){
     semas_[workerId]->acquire();
     ActorRuntime* ctx = nullptr;
     queues_[workerId]->pop(ctx);
-    if(ctx) Metrics::recordAcquire();
+    if(ctx && Metrics::isEnabled()) Metrics::recordAcquire();
     return ctx;
 }
