@@ -1,6 +1,7 @@
 #pragma once
-#include <cstdint>
+#include <mutex>
 #include <string>
+#include <cstdint>
 #include <unordered_map>
 #include "core/actor_system/runtime/i_actor_registry.hpp"
 
@@ -32,6 +33,7 @@ private:
         uint64_t generation;
     };
 
+    mutable std::mutex mutex_;
     std::unordered_map<std::string, ActorEntry> byName_;
     std::unordered_map<uint64_t, ActorEntry> byId_;
     std::unordered_map<uint64_t, uint64_t> generations_;

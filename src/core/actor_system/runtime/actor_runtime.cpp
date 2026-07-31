@@ -45,6 +45,7 @@ void ActorRuntime::enqueue(Message msg){
 }
 
 int ActorRuntime::run(int maxBatch){
+    if(stopped_.load(std::memory_order_relaxed)) return 0;
     auto startTime = Time::now();
     Message msg;
     int processed = 0;
@@ -134,6 +135,7 @@ const std::string& ActorRuntime::actorName() const {
 }
 
 void ActorRuntime::shutdown(){
+    stopped_.store(true, std::memory_order_relaxed);
     actor_->close();
 }
 

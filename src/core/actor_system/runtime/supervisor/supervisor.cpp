@@ -18,6 +18,7 @@ void Supervisor::setStrategy(uint64_t actorId, RestartStrategy strategy){
 void Supervisor::removePolicy(uint64_t actorId){
     std::lock_guard lock(mutex_);
     perActorStrategy_.erase(actorId);
+    oneForAllRestartCount_.erase(actorId);
 }
 
 void Supervisor::setMaxRestarts(int maxRestarts){
@@ -37,15 +38,16 @@ void Supervisor::onActorFailed(ISupervised* runtime, Message failedMsg, const st
 
     // 1. 정책 스냅샷: strategy + maxRestarts를 한 번의 락으로 함께 읽는다.
     //    (각각 다른 락으로 읽으면 스냅샷이 불일치할 수 있다.)
-    RestartStrategy strategy = defaultStrategy_;
-    int limit = maxRestarts_;
+    RestartStrategy strategy;
+    int limit;
     {
         std::lock_guard lock(mutex_);
+        strategy = defaultStrategy_;
+        limit = maxRestarts_;
         auto it = perActorStrategy_.find(runtime->actorId());
         if(it != perActorStrategy_.end()){
             strategy = it->second;
         }
-        limit = maxRestarts_;
     }
 
     // 2. 실패 메시지 + 남은 메일박스를 dead letter로 이관.
@@ -70,19 +72,28 @@ void Supervisor::onActorFailed(ISupervised* runtime, Message failedMsg, const st
         if(runtime->tryRestart(reason, limit)){
             totalRestarts_.fetch_add(1, std::memory_order_relaxed);
         }else{
-            V2_LOG_ERROR("Actor {} restart failed or exceeded max restarts", runtime->actorName().c_str());
+            V2_LOG_ERROR("Actor {} exceeded max restarts ({}), shutting down", runtime->actorName().c_str(), limit);
+            runtime->shutdown();
         }
         break;
     case RestartStrategy::OneForAll:
         {
             std::function<int()> fn;
+            bool underBudget = false;
             {
                 std::lock_guard lock(mutex_);
                 fn = restartAll_;
+                int& n = oneForAllRestartCount_[runtime->actorId()];
+                underBudget = (n < limit);
+                if(underBudget) n++;
+            }
+            if(!underBudget){
+                V2_LOG_ERROR("Actor {} exceeded max one-for-all restarts ({}), shutting down", runtime->actorName().c_str(), limit);
+                runtime->shutdown();
+                break;
             }
             int restarted = 0;
             if(fn){
-                // 사용자 콜백이 예외를 던져도 워커 스레드를 죽이면 안 된다.
                 try{
                     restarted = fn();
                 }catch(const std::exception& e){

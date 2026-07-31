@@ -64,5 +64,6 @@ private:
     std::atomic<size_t> totalRestarts_{0};
     std::atomic<size_t> oneForAllBroadcasts_{0};
     std::unordered_map<uint64_t, RestartStrategy> perActorStrategy_;
+    std::unordered_map<uint64_t, int> oneForAllRestartCount_;
     int maxRestarts_{5};
 };

@@ -233,3 +233,48 @@ TEST(Supervisor, ActorRestartRequestSkipsClosedActor){
     EXPECT_EQ(a->openCount, 0);
     EXPECT_EQ(a->closeCount, 0);
 }
+
+TEST(Supervisor, OneForOneExceededMaxRestartsShutdown){
+    DeadLetterQueue dlq;
+    auto sup = makeSupervisor(dlq, RestartStrategy::OneForOne);
+    sup->setMaxRestarts(2);
+    MockSupervised mock;
+
+    for(int i = 0; i < 3; i++){
+        sup->onActorFailed(&mock, Message::make(Tick{}), "boom");
+    }
+
+    EXPECT_EQ(sup->totalRestarts(), 2);
+    EXPECT_EQ(mock.restartCount(), 2);
+    EXPECT_EQ(mock.shutdownCalls, 1);
+}
+
+TEST(Supervisor, OneForAllExceededMaxRestartsShutdown){
+    DeadLetterQueue dlq;
+    auto sup = makeSupervisor(dlq, RestartStrategy::OneForAll);
+    sup->setMaxRestarts(2);
+    sup->setRestartAll([]() -> int { return 1; });
+    MockSupervised mock;
+
+    for(int i = 0; i < 3; i++){
+        sup->onActorFailed(&mock, Message::make(Tick{}), "boom");
+    }
+
+    EXPECT_EQ(sup->oneForAllBroadcasts(), 2);  // 2회까지만 브로드캐스트
+    EXPECT_EQ(sup->totalRestarts(), 2);
+    EXPECT_EQ(mock.shutdownCalls, 1);
+}
+
+TEST(Supervisor, ShutdownRuntimeStopsProcessing){
+    auto actor = std::make_unique<LifecycleActor>("a", 1);
+    auto* a = actor.get();
+    a->open();
+    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+
+    rt.shutdown();
+    rt.enqueue(Message::make(Tick{}));
+    int processed = rt.run(-1);
+
+    EXPECT_EQ(processed, 0);
+    EXPECT_EQ(a->getState(), Closed);
+}

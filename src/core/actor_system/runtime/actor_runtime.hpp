@@ -60,4 +60,5 @@ private:
     mutable std::mutex timerMutex_;
     std::unordered_set<int> timerIds_;
     std::atomic<int> restartCount_{0};
+    std::atomic<bool> stopped_{false};
 };
