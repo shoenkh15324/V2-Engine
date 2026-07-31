@@ -592,5 +592,6 @@ cmake -B build -G Ninja -DV2_DEFAULT_LOG_LEVEL=3
 
 ## Related Documentation
 
+- [Roadmap](docs/plans/roadmap.md) — development roadmap and phase status
 - [Benchmark details](docs/benchmark/) — per-benchmark methodology and results
 - [Configuration](config/) — per-app JSON configuration files under `config/`

@@ -7,9 +7,9 @@
 ```
 Phase 1: 성능 병목 제거 ✅ 완료
 Phase 2: actor_system 리팩토링 ✅ 완료
-Phase 3: 메모리/전송 최적화 🔄 진행 중
-Phase 4: 아키텍처 고도화
-Phase 5: 벤치마크 인프라 + 보고서
+Phase 3: 메모리/전송 최적화 ✅ 완료
+Phase 4: 아키텍처 고도화 ⬜ 대기
+Phase 5: 벤치마크 인프라 + 보고서 ⬜ 대기 (Phase 4 완료 후)
 ```
 
 ---
@@ -42,29 +42,24 @@ Phase 5: 벤치마크 인프라 + 보고서
 > **목표**: 강결합 구조 해소 → Runtime과 Actor 완전 분리, 단방향 의존성, 컴파일 의존성 최소화, 확장 가능한 구조 확보
 
 
-### 디렉토리 구조
+### 디렉토리 구조 (현재)
 
 ```
 actor_system/
-    ├── actor_system.hpp           # Facade
-    ├── actor_system.cpp
+    ├── actor_system.hpp/cpp       # Facade
+    ├── actor_system_impl.hpp
     │
     ├── actor/
-    │   ├── actor.hpp              # Actor 추상 클래스
-    │   ├── actor.cpp
-    │   ├── actor_handle.hpp       # generation 기반 safe reference
-    │   └── actor_handle.cpp
+    │   ├── actor.hpp/cpp          # Actor 추상 클래스
+    │   └── actor_handle.hpp/cpp   # generation 기반 safe reference
     │
     ├── runtime/
     │   ├── i_actor_runtime.hpp    # Actor가 의존할 인터페이스
-    │   ├── actor_runtime.hpp      # IActorRuntime 구현체
-    │   ├── actor_runtime.cpp
+    │   ├── actor_runtime.hpp/cpp  # IActorRuntime 구현체
     │   ├── i_scheduler.hpp        # Scheduler 인터페이스
-    │   ├── scheduler.hpp
-    │   ├── scheduler.cpp
+    │   ├── scheduler.hpp/cpp
     │   ├── i_actor_registry.hpp   # Registry 인터페이스
-    │   ├── actor_registry.hpp
-    │   ├── actor_registry.cpp
+    │   ├── actor_registry.hpp/cpp
     │   │
     │   └── dispatcher/
     │       ├── i_work_dispatcher.hpp  # WorkDispatcher 인터페이스
@@ -75,9 +70,21 @@ actor_system/
     │           ├── event_loop_epoll.hpp   # epoll 구현체
     │           └── event_loop_epoll.cpp
     │
-    └── message/
-        ├── message.hpp
-        └── message_traits.hpp
+    ├── messages/                   # Message 정의 (서브시스템별 분할)
+    │   ├── message.hpp
+    │   ├── message_traits.hpp
+    │   ├── cmd_messages.hpp
+    │   ├── ipc_messages.hpp
+    │   ├── dbus_messages.hpp
+    │   ├── device_manager_messages.hpp
+    │   ├── monitor_messages.hpp
+    │   ├── system_messages.hpp
+    │   ├── tick_messages.hpp
+    │   └── network_manager/
+    │       ├── network_manager_messages.hpp
+    │       └── wifi_messages.hpp
+    │
+    └── detail/                    # (예비)
 ```
 
 ### 핵심 아키텍처 변경
@@ -190,7 +197,7 @@ ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 
 ---
 
-## Phase 3: 메모리/전송 최적화
+## Phase 3: 메모리/전송 최적화 ✅
 
 > **목표**: 핫 패스 캐시 미스 + 불필요한 할당/잠금/원자 연산 제거
 
@@ -278,7 +285,7 @@ MemoryPool (Singleton)
 | `atexit` flush ✅ | 프로그램 종료 시 main thread 버퍼 drain |
 | stderr lock-free + 파일 mutex ✅ | POSIX stderr는 별도 락 불필요, 파일만 `std::mutex`로 보호 (flush 시에만) |
 
-### 메모리 순서 최적화
+### 메모리 순서 최적화 🔄
 
 > **문제**: 핫 패스 원자들이 기본 `seq_cst` 사용 → ARM에서 불필요한 `DMB ISH` 배리어
 
@@ -287,7 +294,7 @@ MemoryPool (Singleton)
 | `scheduled_` | `exchange(true)` → `memory_order_acq_rel`, `store(false)` → `memory_order_release` |
 | `running_` 플래그 | `Dispatcher::running_`, `Worker::running_` → load는 `relaxed`, store는 `release` |
 
-### 메트릭 핫 패스 최적화
+### 메트릭 핫 패스 최적화 🔄
 
 > **문제**: `count()`가 metrics 활성화 여부와 무관하게 매 메시지마다 두 번의 atomic 로드 수행
 
@@ -300,44 +307,25 @@ MemoryPool (Singleton)
 
 ---
 
-## Phase 4: 아키텍처 고도화
+## Phase 4: 아키텍처 고도화 ⬜
 
 > **목표**: 정확성 + 타입 안전 + 장애 처리 + 로드 밸런싱
+>
+> **진행 순서**: Supervision → 정확성 버그 → typed_channel → Work Stealing
 
-### 타입별 메시지 디스패치
+### 4-1. Supervision 트리 + 예외 격리 🔜
 
-> **문제**: `std::variant<MessageTypes...>` 단일 블롭 — 모든 액터가 모든 메시지 타입을 받음, `[](const auto&){}`로 미처리 타입 무시
-
-| 작업 | 상세 |
-|------|------|
-| `typed_channel.hpp` | 액터별 수신 가능 타입을 컴파일 타임에 제한하는 타입 안전 채널 |
-| `handle()` 분리 | 기존 `handle(const Message&)` → `handle(const SpecificMsg&)` 오버로드로 변경 |
-| variant 분할 | `Message`를 서브 시스템별 variant로 분리 (IPC, D-Bus, Device, Cmd, Network) |
-| 데드 메시지 처리 | 미처리 타입 로깅 + 메트릭 (`dead_letter` 카운터), `DbusRegisterResult` 등 미사용 타입 정리 |
-
-### Supervision 트리 + 예외 격리
-
-> **문제**: `handle()` 예외 시 워커 스레드 크래프 → 프로세스 전체 종료, 복구 불가
+> **문제**: `handle()` 예외 시 워커 스레드 크래시 → 프로세스 전체 종료, 복구 불가
 
 | 작업 | 상세 |
 |------|------|
 | `supervisor.hpp` | 액터 실패 처리/재시작 트리 구조 |
-| 예외 격리 | `ActorRuntime::run()`에서 `try/catch`로 `handle()` 감싸기, 크래프된 액터 격리 |
+| 예외 격리 | `ActorRuntime::run()`에서 `try/catch`로 `handle()` 감싸기, 크래시된 액터 격리 |
 | 재시작 전략 | `one_for_one` (단일 액터 재시작), `one_for_all` (부모-자식 전체 재시작) |
 | 데드 레터 큐 | 실패한 메시지를 보관하는 큐 (디버깅/재시도용) |
 | 라이프사이클 훅 | `preStart()`, `postStop()`, `preRestart()`, `postRestart()` 추가 |
 
-### Work Stealing
-
-> **문제**: 고정 악피니티 — 워커 0에 액터 10개, 워커 1에 0개 → 불균형, 워커 1 유휴
-
-| 작업 | 상세 |
-|------|------|
-| `work_stealing_queue.hpp` | 각 워커의 로컬 큐에서 다른 워커가 작업을 훔치는 구조 |
-| 유휴 감지 | 워커가 `acquire()` 타임아웃 시 다른 워커 큐에서 steal 시도 |
-| 로드 밸런싱 메트릭 | 워커별 큐 깊이/처리량 모니터링, 임계 초과 시 자동 리밸런싱 |
-
-### 정확성 버그 수정
+### 4-2. 정확성 버그 수정 🔜
 
 > **문제**: 동시성 레이스 + 수명 주기 안전성 결여
 
@@ -349,13 +337,35 @@ MemoryPool (Singleton)
 | 그레이셔널 드레인 | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 (`actor_system.cpp:30-38`) |
 | `Worker::stop()` 데드락 | 세마포어 해제 없이 `join()` 호출 시 데드락 → 정지 순서 강제 또는 세마포어 추가 해제 (`worker.cpp:22-27`) |
 
-**변경 파일**: `typed_channel.hpp` (신규), `supervisor.hpp` (신규), `work_stealing_queue.hpp` (신규), `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`
+### 4-3. 타입별 메시지 디스패치 🔜
+
+> **문제**: `Message`가 단일 타입 — 모든 액터가 모든 메시지 타입을 받음, 런타임 `switch`로 식별
+
+| 작업 | 상세 |
+|------|------|
+| `typed_channel.hpp` | 액터별 수신 가능 타입을 컴파일 타임에 제한하는 타입 안전 채널 |
+| `handle()` 분리 | 기존 `handle(const Message&)` → `handle(const SpecificMsg&)` 오버로드로 변경 |
+| 데드 메시지 처리 | 미처리 타입 로깅 + 메트릭 (`dead_letter` 카운터), 미사용 타입 정리 |
+
+### 4-4. Work Stealing 🔜
+
+> **문제**: 고정 악피니티 — 워커 0에 액터 10개, 워커 1에 0개 → 불균형, 워커 1 유휴
+
+| 작업 | 상세 |
+|------|------|
+| `work_stealing_queue.hpp` | 각 워커의 로컬 큐에서 다른 워커가 작업을 훔치는 구조 |
+| 유휴 감지 | 워커가 `acquire()` 타임아웃 시 다른 워커 큐에서 steal 시도 |
+| 로드 밸런싱 메트릭 | 워커별 큐 깊이/처리량 모니터링, 임계 초과 시 자동 리밸런싱 |
+
+**변경 파일**: `supervisor.hpp` (신규), `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`, `typed_channel.hpp` (신규), `work_stealing_queue.hpp` (신규)
 
 ---
 
-## Phase 5: 벤치마크 인프라 통일 + 학술 보고서
+## Phase 5: 벤치마크 인프라 통일 + 학술 보고서 ⬜
 
 > **목표**: 벤치마크 시스템 단일화 + 학술 수준 성능 분석 + 포트폴리오
+>
+> ⏳ Phase 4 완료 후 진행 예정
 
 ### 벤치마크 인프라 통일
 
