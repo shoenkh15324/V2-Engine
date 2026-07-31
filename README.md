@@ -335,7 +335,7 @@ All benchmarks disable the metrics subsystem during execution to eliminate measu
 |-------|------|---------|-------|
 | **CmdActor** | CLI command parser and dispatcher | `CmdRequest`, `WifiScanResult`, `WifiStatusResult`, `WifiConnectResult`, `WifiDisconnectResult` | `CmdResponse`, `ActorEnable/DisableRequest`, `Wifi{Scan,Connect,Disconnect,AutoReconnect}Request` |
 | **IpcServerActor** | UDS IPC server — receives CLI commands, returns responses | `IpcNewConnection`, `IpcDataReceived`, `CmdResponse` | `CmdRequest` |
-| **MonitorActor** | Periodic system resource + PMU data collection, JSON broadcast | `MonitorPoll`, `MonitorNewConnection`, `MonitorClientDisconnected`, `ActorStateChanged` | — (writes directly to UDS clients) |
+| **MonitorActor** | Periodic system resource + PMU data collection, JSON broadcast | `MonitorPoll`, `MonitorNewConnection`, `MonitorClientDisconnected` | — (writes directly to UDS clients) |
 | **TickActor** | Periodic heartbeat generator | `Tick` | — |
 | **DbusActor** | D-Bus gateway — exposes methods, calls external services, subscribes signals | `DbusRegister/UnregisterMethod`, `DbusIncomingMethodCall`, `DbusMethodCallResult`, `DbusProxyCallRequest`, `DbusSubscribeSignal` | `DbusRegisterResult`, `DbusIncomingMethodCall`, `DbusProxyCallResult`, `DbusSignalEvent` |
 | **DeviceManagerActor** | In-memory HAL device registry | `DeviceRegister`, `DeviceUnregister`, `DeviceEnumerate` | `DeviceList` |

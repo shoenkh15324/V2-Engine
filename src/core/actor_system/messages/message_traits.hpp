@@ -4,7 +4,6 @@
 enum class MessageId : uint32_t {
 // System
     SignalNotify = 1,
-    ActorStateChanged,
     // Tick
     Tick,
     // Ipc

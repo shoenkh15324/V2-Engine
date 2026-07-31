@@ -181,11 +181,6 @@ void MonitorActor::handle(const Message& msg){
         V2_LOG_INFO("MonitorActor: client disconnected (conn={})", m.conn);
         break;
     }
-    case MessageId::ActorStateChanged:{
-        const auto& m = msg.as<ActorStateChanged>();
-        V2_LOG_INFO("Actor state changed: {} (id={}) {} -> {}", m.actorName.c_str(), m.actorId, m.oldState, m.newState);
-        break;
-    }
     default:
         break;
     }
