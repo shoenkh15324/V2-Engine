@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.10.16-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.11.19-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
