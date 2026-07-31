@@ -2,6 +2,7 @@
 #include <atomic>
 #include <vector>
 #include <thread>
+#include <mutex>
 #include <functional>
 #include <unordered_map>
 #include "core/common/os/epoll.hpp"
@@ -30,6 +31,7 @@ private:
 
     std::atomic<bool> running_{false};
     std::vector<epoll_event> epollEvents_;
+    std::mutex handlersMutex_;
     std::unordered_map<WatchedFd, Handler> handlers_;
     LockFreeMpscQueue<std::function<void()>> pendingOps_{128};
     Epoll epoll_;

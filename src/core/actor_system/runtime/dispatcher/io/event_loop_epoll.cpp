@@ -49,10 +49,14 @@ void EventLoopEpoll::run(){
                 continue;
             }
             WatchedFd fd = epollEvents_[i].data.fd;
-            auto it = handlers_.find(fd);
-            if(it != handlers_.end()){
-                it->second();
+            Handler handler;
+            {
+                std::lock_guard lock(handlersMutex_);
+                auto it = handlers_.find(fd);
+                if(it == handlers_.end()) continue;
+                handler = it->second;
             }
+            handler();
         }
     }
 }
@@ -65,26 +69,35 @@ void EventLoopEpoll::stop(){
 }
 
 int EventLoopEpoll::subscribe(WatchedFd fd, Handler handler){
-    if(std::this_thread::get_id() == threadId_){
+    bool isLoopThread = std::this_thread::get_id() == threadId_;
+    {
+        std::lock_guard lock(handlersMutex_);
+        if(handlers_.count(fd) > 0) return Fail;
         handlers_[fd] = std::move(handler);
+    }
+    auto add = [this, fd](){
         epoll_event ev{};
         ev.events = EPOLLIN;
         ev.data.fd = fd;
         if(epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, fd, &ev) < 0){
+            std::lock_guard lock(handlersMutex_);
             handlers_.erase(fd);
             return Fail;
         }
         return Ok;
-    }
-    post([this, fd, handler = std::move(handler)]() mutable {
-        subscribe(fd, std::move(handler));
-    });
+    };
+    if(isLoopThread) return add();
+    post([add = std::move(add)]() mutable { add(); });
     return Ok;
 }
 
 int EventLoopEpoll::unsubscribe(WatchedFd fd){
-    if(std::this_thread::get_id() == threadId_){
+    bool isLoopThread = std::this_thread::get_id() == threadId_;
+    {
+        std::lock_guard lock(handlersMutex_);
         handlers_.erase(fd);
+    }
+    if(isLoopThread){
         epoll_ctl(epoll_.fd(), EPOLL_CTL_DEL, fd, nullptr);
         return Ok;
     }
