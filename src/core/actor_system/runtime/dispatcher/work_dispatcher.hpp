@@ -20,7 +20,7 @@ public:
     void stop();
     void dispatch(ActorRuntime* actorRuntime) override;
     ActorRuntime* acquire(int workerId) override;
-    bool isRunning() const override { return running_; }
+    bool isRunning() const override { return running_.load(std::memory_order_relaxed); }
 
 private:
     int workerCount_ = 0;

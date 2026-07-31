@@ -291,8 +291,7 @@ MemoryPool (Singleton)
 
 | 작업 | 상세 |
 |------|------|
-| `scheduled_` | `exchange(true)` → `memory_order_acq_rel`, `store(false)` → `memory_order_release` |
-| `running_` 플래그 | `Dispatcher::running_`, `Worker::running_` → load는 `relaxed`, store는 `release` |
+| `running_` 플래그 | Dispatcher, Worker, EventLoopEpoll, MainApp, TuiApp load → relaxed, store → release |
 
 ### 메트릭 핫 패스 최적화 🔄
 

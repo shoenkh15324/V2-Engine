@@ -50,23 +50,23 @@ void MainApp::open(){
 }
 
 void MainApp::requestStop(){
-    isRunning_.store(false);
+    isRunning_.store(false, std::memory_order_release);
     V2_LOG_INFO("");
     if(actorSystem_) actorSystem_->requestStop();
 }
 
 void MainApp::run(){
-    isRunning_.store(true);
+    isRunning_.store(true, std::memory_order_release);
     V2_LOG_INFO("{} App Run", name_.c_str());
     if(actorSystem_) actorSystem_->run();
-    while(isRunning_.load()){
+    while(isRunning_.load(std::memory_order_relaxed)){
         Sleep::sleepMs(cfg_.mainLoopSleepMs);
     }
 }
 
 void MainApp::close(){
     V2_LOG_INFO("{} App Close", name_.c_str());
-    isRunning_.store(false);
+    isRunning_.store(false, std::memory_order_release);
     if(actorSystem_) actorSystem_->stop();
     actorSystem_.reset();
 }

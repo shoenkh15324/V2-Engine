@@ -25,14 +25,14 @@ void EventLoopEpoll::start(){
     ev.data.fd = stopFd_;
     int result = epoll_ctl(epoll_.fd(), EPOLL_CTL_ADD, stopFd_, &ev);
     V2_ASSERT(result >= 0, "epoll_ctl ADD stopFd failed");
-    running_ = true;
+    running_.store(true, std::memory_order_release);
 }
 
 void EventLoopEpoll::run(){
     pthread_setname_np(pthread_self(), "v2-main");
     threadId_ = std::this_thread::get_id();
 
-    while(running_){
+    while(running_.load(std::memory_order_relaxed)){
         drainPendingOps(); // epoll_wait 전에 pending ops 처리
         int n = epoll_.wait(epollEvents_.data(), maxEvents_, waitTimeoutMs_);
         if(n < 0){
@@ -58,7 +58,7 @@ void EventLoopEpoll::run(){
 }
 
 void EventLoopEpoll::stop(){
-    running_ = false;
+    running_.store(false, std::memory_order_release);
     uint64_t one = 1;
     auto _ = ::write(stopFd_, &one, sizeof(one));
     (void)_;

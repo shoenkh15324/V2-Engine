@@ -15,11 +15,11 @@ WorkDispatcher::~WorkDispatcher(){
 }
 
 void WorkDispatcher::start(){
-    running_ = true;
+    running_.store(true, std::memory_order_release);
 }
 
 void WorkDispatcher::stop(){
-    running_ = false;
+    running_.store(false, std::memory_order_release);
     for(int i = 0; i < workerCount_; i++){
         semas_[i]->release();
     }

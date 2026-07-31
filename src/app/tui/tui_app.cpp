@@ -87,14 +87,14 @@ int TuiApp::open(){
 #endif
     screen_ = std::make_unique<ftxui::App>(ftxui::App::Fullscreen());
     screen_->TrackMouse(true);
-    isRunning_.store(true);
+    isRunning_.store(true, std::memory_order_release);
     recvThread_ = std::thread(&TuiApp::recvLoop, this);
     //
     return Ok;
 }
 
 void TuiApp::run(){
-    isRunning_.store(true);
+    isRunning_.store(true, std::memory_order_release);
 #if V2_PLATFORM_LINUX
     V2_LOG_INFO("{} App Run", appName_.c_str());
     if(screen_){
@@ -104,7 +104,7 @@ void TuiApp::run(){
 }
 
 int TuiApp::close(){
-    isRunning_.store(false);
+    isRunning_.store(false, std::memory_order_release);
 #if V2_PLATFORM_LINUX
     client_.shutdown();
     if(recvThread_.joinable()) recvThread_.join();
@@ -115,7 +115,7 @@ int TuiApp::close(){
 }
 
 void TuiApp::requestStop(){
-    isRunning_.store(false);
+    isRunning_.store(false, std::memory_order_release);
     if(screen_) screen_->Exit();
     V2_LOG_INFO("");
 }
@@ -123,7 +123,7 @@ void TuiApp::requestStop(){
 void TuiApp::recvLoop(){
     std::vector<char> buf(cfg_.monitorRecvBufferSize);
     std::string lineBuffer;
-    while(isRunning_.load()){
+    while(isRunning_.load(std::memory_order_relaxed)){
         int n = client_.recv(buf.data(), buf.size());
         if(n > 0){
             lineBuffer.append(buf.data(), n);

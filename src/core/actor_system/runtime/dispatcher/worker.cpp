@@ -15,12 +15,12 @@ Worker::~Worker(){
 }
 
 void Worker::start(){
-    running_ = true;
+    running_.store(true, std::memory_order_release);
     thread_ = std::thread([this]{ runLoop(); });
 }
 
 void Worker::stop(){
-    running_ = false;
+    running_.store(false, std::memory_order_release);
     if(thread_.joinable() && (std::this_thread::get_id() != thread_.get_id())){
         thread_.join();
     }
@@ -32,7 +32,7 @@ void Worker::runLoop(){
 #elif V2_PLATFORM_MACOS
     pthread_setname_np(threadName_.c_str());
 #endif
-    while(running_){
+    while(running_.load(std::memory_order_relaxed)){
         auto idleStartTime = Time::now();
         ActorRuntime* actorRuntime = workDispatcher_->acquire(id_);
         auto idleEndTime = Time::now();
