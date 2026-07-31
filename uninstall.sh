@@ -3,6 +3,8 @@ set -e
 
 APPS=(
     "v2_main"
+    "v2_cli"
+    "v2_tui"
 )
 
 for name in "${APPS[@]}"; do
@@ -10,7 +12,10 @@ for name in "${APPS[@]}"; do
     sudo systemctl stop "$name" 2>/dev/null || true
     sudo systemctl disable "$name" 2>/dev/null || true
     sudo rm -f "/etc/systemd/system/${name}.service"
+    sudo rm -f "/usr/local/bin/$name"
 done
+
+sudo rm -f /usr/local/bin/v2
 
 sudo systemctl daemon-reload
 sudo systemctl reset-failed 2>/dev/null || true

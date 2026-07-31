@@ -544,7 +544,7 @@ Dependency direction: infra ← core ← service ← app
 
 | Tool | Version |
 |------|---------|
-| C++20 compiler | GCC 11+ / Clang 14+ |
+| C++20 compiler | GCC 14+ (std::format; Ubuntu 22.04: `ubuntu-toolchain-r/test` PPA) |
 | CMake | 3.14+ |
 | Ninja | — |
 | gold linker | `binutils-gold` |

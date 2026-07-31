@@ -39,7 +39,7 @@ fi
 # ============================================
 install_deps() {
     local packages=(
-        "build-essential"
+        "g++-14"
         "cmake"
         "git"
         "ninja-build"
@@ -65,6 +65,13 @@ install_deps() {
         [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { echo "  Skipping dependency installation."; return; }
     fi
 
+    if ! command -v g++-14 >/dev/null 2>&1; then
+        echo "==> g++-14 not found, adding ubuntu-toolchain-r/test PPA..."
+        sudo apt install -y software-properties-common
+        sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+        sudo apt-get update
+    fi
+
     echo "==> Installing dependencies..."
     sudo apt install -y "${packages[@]}"
     echo ""
@@ -79,9 +86,28 @@ TARGETS=("$@")
 build() {
     local log_level="${LOG_LEVEL:-3}"
     local build_type="${BUILD_TYPE:-Release}"
+    local cc="/usr/bin/gcc-14"
+    local cxx="/usr/bin/g++-14"
+
+    if ! command -v "${cxx}" >/dev/null 2>&1; then
+        echo "==> ${cxx} not found. Run install_deps first or install g++-14."
+        return 1
+    fi
+
+    # Invalidate the CMake cache if the cached compiler differs
+    if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] && \
+       grep -q "CMAKE_CXX_COMPILER:.*=${cxx}" "$BUILD_DIR/CMakeCache.txt"; then
+        :
+    else
+        echo "==> Compiler changed or cache missing, cleaning build cache..."
+        rm -rf "$BUILD_DIR"
+    fi
+
     echo "==> Building... (build_type=${build_type}, log_level=${log_level})"
     cmake -B "$BUILD_DIR" -G Ninja -Wno-dev \
         -DCMAKE_BUILD_TYPE="${build_type}" \
+        -DCMAKE_C_COMPILER="${cc}" \
+        -DCMAKE_CXX_COMPILER="${cxx}" \
         -DV2_DEFAULT_LOG_LEVEL="${log_level}" 2>&1 | tail -1
     cmake --build "$BUILD_DIR" -j"$(nproc)" 2>&1 | tail -1
     echo ""
