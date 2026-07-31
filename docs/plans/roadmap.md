@@ -8,7 +8,7 @@
 Phase 1: 성능 병목 제거 ✅ 완료
 Phase 2: actor_system 리팩토링 ✅ 완료
 Phase 3: 메모리/전송 최적화 ✅ 완료
-Phase 4: 아키텍처 고도화 ⬜ 대기
+Phase 4: 아키텍처 고도화 🔄 진행 중 (4-1 완료, 4-2 일부 완료)
 Phase 5: 벤치마크 인프라 + 보고서 ⬜ 대기 (Phase 4 완료 후)
 ```
 
@@ -160,7 +160,6 @@ class ActorHandle {
     void send(Message msg);
 };
 ```
-> TODO: actor state를 아토믹에서 그냥 변수로, ActorState 변경 시 상태변화 이벤트가 전파되도록 관련 메시지 추가 및 모니터 엑터에 적용
 
 
 ### 의존성 방향 (최종)
@@ -247,8 +246,6 @@ ActorHandle ──► IActorRegistry* (forward decl, resolve via generation)
 | DEBUG 정책 | `PoisonDebugPolicy` — deallocate 시 `0xCD` 패턴 덮어쓰기 (use-after-free 탐지) |
 | Noexcept 정책 | `NoexceptAllocPolicy` — 할당 실패 시 `std::abort()` (임베디드용) |
 
-**파일**: `core/common/memory/{free_list, chunk, size_class, slab, thread_local_cache, memory_pool}.hpp`
-
 **구조**:
 ```
 MemoryPool (Singleton)
@@ -279,10 +276,10 @@ MemoryPool (Singleton)
 
 | 작업 | 상세 |
 |------|------|
-| `thread_local` 버퍼 ✅ | per-thread 버퍼에 누적, 4KB 임계치 도달 시만 flush |
+| `thread_local` 버퍼 ✅ | per-thread 버퍼에 누적, 임계치 도달 시만 flush |
 | `std::format` 전환 ✅ | printf `%s`/`%d` → `{}`, 컴파일 타임 포맷 검증, `.c_str()` 제거 |
 | `gLevel` → `std::atomic` ✅ | 멀티스레드 안전성 확보 |
-| `atexit` flush ✅ | 프로그램 종료 시 main thread 버퍼 drain |
+| TLS 소멸자 기반 flush ✅ | `LogBuffer` RAII — 프로그램/스레드 종료 시 자신의 버퍼를 안전하게 drain (`atexit` + `thread_local`의 소멸 순서 UAF 해결) |
 | stderr lock-free + 파일 mutex ✅ | POSIX stderr는 별도 락 불필요, 파일만 `std::mutex`로 보호 (flush 시에만) |
 
 ### 메모리 순서 최적화 ✅
@@ -302,39 +299,39 @@ MemoryPool (Singleton)
 | 지연 `count()` ✅ | `Metrics::recordDispatch/recordEnqueue` 내부에서만 `count()` 호출하도록 변경 |
 | 메트릭 비활성화 시 zero-overhead ✅ | `isEnabled()` 체크를 호출 전으로 이동, 비활성화 시 atomic 로드 0회 |
 
-**변경 파일**: `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp`, `timer.hpp/cpp`, `scheduler.cpp`, `lock_free_mpsc_queue.hpp`, `metrics.hpp/cpp`, `log.cpp`
-
 ---
 
-## Phase 4: 아키텍처 고도화 ⬜
+## Phase 4: 아키텍처 고도화 🔄
 
 > **목표**: 정확성 + 타입 안전 + 장애 처리 + 로드 밸런싱
 >
 > **진행 순서**: Supervision → 정확성 버그 → typed_channel → Work Stealing
 
-### 4-1. Supervision 트리 + 예외 격리 🔜
+### 4-1. Supervision 트리 + 예외 격리 🔄
 
 > **문제**: `handle()` 예외 시 워커 스레드 크래시 → 프로세스 전체 종료, 복구 불가
 
 | 작업 | 상세 |
 |------|------|
-| `supervisor.hpp` | 액터 실패 처리/재시작 트리 구조 |
-| 예외 격리 | `ActorRuntime::run()`에서 `try/catch`로 `handle()` 감싸기, 크래시된 액터 격리 |
-| 재시작 전략 | `one_for_one` (단일 액터 재시작), `one_for_all` (부모-자식 전체 재시작) |
-| 데드 레터 큐 | 실패한 메시지를 보관하는 큐 (디버깅/재시도용) |
-| 라이프사이클 훅 | `preStart()`, `postStop()`, `preRestart()`, `postRestart()` 추가 |
+| `supervisor.hpp` ✅ | 액터 실패 처리/재시작 구조 (`runtime/supervisor/`) |
+| 예외 격리 ✅ | `ActorRuntime::run()`에서 `try/catch`로 `handle()` 감싸기, 크래시된 액터 격리 |
+| 재시작 전략 ✅ | `OneForOne` (실패 액터만), `OneForAll` (전체 재시작, `ActorRestartRequest` 브로드캐스트) |
+| 재시작 예산 ✅ | `maxRestarts` 한도 초과 시 액터 shutdown (`OneForOne`/`OneForAll` 모두), 콜백 예외 격리 |
+| 데드 레터 큐 ✅ | 실패한 메시지를 보관하는 큐 (`dead_letter_queue.hpp`) |
 
-### 4-2. 정확성 버그 수정 🔜
+### 4-2. 정확성 버그 수정 🔄
 
 > **문제**: 동시성 레이스 + 수명 주기 안전성 결여
 
 | 작업 | 상세 |
 |------|------|
-| `scheduled_` 더블 디스패치 | `scheduled_=false` → `empty()` 사이 프로듀서가 중복 디스패치 가능 → `exchange` 기반으로 수정 (`actor_runtime.cpp:45-47`) |
-| 타이머 use-after-free | `Scheduler::addTimer()`에서 `Actor*` raw 포인터 캡처 → `ActorRuntime*` 또는 `weak_ptr`로 변경 (`scheduler.cpp:13-14`) |
-| `ActorState` 레이스 | non-atomic `uint8_t`를 메인/워커 스레드가 동시에 접근 → `std::atomic<uint8_t>` 또는 `std::atomic<ActorState>` (`actor.hpp:53`) |
-| 그레이셔널 드레인 | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 (`actor_system.cpp:30-38`) |
-| `Worker::stop()` 데드락 | 세마포어 해제 없이 `join()` 호출 시 데드락 → 정지 순서 강제 또는 세마포어 추가 해제 (`worker.cpp:22-27`) |
+| 로그 버퍼 exit UAF ✅ | `atexit(logFlush)` + `thread_local gBuf`의 소멸 순서 역전으로 종료 시 use-after-free → `LogBuffer` TLS RAII로 전환 (`log.cpp`, `da133f1`) |
+| epoll 중복 구독/핸들러 레이스 ✅ | `EventLoopEpoll::subscribe()`가 비-loop 스레드에서 중복 감지 실패 → `handlers_` mutex 보호 + 동기 중복 확인 (`da133f1`) |
+| 타이머 use-after-free ✅ | `Scheduler::addTimer()`에서 `Actor*` raw 포인터 캡처 → 수명 안전 처리 (`cde6493`) |
+| `ActorState` 레이스 ✅ | `state_`를 `std::atomic<ActorState>`로 전환 — 전이는 owner 스레드에서 store, 관측자는 load (스레드 프리 원칙은 액터의 처리 상태에 적용, 수명주기 관측 메타데이터는 원자적 read로 안전화) |
+| `ActorStateChanged` 메시지 제거 ✅ | 발신자(`setState()`)가 미사용, 수신측(Monitor)은 로그만 출력 → 메시지·열거값·핸들러 제거. 상태 관측은 `getState()` 폴링으로 통일 |
+| 그레이셔널 드레인 🔜 | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 |
+| `Worker::stop()` 데드락 🔜 | 세마포어 해제 없이 `join()` 호출 시 데드락 가능성 점검 |
 
 ### 4-3. 타입별 메시지 디스패치 🔜
 
@@ -355,8 +352,6 @@ MemoryPool (Singleton)
 | `work_stealing_queue.hpp` | 각 워커의 로컬 큐에서 다른 워커가 작업을 훔치는 구조 |
 | 유휴 감지 | 워커가 `acquire()` 타임아웃 시 다른 워커 큐에서 steal 시도 |
 | 로드 밸런싱 메트릭 | 워커별 큐 깊이/처리량 모니터링, 임계 초과 시 자동 리밸런싱 |
-
-**변경 파일**: `supervisor.hpp` (신규), `actor.hpp/cpp`, `actor_runtime.hpp/cpp`, `work_dispatcher.hpp/cpp`, `worker.hpp/cpp`, `actor_system.hpp/cpp`, `scheduler.cpp`, `typed_channel.hpp` (신규), `work_stealing_queue.hpp` (신규)
 
 ---
 
