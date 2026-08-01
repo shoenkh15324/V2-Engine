@@ -104,3 +104,15 @@ TEST(ActorSystemIntegration, OpenCloseOnce){
     sys.stop();
     EXPECT_EQ(a->closeCount, 2);
 }
+
+TEST(ActorSystemIntegration, DrainProcessesPendingMessages){
+    ActorSystem sys(2);
+    auto* a = sys.createActor<TestActor>("drain_actor", 256);
+    sys.start();
+    constexpr int N = 100;
+    for(int i = 0; i < N; i++){
+        a->sendMsg("drain_actor", Message::make(Tick{}));
+    }
+    sys.stop();
+    EXPECT_EQ(a->tickCount, N);
+}

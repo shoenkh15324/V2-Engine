@@ -26,7 +26,7 @@ public:
     ActorRuntime& operator=(ActorRuntime&&) = delete;
 
     void enqueue(Message msg) override;
-    int run(int maxBatch);
+    int run(int maxBatch, bool* moreWork = nullptr);
     Actor* actor() const override { return actor_.get(); }
     IActorRegistry* actorRegistry() const override { return actorRegistry_; }
     IEventLoop* eventLoop() const override { return eventLoop_; }

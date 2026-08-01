@@ -20,17 +20,20 @@ void WorkDispatcher::start(){
 
 void WorkDispatcher::stop(){
     running_.store(false, std::memory_order_release);
+    draining_.store(false, std::memory_order_release);
     for(int i = 0; i < workerCount_; i++){
         semas_[i]->release();
     }
 }
 
-void WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
-    uint64_t actorId = actorRuntime->actor()->id();
-    int workerId = static_cast<int>(actorId % workerCount_);
-    queues_[workerId]->push(std::move(actorRuntime));
-    if(Metrics::isEnabled()) Metrics::recordDispatch(false, queues_[workerId]->count());
-    semas_[workerId]->release();
+bool WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
+    bool ok = enqueueEntry(actorRuntime);
+    if(ok) pendingWork_.fetch_add(1, std::memory_order_relaxed);
+    return ok;
+}
+
+bool WorkDispatcher::redispatch(ActorRuntime* actorRuntime){
+    return enqueueEntry(actorRuntime);
 }
 
 ActorRuntime* WorkDispatcher::acquire(int workerId){
@@ -39,4 +42,29 @@ ActorRuntime* WorkDispatcher::acquire(int workerId){
     queues_[workerId]->pop(ctx);
     if(ctx && Metrics::isEnabled()) Metrics::recordAcquire();
     return ctx;
+}
+
+void WorkDispatcher::beginDrain(){
+    running_.store(false, std::memory_order_release);
+    draining_.store(true, std::memory_order_release);
+    for(int i = 0; i < workerCount_; i++){
+        semas_[i]->release();
+    }
+}
+
+void WorkDispatcher::onWorkDone(){
+    if(pendingWork_.fetch_sub(1, std::memory_order_acq_rel) == 1){
+        if(draining_.load(std::memory_order_acquire)){
+            for(int i = 0; i < workerCount_; i++) semas_[i]->release();
+        }
+    }
+}
+
+bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
+    uint64_t actorId = actorRuntime->actor()->id();
+    int workerId = static_cast<int>(actorId % workerCount_);
+    if(!queues_[workerId]->push(std::move(actorRuntime))) return false;
+    if(Metrics::isEnabled()) Metrics::recordDispatch(false, queues_[workerId]->count());
+    semas_[workerId]->release();
+    return true;
 }

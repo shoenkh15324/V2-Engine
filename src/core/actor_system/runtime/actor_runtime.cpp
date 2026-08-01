@@ -44,7 +44,8 @@ void ActorRuntime::enqueue(Message msg){
     }
 }
 
-int ActorRuntime::run(int maxBatch){
+int ActorRuntime::run(int maxBatch, bool* moreWork){
+    if(moreWork) *moreWork = false; 
     if(stopped_.load(std::memory_order_relaxed)) return 0;
     auto startTime = Time::now();
     Message msg;
@@ -77,7 +78,8 @@ int ActorRuntime::run(int maxBatch){
     if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), processed, gapNs);
 
     if(!mailbox_->empty() && workDispatcher_){
-        workDispatcher_->dispatch(this);
+        bool ok = workDispatcher_->redispatch(this);
+        if(moreWork) *moreWork = ok;
     }
     return processed;
 }

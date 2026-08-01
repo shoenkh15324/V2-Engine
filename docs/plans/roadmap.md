@@ -8,7 +8,7 @@
 Phase 1: 성능 병목 제거 ✅ 완료
 Phase 2: actor_system 리팩토링 ✅ 완료
 Phase 3: 메모리/전송 최적화 ✅ 완료
-Phase 4: 아키텍처 고도화 🔄 진행 중 (4-1 완료, 4-2 일부 완료)
+Phase 4: 아키텍처 고도화 🔄 진행 중 (4-1 완료, 4-2 완료)
 Phase 5: 벤치마크 인프라 + 보고서 ⬜ 대기 (Phase 4 완료 후)
 ```
 
@@ -307,7 +307,7 @@ MemoryPool (Singleton)
 >
 > **진행 순서**: Supervision → 정확성 버그 → typed_channel → Work Stealing
 
-### 4-1. Supervision 트리 + 예외 격리 🔄
+### 4-1. Supervision 트리 + 예외 격리 ✅
 
 > **문제**: `handle()` 예외 시 워커 스레드 크래시 → 프로세스 전체 종료, 복구 불가
 
@@ -319,7 +319,7 @@ MemoryPool (Singleton)
 | 재시작 예산 ✅ | `maxRestarts` 한도 초과 시 액터 shutdown (`OneForOne`/`OneForAll` 모두), 콜백 예외 격리 |
 | 데드 레터 큐 ✅ | 실패한 메시지를 보관하는 큐 (`dead_letter_queue.hpp`) |
 
-### 4-2. 정확성 버그 수정 🔄
+### 4-2. 정확성 버그 수정 ✅
 
 > **문제**: 동시성 레이스 + 수명 주기 안전성 결여
 
@@ -330,8 +330,8 @@ MemoryPool (Singleton)
 | 타이머 use-after-free ✅ | `Scheduler::addTimer()`에서 `Actor*` raw 포인터 캡처 → 수명 안전 처리 (`cde6493`) |
 | `ActorState` 레이스 ✅ | `state_`를 `std::atomic<ActorState>`로 전환 — 전이는 owner 스레드에서 store, 관측자는 load (스레드 프리 원칙은 액터의 처리 상태에 적용, 수명주기 관측 메타데이터는 원자적 read로 안전화) |
 | `ActorStateChanged` 메시지 제거 ✅ | 발신자(`setState()`)가 미사용, 수신측(Monitor)은 로그만 출력 → 메시지·열거값·핸들러 제거. 상태 관측은 `getState()` 폴링으로 통일 |
-| 그레이셔널 드레인 🔜 | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 |
-| `Worker::stop()` 데드락 🔜 | 세마포어 해제 없이 `join()` 호출 시 데드락 가능성 점검 |
+| 그레이셔널 드레인 ✅ | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 |
+| `Worker::stop()` 데드락 ✅ | 세마포어 해제 없이 `join()` 호출 시 데드락 가능성 점검 |
 
 ### 4-3. 타입별 메시지 디스패치 🔜
 

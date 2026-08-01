@@ -2,22 +2,24 @@
 #include <atomic>
 #include <thread>
 #include <string>
+#include <memory>
 #include "core/common/config/platform_config.h"
 
-class IWorkDispatcher;
+class WorkDispatcher;
 
 class Worker{
-public:
-    explicit Worker(IWorkDispatcher* workDispatcher, int id, int maxBatch);
+friend class ActorSystem;
+friend struct std::default_delete<Worker>;
+
+private:
+    explicit Worker(WorkDispatcher* workDispatcher, int id, int maxBatch);
     ~Worker();
 
     void start();
     void stop();
-
-private:
     void runLoop();
 
-    IWorkDispatcher* workDispatcher_;
+    WorkDispatcher* workDispatcher_;
     std::thread thread_;
     std::atomic<bool> running_{false};
     std::string threadName_;

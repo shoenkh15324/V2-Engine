@@ -10,7 +10,7 @@ ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int e
     Metrics::init(numWorkers);
     workers_.reserve(numWorkers);
     for(int i = 0; i < numWorkers; i++){
-        workers_.push_back(std::make_unique<Worker>(&workDispatcher_, i, maxBatch));
+        workers_.push_back(std::unique_ptr<Worker>(new Worker(&workDispatcher_, i, maxBatch)));
     }
     supervisor_.setRestartAll([this]() -> int {
         int count = 0;
@@ -45,14 +45,15 @@ void ActorSystem::start(){
 }
 
 void ActorSystem::stop(){
-    for(auto& ctx : actorRuntimes_){
-        ctx->actor()->close();
-    }
     scheduler_.stop();
     eventLoop_.stop();
-    workDispatcher_.stop();
+    workDispatcher_.beginDrain();
     for(auto& w : workers_){
         w->stop();
+    }
+    workDispatcher_.stop();
+    for(auto& ctx : actorRuntimes_){
+        ctx->actor()->close();
     }
 }
 
