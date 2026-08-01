@@ -6,7 +6,7 @@
 #include "core/actor_system/runtime/supervisor/supervisor.hpp"
 #include "core/actor_system/runtime/supervisor/dead_letter_queue.hpp"
 #include "core/actor_system/runtime/supervisor/i_supervised.hpp"
-#include "core/actor_system/runtime/actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 #include "core/actor_system/messages/tick_messages.hpp"

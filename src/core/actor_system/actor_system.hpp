@@ -3,11 +3,11 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include "core/actor_system/runtime/actor_registry.hpp"
+#include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
-#include "core/actor_system/runtime/dispatcher/io/event_loop_epoll.hpp"
-#include "core/actor_system/runtime/scheduler.hpp"
-#include "core/actor_system/runtime/actor_runtime.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
+#include "core/actor_system/runtime/scheduler/scheduler.hpp"
+#include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/runtime/supervisor/supervisor.hpp"
 #include "core/actor_system/runtime/supervisor/dead_letter_queue.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"

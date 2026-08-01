@@ -5,7 +5,7 @@
 #include <mutex>
 #include <functional>
 #include <unordered_map>
-#include "core/common/os/epoll.hpp"
+#include "infra/platform/linux/epoll.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 

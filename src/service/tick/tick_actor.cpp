@@ -3,7 +3,7 @@
 #include "core/common/util/return.hpp"
 #include "core/common/time/time.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
-#include "core/actor_system/runtime/scheduler.hpp"
+#include "core/actor_system/runtime/scheduler/scheduler.hpp"
 #include "core/actor_system/messages/tick_messages.hpp"
 
 TickActor::TickActor(std::string name, uint64_t id, uint64_t tickMs) : Actor(std::move(name), id), tickMs_(tickMs){

@@ -4,7 +4,7 @@
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
 #include "core/perf/metrics/metrics.hpp"
-#include "core/common/os/signal_handler.hpp"
+#include "infra/platform/linux/signal_handler.hpp"
 #include "service/system/system_actor.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"

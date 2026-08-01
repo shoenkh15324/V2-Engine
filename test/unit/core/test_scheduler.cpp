@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-#include "core/actor_system/runtime/scheduler.hpp"
-#include "core/actor_system/runtime/actor_runtime.hpp"
-#include "core/actor_system/runtime/actor_registry.hpp"
-#include "core/actor_system/runtime/dispatcher/io/event_loop_epoll.hpp"
+#include "core/actor_system/runtime/scheduler/scheduler.hpp"
+#include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
+#include "core/actor_system/actor/actor_registry.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/messages/tick_messages.hpp"

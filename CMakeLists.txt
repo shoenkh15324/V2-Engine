@@ -47,8 +47,9 @@ if(NOT TARGET SDBusCpp::sdbus-c++)
 endif()
 
 # ── Internal modules ───────────────────────────────────────
-include(${CMAKE_CURRENT_LIST_DIR}/src/core/core.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/infra/infra.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/src/core/core.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/bench/bench.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/service/service.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
 

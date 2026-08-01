@@ -3,7 +3,7 @@
 #include "core/common/log/log.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/i_scheduler.hpp"
-#include "core/actor_system/runtime/i_actor_registry.hpp"
+#include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 
 Actor::Actor(std::string name, uint64_t id) : name_(std::move(name)), id_(id){}

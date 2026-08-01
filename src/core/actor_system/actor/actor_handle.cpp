@@ -1,5 +1,5 @@
 #include "actor_handle.hpp"
-#include "core/actor_system/runtime/i_actor_registry.hpp"
+#include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor.hpp"
 
 bool ActorHandle::operator==(const ActorHandle& other) const {

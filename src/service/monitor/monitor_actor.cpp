@@ -2,7 +2,7 @@
 #include "core/actor_system/messages/monitor_messages.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
-#include "core/actor_system/runtime/i_actor_registry.hpp"
+#include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/common/log/log.hpp"

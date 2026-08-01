@@ -1,7 +1,7 @@
 #include "system_actor.hpp"
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
-#include "core/common/os/signal_handler.hpp"
+#include "infra/platform/linux/signal_handler.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/actor_system/messages/system_messages.hpp"

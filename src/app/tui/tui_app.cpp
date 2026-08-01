@@ -3,7 +3,7 @@
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
-#include "core/common/os/signal_handler.hpp"
+#include "infra/platform/linux/signal_handler.hpp"
 #include "app/tui/render_util.hpp"
 #include <csignal>
 #include <ftxui/dom/elements.hpp>

@@ -15,33 +15,72 @@
 - [ ] **베이스라인 메트릭 수집**: 현재 테스트 커버리지, 빌드 시간, 바이너리 크기 기록
 
 ### 0.2 인터페이스 정의 디렉토리 구조 생성
+
+> **원칙 (Phase 0 결정사항)**
+> - **의존 방향**: `core`(내부) → `infra`(외부). core는 OS/외부 라이브러리를 알지 못함
+> - core는 **C++20 (프로젝트 전체 통일), std(+libc)만 사용**, 외부 라이브러리 링크 금지, **단독 빌드/실행 가능** (게임 엔진 코어 모델)
+> - **기존 `i_*` 파일이 이미 Port** — 신규 인터페이스는 `ITimeSource`, `IMemoryAllocator` **두 개만 추가** (과설계 방지)
+> - **Port는 각 도메인 폴더에 co-location** (별도 `common/interfaces/` 디렉토리 없음 — 기존 `i_actor_registry` 등과 동일 규칙)
+> - **OS 의존 구현체만 infra로 이관**: epoll, timerfd, pthread, signal_handler
+> - 네이밍: `IClock` → **`ITimeSource`** (CPU 클럭 혼동 방지), `IAllocator` → **`IMemoryAllocator`** (할당 대상 명시)
+
 ```
-src/core/
+src/core/                                  # 내부 원: 도메인 (Entities + Use Cases)
+│                                          # C++20, std-only, 단독 빌드/실행
 ├── actor_system/
-│   ├── runtime/
-│   │   ├── interfaces/          # NEW: 순수 인터페이스만
-│   │   │   ├── i_clock.hpp
-│   │   │   ├── i_allocator.hpp
-│   │   │   ├── i_logger.hpp
-│   │   │   ├── i_metrics.hpp
-│   │   │   ├── i_mailbox.hpp
-│   │   │   ├── i_timer_service.hpp
-│   │   │   ├── i_event_loop.hpp
-│   │   │   ├── i_work_dispatcher.hpp
-│   │   │   ├── i_scheduler.hpp
-│   │   │   ├── i_actor_registry.hpp
-│   │   │   ├── i_supervisor.hpp
-│   │   │   ├── i_dead_letter_queue.hpp
-│   │   │   └── i_lifecycle_handler.hpp
-│   │   └── ... (기존 구현체들)
-│   └── ...
-├── common/
-│   ├── interfaces/              # NEW: 공통 인터페이스
-│   │   ├── i_clock.hpp
-│   │   │   ├── i_allocator.hpp
-│   │   │   ├── i_logger.hpp
-│   │   │   └── i_metrics.hpp
-│   └── ... (기존 유틸리티들)
+│   ├── actor/                             # [Entities] 액터 신원·참조·조회
+│   │   ├── actor.hpp/cpp
+│   │   ├── actor_handle.hpp/cpp
+│   │   ├── i_actor_registry.hpp           # MOVE: runtime/ → actor/ (묶음화)
+│   │   └── actor_registry.hpp/cpp         # MOVE: runtime/ → actor/
+│   ├── messages/                          # [Entities] 메시지 계약
+│   │   ├── message.hpp/cpp
+│   │   └── message_traits.hpp
+│   ├── runtime/                           # [Use Cases] 처리 오케스트레이션
+│   │   ├── actor_runtime/actor_runtime.hpp/cpp
+│   │   ├── i_actor_runtime.hpp            # 유지
+│   │   ├── i_scheduler.hpp                # 유지 (Port)
+│   │   ├── scheduler/scheduler.hpp/cpp    # 유지 (Timer는 infra로)
+│   │   ├── dispatcher/
+│   │   │   ├── worker.hpp/cpp             # pthread 호출은 infra로 분리
+│   │   │   ├── i_work_dispatcher.hpp      # 유지 (Port)
+│   │   │   ├── work_dispatcher.hpp/cpp
+│   │   │   └── io/
+│   │   │       └── i_event_loop.hpp       # 유지 (Port, 도메인 co-location)
+│   │   └── supervisor/
+│   │       ├── i_supervisor.hpp           # 유지 (Port)
+│   │       ├── supervisor.hpp/cpp
+│   │       ├── i_supervised.hpp
+│   │       └── dead_letter_queue.hpp/cpp
+│   └── actor_system.hpp/cpp               # Composition Root + createDefault()
+├── common/                                # 공용 도메인 (Port는 각 도메인에 co-location)
+│   ├── time/                              # 순수 수치 변환 + ITimeSource
+│   │   ├── time.hpp
+│   │   └── i_time_source.hpp              # NEW (IClock → ITimeSource)
+│   ├── memory/                            # std-only 순수 구현 + IMemoryAllocator
+│   │   ├── memory_pool.hpp
+│   │   └── i_memory_allocator.hpp         # NEW (IAllocator → IMemoryAllocator)
+│   ├── log/log.hpp/cpp                    # 유지 (fprintf/std — std-only)
+│   ├── container/                         # lock_free_mpsc_queue, ring_buffer, cache_line
+│   ├── config/                            # 설정 타입만 (구조체)
+│   └── util/                              # 기존 유지
+└── perf/metrics/                          # [Entities] Metrics → 인스턴스 기반 (Phase 1.5)
+
+src/infra/                                 # 외부 원: Adapters — OS/외부 라이브러리 의존만
+├── platform/linux/
+│   ├── event_loop_epoll.hpp/cpp           # MOVE: dispatcher/io/ (IEventLoop 구현)
+│   ├── timer_fd.hpp/cpp                   # MOVE: common/time/timer (timerfd)
+│   └── signal_handler.hpp/cpp             # MOVE: common/os/
+├── threading/
+│   └── posix_thread.hpp/cpp               # worker의 pthread_setname_np 분리
+├── memory/
+│   └── memory_pool_allocator.hpp/cpp      # IMemoryAllocator 구현 (MemoryPoolT 어댑터)
+├── config/json_config_loader.hpp/cpp      # nlohmann_json 의존
+├── ui/ftxui_renderer.hpp/cpp              # ftxui 의존
+└── mock/                                  # MockTimeSource, MockAllocator, TestRegistry
+
+bench/                                     # 벤치마크 (core의 소비자)
+app/                                       # CLI/TUI/main (기존)
 ```
 
 ### 0.3 의존성 주입 컨테이너 도입 (경량)
@@ -75,15 +114,15 @@ target_link_libraries(v2_core PUBLIC
 
 ### 1.2 핵심 인터페이스 정의 (P0-2)
 
-#### 1.2.1 `core/common/interfaces/i_clock.hpp`
+#### 1.2.1 `core/common/time/i_time_source.hpp`
 ```cpp
 #pragma once
 #include <chrono>
 #include <cstdint>
 
-class IClock {
+class ITimeSource {
 public:
-    virtual ~IClock() = default;
+    virtual ~ITimeSource() = default;
     using TimePoint = std::chrono::steady_clock::time_point;
     using Duration = std::chrono::steady_clock::duration;
 
@@ -97,15 +136,15 @@ public:
 };
 ```
 
-#### 1.2.2 `core/common/interfaces/i_allocator.hpp`
+#### 1.2.2 `core/common/memory/i_memory_allocator.hpp`
 ```cpp
 #pragma once
 #include <cstddef>
 #include <cstdint>
 
-class IAllocator {
+class IMemoryAllocator {
 public:
-    virtual ~IAllocator() = default;
+    virtual ~IMemoryAllocator() = default;
     virtual void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) = 0;
     virtual void deallocate(void* ptr, size_t size, size_t alignment = alignof(std::max_align_t)) = 0;
     virtual size_t allocatedBytes() const noexcept = 0;
@@ -113,7 +152,7 @@ public:
 };
 ```
 
-#### 1.2.3 `core/common/interfaces/i_logger.hpp`
+#### 1.2.3 `core/common/log/i_logger.hpp`
 ```cpp
 #pragma once
 #include <string_view>
@@ -131,7 +170,7 @@ public:
 };
 ```
 
-#### 1.2.4 `core/actor_system/runtime/interfaces/i_metrics.hpp`
+#### 1.2.4 `core/perf/metrics/i_metrics.hpp`
 ```cpp
 #pragma once
 #include <cstdint>
@@ -165,7 +204,7 @@ public:
 };
 ```
 
-#### 1.2.5 `core/actor_system/runtime/interfaces/i_mailbox.hpp`
+#### 1.2.5 `core/actor_system/runtime/i_mailbox.hpp`
 ```cpp
 #pragma once
 #include "core/actor_system/messages/message.hpp"
@@ -182,7 +221,7 @@ public:
 };
 ```
 
-#### 1.2.6 `core/actor_system/runtime/interfaces/i_timer_service.hpp`
+#### 1.2.6 `core/actor_system/runtime/i_timer_service.hpp`
 ```cpp
 #pragma once
 #include <cstdint>
@@ -201,7 +240,7 @@ public:
 };
 ```
 
-#### 1.2.7 `core/actor_system/runtime/interfaces/i_lifecycle_handler.hpp`
+#### 1.2.7 `core/actor_system/runtime/i_lifecycle_handler.hpp`
 ```cpp
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
@@ -470,21 +509,24 @@ public:
 ### 2.1 디렉토리 구조 재편
 ```
 src/
-├── core/                          # 순수 인터페이스 + 도메인 로직만
+├── core/                          # 순수 인터페이스 + 도메인 로직만 (Port는 도메인 co-location)
 │   ├── actor_system/
 │   │   ├── runtime/
-│   │   │   ├── interfaces/        # 모든 인터페이스
-│   │   │   ├── actor_runtime.hpp  # 경량화된 런타임
+│   │   │   ├── i_actor_runtime.hpp     # Port (co-location)
+│   │   │   ├── i_scheduler.hpp         # Port (co-location)
+│   │   │   ├── i_timer_service.hpp     # Port (co-location)
+│   │   │   ├── actor_runtime.hpp       # 경량화된 런타임
 │   │   │   ├── lifecycle_handler.hpp
-│   │   │   └── ...
+│   │   │   └── dispatcher/
+│   │   │       ├── i_work_dispatcher.hpp   # Port (co-location)
+│   │   │       └── io/i_event_loop.hpp     # Port (co-location)
 │   │   └── ...
 │   ├── common/
-│   │   ├── interfaces/
-│   │   ├── time.hpp               # IClock만 정의
-│   │   ├── log.hpp                # ILogger만 정의
-│   │   ├── memory.hpp             # IAllocator만 정의
-│   │   └── metrics.hpp            # IMetrics만 정의
-│   └── perf/                      # 벤치마크 인터페이스만 (선택적)
+│   │   ├── time/i_time_source.hpp     # ITimeSource만 정의 (co-location)
+│   │   ├── log/i_logger.hpp           # ILogger만 정의 (co-location)
+│   │   ├── memory/i_memory_allocator.hpp  # IMemoryAllocator만 정의 (co-location)
+│   │   └── ...
+│   └── perf/metrics/i_metrics.hpp     # IMetrics만 정의 (co-location)
 │
 ├── infra/                         # 모든 구현체
 │   ├── platform/
@@ -527,7 +569,7 @@ src/
 #### 2.2.1 `infra/platform/linux/epoll_event_loop.hpp`
 ```cpp
 // src/core/actor_system/runtime/dispatcher/io/event_loop_epoll.hpp → 이관
-#include "core/actor_system/runtime/interfaces/i_event_loop.hpp"
+#include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 
 class EpollEventLoop : public IEventLoop {
     // 기존 EventLoopEpoll 구현 거의 그대로
@@ -538,7 +580,7 @@ class EpollEventLoop : public IEventLoop {
 #### 2.2.2 `infra/platform/linux/timer_fd_timer.hpp`
 ```cpp
 // src/core/common/time/timer.hpp/cpp → 이관
-#include "core/actor_system/runtime/interfaces/i_timer_service.hpp"
+#include "core/actor_system/runtime/i_timer_service.hpp"
 
 class TimerFdTimer : public ITimerService {
     // 기존 Timer 구현 거의 그대로
@@ -549,7 +591,7 @@ class TimerFdTimer : public ITimerService {
 #### 2.2.3 `infra/platform/linux/posix_thread.hpp`
 ```cpp
 // worker.cpp의 pthread_setname_np 등 추출
-#include "core/common/interfaces/i_thread.hpp"
+#include "core/actor_system/runtime/dispatcher/i_thread.hpp"
 
 class PosixThread : public IThread {
     void setName(std::string_view name) override {
@@ -563,12 +605,12 @@ class PosixThread : public IThread {
 
 #### 2.3.1 `infra/memory/memory_pool_allocator.hpp`
 ```cpp
-#include "core/common/interfaces/i_allocator.hpp"
+#include "core/common/memory/i_memory_allocator.hpp"
 #include "core/common/memory/slab.hpp"
 #include "core/common/memory/size_class.hpp"
 #include "core/common/memory/thread_local_cache.hpp"
 
-class MemoryPoolAllocator : public IAllocator {
+class MemoryPoolAllocator : public IMemoryAllocator {
     // 기존 MemoryPoolT 구현을 IAllocator로 래핑
     // 디버그 정책, 할당 정책 템플릿 파라미터로 외부화
 };
@@ -578,7 +620,7 @@ class MemoryPoolAllocator : public IAllocator {
 
 #### 2.4.1 `infra/logging/file_logger.hpp`
 ```cpp
-#include "core/common/interfaces/i_logger.hpp"
+#include "core/common/log/i_logger.hpp"
 
 class FileLogger : public ILogger {
     std::mutex mutex_;
@@ -600,7 +642,7 @@ class FileLogger : public ILogger {
 
 #### 2.5.1 `infra/metrics/metrics_collector.hpp`
 ```cpp
-#include "core/common/interfaces/i_metrics.hpp"
+#include "core/perf/metrics/i_metrics.hpp"
 
 class MetricsCollector : public IMetrics {
     // 기존 Metrics 구현 거의 그대로
@@ -1015,7 +1057,7 @@ struct RuntimeConfig {
 
 ### 4.3 IMailbox 인터페이스화 및 LockFreeMpscQueue 분리 (P2-3)
 
-**파일**: `src/core/actor_system/runtime/interfaces/i_mailbox.hpp` (이미 Phase 1에서 정의)
+**파일**: `src/core/actor_system/runtime/i_mailbox.hpp` (이미 Phase 1에서 정의)
 
 ```cpp
 // src/core/common/container/lock_free_mpsc_queue.hpp → 구현체로 이동
@@ -1110,9 +1152,9 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 | `core/common/time/timer.hpp/cpp` | `infra/platform/linux/timer_fd_timer.hpp/cpp` | `ITimerService` 구현 |
 | `core/common/os/epoll.hpp/cpp` | `infra/platform/linux/epoll.hpp/cpp` | 내부 구현 |
 | `core/common/os/signal_handler.hpp/cpp` | `infra/platform/linux/signal_handler.hpp/cpp` | 내부 구현 |
-| `core/common/log/log.hpp/cpp` | `core/common/interfaces/i_logger.hpp` + `infra/logging/file_logger.hpp/cpp` | 인터페이스/구현 분리 |
-| `core/perf/metrics/metrics.hpp/cpp` | `core/common/interfaces/i_metrics.hpp` + `infra/metrics/metrics_collector.hpp/cpp` | 인터페이스/구현 분리 |
-| `core/common/memory/memory_pool.hpp` | `core/common/interfaces/i_allocator.hpp` + `infra/memory/memory_pool_allocator.hpp/cpp` | 인터페이스/구현 분리 |
+| `core/common/log/log.hpp/cpp` | `core/common/log/i_logger.hpp` + `infra/logging/file_logger.hpp/cpp` | 인터페이스/구현 분리 |
+| `core/perf/metrics/metrics.hpp/cpp` | `core/perf/metrics/i_metrics.hpp` + `infra/metrics/metrics_collector.hpp/cpp` | 인터페이스/구현 분리 |
+| `core/common/memory/memory_pool.hpp` | `core/common/memory/i_memory_allocator.hpp` + `infra/memory/memory_pool_allocator.hpp/cpp` | 인터페이스/구현 분리 |
 | `core/actor_system/messages/message.hpp` | `core/actor_system/messages/message.hpp` (인터페이스 유지) + `infra/messaging/message_factory.hpp` | 팩토리 분리 |
 | `core/core.cmake` | `core/core.cmake` (인터페이스만) + `infra/infra.cmake` (구현체) | CMake 분리 |
 

@@ -1,5 +1,5 @@
 #include "work_dispatcher.hpp"
-#include "core/actor_system/runtime/actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/perf/metrics/metrics.hpp"
 
