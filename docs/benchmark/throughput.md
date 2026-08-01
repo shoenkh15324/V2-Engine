@@ -148,14 +148,14 @@ push부터 handle까지의 **최대 메시지 처리율**을 측정합니다. �
 
 ```
 메인 스레드:  receiveMsg(Tick)
-    └→ ActorContext::enqueue()
+    └→ ActorRuntime::enqueue()
         ├→ Mailbox::push()           [뮤텍스 1]
         └→ Dispatcher::dispatch()
             ├→ readyQueue_.push()    [뮤텍스 2]
             └→ sema_.release()       [세마포어 신호]
 
 워커 스레드:  sema_.acquire()      [세마포어 대기]
-    └→ ActorContext::run(maxBatch)
+    └→ ActorRuntime::run(maxBatch)
         └→ Mailbox::pop()            [뮤텍스 3]
             └→ Actor::handle()
                 └→ counter_.fetch_add(1)

@@ -9,6 +9,8 @@
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 
+inline constexpr size_t kPendingOpsCapacity = 128;
+
 class EventLoopEpoll : public IEventLoop {
 public:
     explicit EventLoopEpoll(int maxEvents = 64, int waitTimeoutMs = 1000);
@@ -33,7 +35,7 @@ private:
     std::vector<epoll_event> epollEvents_;
     std::mutex handlersMutex_;
     std::unordered_map<WatchedFd, Handler> handlers_;
-    LockFreeMpscQueue<std::function<void()>> pendingOps_{128};
+    LockFreeMpscQueue<std::function<void()>> pendingOps_{kPendingOpsCapacity};
     Epoll epoll_;
     int stopFd_ = -1;
     int maxEvents_ = 64;

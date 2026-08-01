@@ -1,6 +1,7 @@
 #include "actor_registry.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
+#include "core/common/log/log.hpp"
 
 ActorHandle ActorRegistry::findByName(const std::string& name){
     std::lock_guard lock(mutex_);
@@ -42,6 +43,11 @@ void ActorRegistry::add(Actor* actor){
     std::lock_guard lock(mutex_);
     uint64_t id = actor->id();
     uint64_t gen = generations_[id]++;
+    auto nameIt = byName_.find(actor->name());
+    if(nameIt != byName_.end() && (nameIt->second.actor != actor)){
+        V2_LOG_ERROR("Actor name '{}' already registered by id {}, overwriting with id {}",
+                     actor->name().c_str(), nameIt->second.actor->id(), id);
+    }
     byName_[actor->name()] = {actor, gen};
     byId_[id] = {actor, gen};
     actor->setGeneration(gen);
@@ -51,7 +57,10 @@ void ActorRegistry::remove(Actor* actor){
     std::lock_guard lock(mutex_);
     uint64_t id = actor->id();
     generations_[id]++;
-    byName_.erase(actor->name());
+    auto nameIt = byName_.find(actor->name());
+    if((nameIt != byName_.end()) && (nameIt->second.actor == actor)){
+        byName_.erase(nameIt); // 다른 액터가 같은 이름을 재사용했으면 건드리지 않음
+    }
     byId_.erase(id);
 }
 

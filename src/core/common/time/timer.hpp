@@ -55,7 +55,7 @@ private:
 
     int allocNode(); // 슬롯 할당 (free list 우선)
     void freeNode(int idx); // 슬롯 해제 (free list에 추가)
-    void excuteExpiredTimers();
+    void executeExpiredTimers();
     void scheduleNextTimer(const Clock::time_point& now);
 
     Compare compare_{&pool_};

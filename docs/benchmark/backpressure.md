@@ -254,7 +254,7 @@ bool push(U&& msg){
 // 워커 루프
 void Worker::runLoop(){
     while(running_){
-        ActorContext* actorCtx = dispatcher_->acquire();   // 세마포어 차단
+        ActorRuntime* actorCtx = dispatcher_->acquire();   // 세마포어 차단
         if(!actorCtx) break;
         int processed = actorCtx->run(maxBatch_);          // 배치 처리
     }

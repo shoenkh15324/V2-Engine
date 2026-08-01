@@ -45,7 +45,7 @@ TEST(ActorSystemIntegration, FullLifeCycle){
     EXPECT_EQ(a->openCount, 1);
 
     // sendMsg: actor_a -> actor_a (self)
-    // dispatcher dispatch → worker acquire → ActorContext::run → handle(Tick)
+    // dispatcher dispatch → worker acquire → ActorRuntime::run → handle(Tick)
     a->sendMsg("actor_a", Message::make(Tick{}));
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_GE(a->tickCount, 1);

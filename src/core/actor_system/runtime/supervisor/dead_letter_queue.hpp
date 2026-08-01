@@ -4,6 +4,8 @@
 #include "core/actor_system/messages/message.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 
+inline constexpr size_t kDeadLetterQueueCapacity = 128;
+
 struct DeadLetter{
     uint64_t actorId = 0;
     std::string actorName = "";
@@ -14,7 +16,7 @@ struct DeadLetter{
 
 class DeadLetterQueue{
 public:
-    explicit DeadLetterQueue(size_t capacity = 128) : queue_(capacity){}
+    explicit DeadLetterQueue(size_t capacity = kDeadLetterQueueCapacity) : queue_(capacity){}
     ~DeadLetterQueue() = default;
 
     DeadLetterQueue(const DeadLetterQueue&) = delete;

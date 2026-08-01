@@ -90,7 +90,7 @@ void Timer::start(){
                 continue;
             }
             lock.unlock();
-            excuteExpiredTimers();
+            executeExpiredTimers();
         }
     });
 #endif
@@ -131,7 +131,7 @@ void Timer::handleTimerEvent(){
         }while(r < 0 && errno == EINTR);
     }
 #endif
-    excuteExpiredTimers();
+    executeExpiredTimers();
 }
 
 bool Timer::isRepeating(int id) const {
@@ -163,7 +163,7 @@ void Timer::freeNode(int idx){
     freeList_.push_back(idx);
 }
 
-void Timer::excuteExpiredTimers(){
+void Timer::executeExpiredTimers(){
     struct ReadyNode{
         int64_t id;
         Callback cb;
