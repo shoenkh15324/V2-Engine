@@ -78,7 +78,7 @@ public:
             return result;
         }
         
-        if(ops_->cloneAllocate) return {};
+        if(!ops_->cloneAllocate) return {};
         result.storage_.ptr = ops_->cloneAllocate(data());
         result.id_ = id_;
         result.ops_ = ops_;
@@ -115,33 +115,45 @@ private:
 
     template<typename T>
     static const MessageOps* opsFor(){
-        static constexpr auto isPool = (sizeof(T) > kInlineSize) || (alignof(T) > alignof(std::max_align_t)) || !std::is_nothrow_move_constructible_v<T>;
+        static constexpr bool isPool = (sizeof(T) > kInlineSize) || (alignof(T) > alignof(std::max_align_t)) || !std::is_nothrow_move_constructible_v<T>;
         static constexpr bool isCopyable = std::is_copy_constructible_v<T>;
         if constexpr (isPool){
-            static constexpr MessageOps ops = {
-                .destroy = [](void* p){ MemoryPool::instance().deallocate(static_cast<T*>(p)); },
-                .move = [](void* dst, void* src){
-                    ::new(dst) T(std::move(*static_cast<T*>(src)));
-                    static_cast<T*>(src)->~T();
-                },
-                .cloneConstruct = nullptr,
-                .cloneAllocate = isCopyable ? (+[](const void* src) -> void*{
-                    return MemoryPool::instance().allocate<T>(*static_cast<const T*>(src));
-                }) : nullptr,
-            };
+            static constexpr MessageOps ops = []{
+                MessageOps ops{
+                    .destroy = [](void* p){ MemoryPool::instance().deallocate(static_cast<T*>(p)); },
+                    .move = [](void* dst, void* src){
+                        ::new(dst) T(std::move(*static_cast<T*>(src)));
+                        static_cast<T*>(src)->~T();
+                    },
+                    .cloneConstruct = nullptr,
+                    .cloneAllocate = nullptr,
+                };
+                if constexpr (isCopyable){
+                    ops.cloneAllocate = [](const void* src) -> void*{
+                        return MemoryPool::instance().allocate<T>(*static_cast<const T*>(src));
+                    };
+                }
+                return ops;
+            }();
             return &ops;
         }else{
-            static constexpr MessageOps ops = {
-                .destroy = [](void* p){ static_cast<T*>(p)->~T(); },
-                .move = [](void* dst, void* src){
-                    ::new(dst) T(std::move(*static_cast<T*>(src)));
-                    static_cast<T*>(src)->~T();
-                },
-                .cloneConstruct = isCopyable ? (+[](void* dst, const void* src){
-                    ::new(dst) T(*static_cast<const T*>(src));
-                }) : nullptr,
-                .cloneAllocate = nullptr,
-            };
+            static constexpr MessageOps ops = []{
+                MessageOps ops{
+                    .destroy = [](void* p){ static_cast<T*>(p)->~T(); },
+                    .move = [](void* dst, void* src){
+                        ::new(dst) T(std::move(*static_cast<T*>(src)));
+                        static_cast<T*>(src)->~T();
+                    },
+                    .cloneConstruct = nullptr,
+                    .cloneAllocate = nullptr,
+                };
+                if constexpr (isCopyable){
+                    ops.cloneConstruct = [](void* dst, const void* src){
+                        ::new(dst) T(*static_cast<const T*>(src));
+                    };
+                }
+                return ops;
+            }();
             return &ops;
         }
     }

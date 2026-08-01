@@ -7,6 +7,7 @@ endfunction()
 
 add_v2_test(test_ring_buffer core/test_ring_buffer.cpp)
 add_v2_test(test_mailbox core/test_mpsc_queue.cpp)
+add_v2_test(test_message core/test_message.cpp)
 add_v2_test(test_actor_registry core/test_actor_registry.cpp)
 add_v2_test(test_timer core/test_timer.cpp)
 add_v2_test(test_work_dispatcher core/test_work_dispatcher.cpp)
