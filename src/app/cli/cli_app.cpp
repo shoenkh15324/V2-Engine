@@ -37,16 +37,6 @@ CliApp::CliApp() : subCmds_{ // name, usage, description
         {"disable", "", "Disable metrics"},
         {"snapshot", "", "Show metrics snapshot"},
         {"reset", "", "Reset metrics"},
-    }},
-    {"benchmark", {}, "Performance benchmarks", {
-        {"throughput", "[--workers N] [--actors N] [--iterations N] [--maxbatch N] [--warmup N] [--mailbox N]", "Measure message throughput"},
-        {"latency", "[--workers N] [--iterations N] [--maxbatch N] [--warmup N] [--mailbox N]", "Measure per-message end-to-end latency"},
-        {"contention", "[--workers N] [--producers N] [--iterations N] [--maxbatch N] [--warmup N] [--mailbox N]", "Measure multi-producer contention"},
-        {"scaling", "[--iterations N] [--maxbatch N] [--warmup N] [--scale-max N]", "Measure worker and actor scaling"},
-        {"backpressure", "[--workers N] [--maxbatch N] [--mailbox N] [--flood-rate N] [--flood-duration N]", "Measure mailbox overflow behavior"},
-        {"scheduler", "[--workers N] [--maxbatch N] [--interval N] [--duration N]", "Measure timer scheduling precision"},
-        {"list", "", "List available benchmarks"},
-        {"all", "[--workers N] [--iterations N]", "Run all benchmarks"},
     }}
 }{
     //

@@ -2,7 +2,6 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "infra/hal/pmu/i_pmu.hpp"
 #include "core/actor_system/messages/network_manager/wifi_messages.hpp"
-#include "bench/benchmark.hpp"
 #include <string>
 #include <vector>
 #include <functional>
@@ -31,7 +30,6 @@ private:
     std::string handlePmu(const std::vector<std::string>& args);
     std::string handleWifi(const std::vector<std::string>& args);
     std::string handleMetrics(const std::vector<std::string>& args);
-    std::string handleBenchmark(const std::vector<std::string>& args);
 
     // Actor helpers
     std::string doActorList();
@@ -43,9 +41,6 @@ private:
 
     // Metrics helpers
     std::string formatMetricsSnapshot();
-
-    // Benchmark helpers
-    std::string formatBenchmarkResult(const BenchmarkResult& result);
 
     std::unordered_map<std::string, Handler> handlers_;
     std::unique_ptr<IPmu> pmu_;
