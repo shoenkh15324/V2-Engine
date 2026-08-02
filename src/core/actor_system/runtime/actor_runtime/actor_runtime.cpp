@@ -8,7 +8,6 @@
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
-#include "core/actor_system/messages/cmd_messages.hpp"
 
 ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop, ISupervisor* supervisor)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){

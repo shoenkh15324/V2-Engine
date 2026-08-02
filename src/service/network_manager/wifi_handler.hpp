@@ -1,6 +1,6 @@
 #pragma once
 #include "core/common/config/platform_config.h"
-#include "core/actor_system/messages/network_manager/wifi_messages.hpp"
+#include "service/network_manager/wifi_messages.hpp"
 #include <cstdint>
 #include <string>
 #include <memory>

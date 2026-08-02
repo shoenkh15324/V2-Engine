@@ -5,7 +5,7 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/common/util/return.hpp"
-#include "core/actor_system/messages/tick_messages.hpp"
+#include "service/tick/tick_messages.hpp"
 #include <thread>
 #include <atomic>
 #include <chrono>

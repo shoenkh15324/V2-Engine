@@ -1,7 +1,7 @@
 #pragma once
 #include "core/common/config/platform_config.h"
 #include <string>
-#include "message_traits.hpp"
+#include "core/actor_system/messages/message_traits.hpp"
 
 struct CmdRequest{
     static constexpr MessageId kId = MessageId::CmdRequest;
@@ -13,12 +13,4 @@ struct CmdResponse{
     static constexpr MessageId kId = MessageId::CmdResponse;
     ConnHandle conn;
     std::string result;
-};
-
-struct ActorEnableRequest{
-    static constexpr MessageId kId = MessageId::ActorEnableRequest;
-};
-
-struct ActorDisableRequest{
-    static constexpr MessageId kId = MessageId::ActorDisableRequest;
 };

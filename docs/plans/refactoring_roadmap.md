@@ -1,6 +1,6 @@
 # V2-Engine Core Layer 리팩토링 로드맵
 
-> **목표**: Core Layer를 Clean Architecture 원칙에 부합하는 순수 비즈니스 로직 계층으로 재구축
+> **목표**: Core Layer와 Service Layer를 Clean Architecture 원칙에 부합하는 순수 계층으로 재구축 (포트 소유권 정리 포함)
 > **기간**: 약 7-10주 (Phase 1-4)
 > **기준선**: 현재 총점 20/70 → 목표 60+/70
 
@@ -23,6 +23,17 @@
 > - **Port는 각 도메인 폴더에 co-location** (별도 `common/interfaces/` 디렉토리 없음 — 기존 `i_actor_registry` 등과 동일 규칙)
 > - **OS 의존 구현체만 infra로 이관**: epoll, timerfd, pthread, signal_handler
 > - 네이밍: `IClock` → **`ITimeSource`** (CPU 클럭 혼동 방지), `IAllocator` → **`IMemoryAllocator`** (할당 대상 명시)
+>
+> **추가 원칙 (Phase 1 보강)**
+> - **포트 소유권 = 소비자 소유 (DIP)**: 인터페이스는 **사용하는 계층이 소유**, infra는 구현체만 소유
+>   - 예: `IPmu`/`ISys`/`II2c`는 소비자(`cmd`, `monitor`)가 있는 `service/ports/`로 이전. 구현체(`PmuRsp5`, `SysLinux`)는 infra 유지
+>   - 인터페이스가 공급자(infra)에 있으면 의존 화살표가 `service → infra`로 새므로 위반. 인터페이스 위치가 곧 의존 방향
+> - **메시지도 co-location**: 서비스 전용 메시지(`dbus`, `wifi`, `cmd`, `ipc`, `monitor`, `tick`, `device_manager`)는 소유 서비스 폴더로. core `messages/`는 엔진 범용 타입만
+> - **Composition Root는 app**: 구체 타입 생성/주입은 app에서만. core/service에서 infra 구체 타입 `#include` 및 `new` 금지
+> - **플랫폼 분기 금지**: service에서 `#if V2_PLATFORM_*`로 구현체 선택 금지 → 생성자 주입/팩토리로 위임 (하드웨어 결정은 배포 문제이지 비즈니스 로직 문제가 아님)
+> - **service는 core + 자체 포트만 의존**: infra 및 3rd-party(`nlohmann_json`, `sdbus` 등) 직접 참조 금지
+> - **서비스 간 결합은 메시지로**: 구체 액터 헤더 직접 include 대신 메시지/레지스트리 조회
+> - **빌드 시스템이 경계를 강제**: CMake 타깃 의존성(`v2_core → v2_service → v2_infra → v2_app`)으로 계층 위반을 컴파일 단계에서 검출
 
 ```
 src/core/                                  # 내부 원: 도메인 (Entities + Use Cases)
@@ -37,10 +48,12 @@ src/core/                                  # 내부 원: 도메인 (Entities + U
 │   │   ├── message.hpp/cpp
 │   │   └── message_traits.hpp
 │   ├── runtime/                           # [Use Cases] 처리 오케스트레이션
-│   │   ├── actor_runtime/actor_runtime.hpp/cpp
-│   │   ├── i_actor_runtime.hpp            # 유지
-│   │   ├── i_scheduler.hpp                # 유지 (Port)
-│   │   ├── scheduler/scheduler.hpp/cpp    # 유지 (Timer는 infra로)
+|   |   ├── actor_runtime
+│   │   |   ├── actor_runtime/actor_runtime.hpp/cpp
+│   │   |   └── i_actor_runtime.hpp            # 유지
+|   |   ├── scheduler
+│   │   │   ├── i_scheduler.hpp                # 유지 (Port)
+│   │   │   └── scheduler/scheduler.hpp/cpp    # 유지 (Timer는 infra로)
 │   │   ├── dispatcher/
 │   │   │   ├── worker.hpp/cpp             # pthread 호출은 infra로 분리
 │   │   │   ├── i_work_dispatcher.hpp      # 유지 (Port)
@@ -52,18 +65,32 @@ src/core/                                  # 내부 원: 도메인 (Entities + U
 │   │       ├── supervisor.hpp/cpp
 │   │       ├── i_supervised.hpp
 │   │       └── dead_letter_queue.hpp/cpp
-│   └── actor_system.hpp/cpp               # Composition Root + createDefault()
-├── common/                                # 공용 도메인 (Port는 각 도메인에 co-location)
-│   ├── time/                              # 순수 수치 변환 + ITimeSource
-│   │   ├── time.hpp
-│   │   └── i_time_source.hpp              # NEW (IClock → ITimeSource)
-│   ├── memory/                            # std-only 순수 구현 + IMemoryAllocator
-│   │   ├── memory_pool.hpp
-│   │   └── i_memory_allocator.hpp         # NEW (IAllocator → IMemoryAllocator)
-│   ├── log/log.hpp/cpp                    # 유지 (fprintf/std — std-only)
-│   ├── container/                         # lock_free_mpsc_queue, ring_buffer, cache_line
-│   ├── config/                            # 설정 타입만 (구조체)
-│   └── util/                              # 기존 유지
+│   └── actor_system.hpp/cpp               # 엔진 조립 API (createDefault는 편의 팩토리, 실배선은 app에서)
+├── common/                                # 공용 도메인 — std(+libc) 전용, OS/3rd-party 무의존
+│   ├── config/                            # 설정 POCO 타입 + 컴파일타임 탐지만
+│   │   ├── platform_config.h              # 유지 — V2_PLATFORM_*/V2_COMPILER_* 탐지 (OS 호출 없음)
+│   │   ├── runtime_config.h               # 유지 — 설정 구조체만 (epoll 필드명은 eventLoop로 일반화)
+│   │   └── runtime_config.cpp             # (정리) — nlohmann 파싱 제거 → infra/config/로 이관
+│   ├── container/                         # std-only 순수 컨테이너 (인터페이스도 core co-location)
+│   │   ├── cache_line.hpp                 # 유지 — 캐시라인 정렬
+│   │   ├── lock_free_mpsc_queue.hpp       # 유지 — MPSC 메일박스 큐 (구현체)
+│   │   └── ring_buffer.hpp/cpp            # 유지 — 바이트 링 버퍼 (IByteBuffer 분리는 Phase 4.4)
+│   ├── time/                              # 시간 도메인
+│   │   ├── i_time_source.hpp              # 유지 (IClock → ITimeSource) — Port
+│   │   ├── time.hpp/cpp                   # 유지 — 순수 수치 변환 + now() (std::chrono)
+│   │   └── sleep.hpp                      # MOVE: util/ → time/ (시간 관련 std-only)
+│   ├── memory/                            # 메모리 도메인 — 순수 구현
+│   │   ├── i_memory_allocator.hpp         # NEW (IAllocator → IMemoryAllocator) — Port
+│   │   ├── memory_pool.hpp                # 유지 — MemoryPoolT 순수 구현
+│   │   ├── slab.hpp / size_class.hpp      # 유지 — slab 할당기 / 크기 클래스
+│   │   ├── chunk.hpp / free_list.hpp      # 유지 — 청크 / 자유 목록
+│   │   └── thread_local_cache.hpp         # 유지 — TLC 캐시
+│   ├── log/                               # 로깅 도메인
+│   │   ├── i_logger.hpp                   # NEW (Phase 1.2.3) — Port (ILogger)
+│   │   └── log.hpp/cpp                    # 유지 (fprintf/std — std-only 기본 구현)
+│   └── util/                              # 공용 유틸 (std-only)
+│       ├── return.hpp                     # 유지 — Ok/Fail + Result<T>
+│       └── debug.hpp                      # 유지 — V2_ASSERT (iostream)
 └── perf/metrics/                          # [Entities] Metrics → 인스턴스 기반 (Phase 1.5)
 
 src/infra/                                 # 외부 원: Adapters — OS/외부 라이브러리 의존만
@@ -79,8 +106,41 @@ src/infra/                                 # 외부 원: Adapters — OS/외부 
 ├── ui/ftxui_renderer.hpp/cpp              # ftxui 의존
 └── mock/                                  # MockTimeSource, MockAllocator, TestRegistry
 
+src/service/                             # Use Cases — 비즈니스 로직 (core + 자체 포트만 의존)
+├── device_manager/
+│   ├── device_manager_actor.hpp/cpp
+│   └── device_manager_messages.hpp       # MOVE: core/messages/ → 여기
+├── network_manager/
+│   ├── network_manager_actor.hpp/cpp
+│   ├── network_manager_messages.hpp      # MOVE: core/messages/network_manager/ → 여기
+│   └── wifi_messages.hpp                 # MOVE: core/messages/network_manager/ → 여기
+├── monitor/
+│   ├── monitor_actor.hpp/cpp
+│   ├── monitor_messages.hpp              # MOVE: core/messages/ → 여기
+│   └── monitor_data.hpp                  # 유지 (공유 POCO)
+├── dbus/
+│   ├── dbus_actor.hpp/cpp
+│   ├── dbus_messages.hpp                 # MOVE: core/messages/ → 여기
+│   └── i_dbus_handler.hpp                # Port — 구현(sdbus)은 infra
+├── ipc/
+│   ├── ipc_server_actor.hpp/cpp
+│   ├── ipc_messages.hpp                  # MOVE: core/messages/ → 여기
+│   └── i_ipc_server.hpp                  # Port — 구현(UdsServer)은 infra
+├── cmd/
+│   ├── cmd_actor.hpp/cpp
+│   └── cmd_messages.hpp                  # MOVE: core/messages/ → 여기
+├── system/
+│   └── system_actor.hpp/cpp              # signal_handler 호출은 infra로
+├── tick/
+│   ├── tick_actor.hpp/cpp
+│   └── tick_messages.hpp                 # MOVE: core/messages/ → 여기
+└── ports/                                # 서비스 소유 포트 (구현체는 infra)
+    ├── i_pmu.hpp                         # MOVE: infra/hal/pmu/ → 여기
+    ├── i_sys.hpp                         # MOVE: infra/hal/sys/ → 여기
+    └── i_i2c.hpp                         # MOVE: infra/hal/i2c/ → 여기
+
 bench/                                     # 벤치마크 (core의 소비자)
-app/                                       # CLI/TUI/main (기존)
+app/                                       # CLI/TUI/main — Composition Root (기존)
 ```
 
 ### 0.3 의존성 주입 컨테이너 도입 (경량)
@@ -502,6 +562,74 @@ public:
 };
 ```
 
+### 1.6 서비스 계층 경계 복원 — 포트 소유권 정리 (P0-7)
+
+**문제**: `IPmu`/`ISys`/`II2c` 인터페이스가 `infra/hal/`에 있어 service가 infra에 의존. 또한 액터가 구현체를 `#if`로 직접 선택·생성해 하드웨어 결정이 비즈니스 로직에 침투.
+
+**파일** (인터페이스만 이동 — 구현체는 infra 유지):
+- `src/infra/hal/pmu/i_pmu.hpp` → `src/service/ports/i_pmu.hpp`
+- `src/infra/hal/sys/i_sys.hpp` → `src/service/ports/i_sys.hpp`
+- `src/infra/hal/i2c/i_i2c.hpp` → `src/service/ports/i_i2c.hpp`
+
+**리팩토링**:
+```cpp
+// Before: cmd_actor.cpp — 액터가 구현체를 직접 선택/생성
+#include "infra/hal/pmu/pmu_rsp5.hpp"
+pmu_ = [](){
+#if V2_PLATFORM_LINUX && defined(__aarch64__)
+    return std::make_unique<PmuRsp5>();
+#else
+    return std::make_unique<PmuMock>();
+#endif
+}();
+
+// After: 생성자 주입 — 구현 선택은 composition root(app)에서
+class CmdActor : public Actor {
+public:
+    CmdActor(std::string name, uint64_t id, IPmu* pmu)
+        : Actor(std::move(name), id), pmu_(pmu) {}
+private:
+    IPmu* pmu_;   // 소유하지 않음
+};
+```
+
+- [ ] 3개 HAL 포트 `service/ports/`로 이동 + 모든 include 경로 수정
+- [ ] `cmd_actor`, `monitor_actor`의 `#if` 구현 선택 제거 → 생성자 주입으로
+- [ ] 플랫폼 분기 로직은 app composition root로 이동 (`PmuRsp5`/`SysLinux`를 여기서 생성·주입)
+- [ ] `monitor_actor.cpp`의 `nlohmann_json` 직접 사용 제거 → 직렬화는 infra 어댑터로 위임
+- [ ] `monitor_actor`의 UDS 직접 사용 제거 → `IIpcServer` 포트로 교체 (구현: `uds_server`)
+
+### 1.7 서비스 전용 메시지 이관 (P0-8)
+
+**문제**: `core/actor_system/messages/`에 서비스 전용 계약이 있어 core 엔진이 비즈니스 도메인(db/wifi/cmd/...)을 앎.
+
+**원칙**: 메시지도 Port처럼 **소유 도메인(서비스) 폴더에 co-location**. core는 엔진 범용 타입만 유지.
+
+**이관 대상**:
+- `core/actor_system/messages/cmd_messages.hpp` → `service/cmd/cmd_messages.hpp`
+- `.../ipc_messages.hpp` → `service/ipc/ipc_messages.hpp`
+- `.../dbus_messages.hpp` → `service/dbus/dbus_messages.hpp`
+- `.../monitor_messages.hpp` → `service/monitor/monitor_messages.hpp`
+- `.../tick_messages.hpp` → `service/tick/tick_messages.hpp`
+- `.../device_manager_messages.hpp` → `service/device_manager/device_manager_messages.hpp`
+- `.../network_manager/network_manager_messages.hpp`, `.../network_manager/wifi_messages.hpp` → `service/network_manager/`
+
+**core에 유지**: `message.hpp`(envelope), `message_traits.hpp`, `system_messages.hpp`(엔진 수명주기 — ActorEnable/Disable/Restart)
+
+**참고**: Phase 3.4의 `V2_MESSAGE_TRAITS` 매크로로 **어떤 타입이든 메시지로 등록**되므로 core는 서비스 타입을 몰라도 됨. 서비스 간 공유 메시지는 "소유 서비스가 원천"이고 소비자는 해당 헤더만 include (데이터 계약이라 허용).
+
+- [ ] 각 서비스 메시지 파일 이관 + 모든 `#include` 경로 수정
+- [ ] 이관 후 `core/actor_system/messages/`에 서비스 타입이 안 남는지 검증 (CI 스캔)
+
+### 1.8 서비스 간 결합 완화 (P0-9)
+
+**문제**: `network_manager_actor.cpp`가 `service/dbus/dbus_actor.hpp`를 직접 include (구체 액터 타입 결합).
+
+**원칙**: 서비스 간 통신은 메시지/레지스트리 조회로. 구체 액터 헤더 include 금지.
+
+- [ ] `network_manager → dbus_actor` 직접 참조 제거 → 메시지 기반 통신으로 전환
+- [ ] 서비스 디렉토리 간 `#include` 현황을 CI에서 스캔 (위반 시 실패)
+
 ---
 
 ## Phase 2: 인프라 구현체 이관 (2-3주) — **P1 High**
@@ -521,11 +649,13 @@ src/
 │   │   │       ├── i_work_dispatcher.hpp   # Port (co-location)
 │   │   │       └── io/i_event_loop.hpp     # Port (co-location)
 │   │   └── ...
-│   ├── common/
-│   │   ├── time/i_time_source.hpp     # ITimeSource만 정의 (co-location)
-│   │   ├── log/i_logger.hpp           # ILogger만 정의 (co-location)
-│   │   ├── memory/i_memory_allocator.hpp  # IMemoryAllocator만 정의 (co-location)
-│   │   └── ...
+│   ├── common/                       # std-only 순수 도메인 (포트 co-location)
+│   │   ├── config/                   # platform_config.h, runtime_config.h (구조체만)
+│   │   ├── container/                # cache_line, lock_free_mpsc_queue, ring_buffer
+│   │   ├── time/                     # i_time_source.hpp, time.hpp/cpp, sleep.hpp
+│   │   ├── memory/                   # i_memory_allocator.hpp, memory_pool, slab, size_class, chunk, free_list, thread_local_cache
+│   │   ├── log/                      # i_logger.hpp, log.hpp/cpp (기본 구현)
+│   │   └── util/                     # return.hpp, debug.hpp
 │   └── perf/metrics/i_metrics.hpp     # IMetrics만 정의 (co-location)
 │
 ├── infra/                         # 모든 구현체
@@ -558,7 +688,18 @@ src/
 │       ├── ftxui_renderer.hpp/cpp           # ftxui 의존
 │       └── tui_widgets/
 │
-├── app/                             # 애플리케이션 진입점 (CLI, TUI, Main)
+├── service/                         # Use Cases — 비즈니스 로직 (core + 자체 포트만)
+│   ├── device_manager/
+│   ├── network_manager/             # + wifi_messages.hpp
+│   ├── monitor/
+│   ├── dbus/                        # + i_dbus_handler.hpp (Port)
+│   ├── ipc/                         # + i_ipc_server.hpp (Port)
+│   ├── cmd/
+│   ├── system/
+│   ├── tick/
+│   └── ports/                       # i_pmu.hpp, i_sys.hpp, i_i2c.hpp (소비자 소유 Port)
+│
+├── app/                             # Composition Root — 구체 타입 생성/주입
 │   ├── cli/
 │   ├── tui/
 │   └── main/
@@ -1055,24 +1196,34 @@ struct RuntimeConfig {
 };
 ```
 
-### 4.3 IMailbox 인터페이스화 및 LockFreeMpscQueue 분리 (P2-3)
+### 4.3 IMailbox 인터페이스화 (P2-3)
 
-**파일**: `src/core/actor_system/runtime/i_mailbox.hpp` (이미 Phase 1에서 정의)
+**파일**: `src/core/actor_system/runtime/i_mailbox.hpp` (이미 Phase 1.2.5에서 정의 — Port는 actor_system 도메인에 co-location)
 
 ```cpp
-// src/core/common/container/lock_free_mpsc_queue.hpp → 구현체로 이동
-// infra/container/lock_free_mpsc_queue.hpp
+// core/actor_system/runtime/i_mailbox.hpp (Port — actor_system 도메인 co-location)
+class IMailbox {
+public:
+    virtual ~IMailbox() = default;
+    virtual bool push(Message&& msg) = 0;
+    virtual bool pop(Message& out) = 0;
+    virtual size_t count() const = 0;
+    virtual size_t capacity() const = 0;
+    virtual bool empty() const = 0;
+    virtual void clear() = 0;
+};
 
-// Core에는 인터페이스만
+// core/common/container/lock_free_mpsc_queue.hpp (구현체 — std-only 순수 구현이라 core 유지)
 class LockFreeMpscQueue : public IMailbox {
-    // 기존 구현 거의 그대로
+    // 기존 구현 거의 그대로 (infra로 이동하지 않음 — OS/3rd-party 의존 없음)
 };
 ```
 
 ### 4.4 RingBuffer 일반화 (P2-4)
 
 ```cpp
-// src/core/common/container/ring_buffer.hpp → 인터페이스 분리
+// src/core/common/container/ring_buffer.hpp — 인터페이스/구현 모두 core co-location
+// (순수 std 구현이므로 infra로 이동하지 않음)
 class IByteBuffer {
 public:
     virtual ~IByteBuffer() = default;
@@ -1086,7 +1237,7 @@ public:
     virtual bool full() const = 0;
 };
 
-// 구현체: infra/container/ring_buffer.hpp
+// 같은 폴더에 구현체 유지
 class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 ```
 
@@ -1112,6 +1263,7 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 | **M3: ActorRuntime 분해** | Week 3 말 | `ActorRuntime` < 100줄, 책임 분리 확인 |
 | **M4: 전역 상태 제거** | Week 4 말 | `Metrics`, `Log`, `MemoryPool` static 멤버 0개 |
 | **M5: 인프라 이관 완료** | Week 6 말 | `core/`에 OS 의존 코드 0개, `infra/` 빌드 성공 |
+| **M5b: 서비스 계층 경계 복원** | Week 6 말 | `service/ports/` 포트 이관, 서비스 전용 메시지 이관, service↔infra 직접 include 0개 |
 | **M6: 성능 병목 해소** | Week 7 말 | Scheduler O(1), Registry 락 분할, 벤치마크 개선 |
 | **M7: 도메인 모델 개선** | Week 8 말 | Actor Anemic Model 해소, 설정 타입 안전화 |
 | **M8: 최종 릴리스** | Week 9-10 | 전체 테스트 통과, 문서화 완료, 성능 회귀 없음 |
@@ -1134,7 +1286,7 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 
 | 지표 | 현재 | 목표 | 측정 방법 |
 |------|------|------|-----------|
-| **Layer Separation 점수** | 2/10 | 9/10 | `core/` 내 외부 심볼 참조 0개 |
+| **Layer Separation 점수** | 2/10 | 9/10 | `core/`, `service/` 내 infra/3rd-party 심볼 참조 0개 |
 | **Testability 점수** | 2/10 | 8/10 | 단위 테스트 Mock 없이 실행 가능, 병렬 테스트 지원 |
 | **Maintainability 점수** | 3/10 | 7/10 | 순환 복잡도 평균 < 10, 클래스당 메서드 < 15 |
 | **SOLID 준수율** | 30% | 85% | 정적 분석 도구 (cppcheck, clang-tidy) |
@@ -1153,10 +1305,29 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 | `core/common/os/epoll.hpp/cpp` | `infra/platform/linux/epoll.hpp/cpp` | 내부 구현 |
 | `core/common/os/signal_handler.hpp/cpp` | `infra/platform/linux/signal_handler.hpp/cpp` | 내부 구현 |
 | `core/common/log/log.hpp/cpp` | `core/common/log/i_logger.hpp` + `infra/logging/file_logger.hpp/cpp` | 인터페이스/구현 분리 |
+| `core/common/config/runtime_config.cpp` | `infra/config/json_config_loader.hpp/cpp` | nlohmann 파싱 이관 (core는 구조체만) |
+| `core/common/config/runtime_config.h` | `core/common/config/runtime_config.h` | 유지 — 필드명 `epoll*` → `eventLoop*` 일반화 |
+| `core/common/util/sleep.hpp` | `core/common/time/sleep.hpp` | 시간 관련 유틸 이관 |
+| `core/common/container/ring_buffer.hpp/cpp` | `core/common/container/ring_buffer.hpp/cpp` | 유지 — `IByteBuffer` 분리만 (구현은 core) |
 | `core/perf/metrics/metrics.hpp/cpp` | `core/perf/metrics/i_metrics.hpp` + `infra/metrics/metrics_collector.hpp/cpp` | 인터페이스/구현 분리 |
 | `core/common/memory/memory_pool.hpp` | `core/common/memory/i_memory_allocator.hpp` + `infra/memory/memory_pool_allocator.hpp/cpp` | 인터페이스/구현 분리 |
 | `core/actor_system/messages/message.hpp` | `core/actor_system/messages/message.hpp` (인터페이스 유지) + `infra/messaging/message_factory.hpp` | 팩토리 분리 |
+| `core/actor_system/messages/cmd_messages.hpp` | `service/cmd/cmd_messages.hpp` | 서비스 전용 메시지 이관 |
+| `core/actor_system/messages/ipc_messages.hpp` | `service/ipc/ipc_messages.hpp` | 서비스 전용 메시지 이관 |
+| `core/actor_system/messages/dbus_messages.hpp` | `service/dbus/dbus_messages.hpp` | 서비스 전용 메시지 이관 |
+| `core/actor_system/messages/monitor_messages.hpp` | `service/monitor/monitor_messages.hpp` | 서비스 전용 메시지 이관 |
+| `core/actor_system/messages/tick_messages.hpp` | `service/tick/tick_messages.hpp` | 서비스 전용 메시지 이관 |
+| `core/actor_system/messages/device_manager_messages.hpp` | `service/device_manager/device_manager_messages.hpp` | 서비스 전용 메시지 이관 |
+| `core/actor_system/messages/network_manager/*.hpp` | `service/network_manager/*.hpp` | 서비스 전용 메시지 이관 |
+| `infra/hal/pmu/i_pmu.hpp` | `service/ports/i_pmu.hpp` | 포트 소유권 이전 (소비자 소유) |
+| `infra/hal/sys/i_sys.hpp` | `service/ports/i_sys.hpp` | 포트 소유권 이전 (소비자 소유) |
+| `infra/hal/i2c/i_i2c.hpp` | `service/ports/i_i2c.hpp` | 포트 소유권 이전 (소비자 소유) |
+| `infra/hal/pmu/pmu_rsp5.hpp/cpp` | `infra/hal/pmu/pmu_rsp5.hpp/cpp` | 유지 — `IPmu` 구현체 |
+| `infra/hal/sys/sys_linux.hpp/cpp` | `infra/hal/sys/sys_linux.hpp/cpp` | 유지 — `ISys` 구현체 |
+| `infra/hal/i2c/i2c_linux.hpp/cpp` | `infra/hal/i2c/i2c_linux.hpp/cpp` | 유지 — `II2c` 구현체 |
+| `infra/transport/uds/uds_server.hpp/cpp` | `infra/transport/uds/uds_server.hpp/cpp` | 유지 — `IIpcServer` 구현 (포트는 `service/ipc/`) |
 | `core/core.cmake` | `core/core.cmake` (인터페이스만) + `infra/infra.cmake` (구현체) | CMake 분리 |
+| `service/network_manager/network_manager_actor.cpp` | (수정) `dbus_actor.hpp` 직접 include 제거 | 메시지 기반 통신으로 전환 |
 
 ---
 

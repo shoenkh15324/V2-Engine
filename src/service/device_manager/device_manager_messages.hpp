@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "message_traits.hpp"
+#include "core/actor_system/messages/message_traits.hpp"
 
 enum class HalType : uint8_t {
     I2c = 0,

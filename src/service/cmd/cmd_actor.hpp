@@ -1,7 +1,7 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "infra/hal/pmu/i_pmu.hpp"
-#include "core/actor_system/messages/network_manager/wifi_messages.hpp"
+#include "service/network_manager/wifi_messages.hpp"
 #include <string>
 #include <vector>
 #include <functional>

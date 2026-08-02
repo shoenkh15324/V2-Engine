@@ -1,6 +1,6 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/messages/device_manager_messages.hpp"
+#include "service/device_manager/device_manager_messages.hpp"
 
 class DeviceManagerActor : public Actor{
 public:

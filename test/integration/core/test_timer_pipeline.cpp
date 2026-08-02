@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor_system.hpp"
-#include "core/actor_system/messages/tick_messages.hpp"
+#include "service/tick/tick_messages.hpp"
 #include <atomic>
 #include <thread>
 #include <chrono>

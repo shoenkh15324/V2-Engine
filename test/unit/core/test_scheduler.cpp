@@ -5,7 +5,7 @@
 #include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/messages/tick_messages.hpp"
+#include "service/tick/tick_messages.hpp"
 #include <atomic>
 #include <memory>
 #include <thread>

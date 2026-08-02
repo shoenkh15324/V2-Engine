@@ -9,7 +9,7 @@
 #if V2_PLATFORM_LINUX
 #include <sdbus-c++/sdbus-c++.h>
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/messages/dbus_messages.hpp"
+#include "service/dbus/dbus_messages.hpp"
 
 class DbusServerHandler{
 public:

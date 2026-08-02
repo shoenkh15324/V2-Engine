@@ -7,7 +7,7 @@
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
-#include "core/actor_system/messages/tick_messages.hpp"
+#include "service/tick/tick_messages.hpp"
 #include <memory>
 
 namespace{

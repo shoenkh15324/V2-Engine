@@ -2,7 +2,7 @@
 #include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/common/time/time.hpp"
-#include "core/actor_system/messages/tick_messages.hpp"
+#include "service/tick/tick_messages.hpp"
 #include <chrono>
 #include <vector>
 

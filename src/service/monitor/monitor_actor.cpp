@@ -1,5 +1,5 @@
 #include "monitor_actor.hpp"
-#include "core/actor_system/messages/monitor_messages.hpp"
+#include "service/monitor/monitor_messages.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
