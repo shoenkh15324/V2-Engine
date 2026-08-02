@@ -1,20 +1,19 @@
 #include "cmd_actor.hpp"
+#include <sstream>
+#include <iomanip>
+#include "core/common/log/log.hpp"
+#include "core/common/config/platform_config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
-#include "service/cmd/cmd_messages.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
-#include "core/common/log/log.hpp"
-#include "core/common/config/platform_config.h"
 #include "core/perf/metrics/metrics.hpp"
-#include "infra/hal/pmu/pmu_rsp5.hpp"
-#include "infra/hal/pmu/pmu_mock.hpp"
+#include "service/cmd/cmd_messages.hpp"
 #include "service/monitor/monitor_data.hpp"
-#include <sstream>
-#include <iomanip>
 
-CmdActor::CmdActor(std::string name, uint64_t id) : Actor(std::move(name), id){
+
+CmdActor::CmdActor(std::string name, uint64_t id, IPmu* pmu) : Actor(std::move(name), id), pmu_(pmu){
     //
 }
 
@@ -31,15 +30,6 @@ int CmdActor::open(){
     handlers_["wifi"] = [this](const auto& a){ return handleWifi(a); };
     handlers_["metrics"] = [this](const auto& a){ return handleMetrics(a); };
     //
-    pmu_ = []()->std::unique_ptr<IPmu>{
-#if V2_PLATFORM_LINUX && defined(__aarch64__)
-        return std::make_unique<PmuRsp5>();
-#else
-        return std::make_unique<PmuMock>();
-#endif
-    }();
-    if(pmu_) pmu_->open();
-    //
     state_ = Opened;
     V2_LOG_INFO("Cmd Actor opened");
     return 0;
@@ -49,7 +39,7 @@ int CmdActor::close(){
     if(state_ == Closed) return 0;
     state_ = Closing;
     //
-    if(pmu_){ pmu_->close(); pmu_.reset(); }
+    pmu_ = nullptr;
     //
     state_ = Closed;
     V2_LOG_INFO("Cmd Actor closed");

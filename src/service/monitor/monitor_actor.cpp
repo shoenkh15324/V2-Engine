@@ -1,26 +1,23 @@
 #include "monitor_actor.hpp"
-#include "service/monitor/monitor_messages.hpp"
+#include <memory>
+#include <vector>
+#include "core/common/log/log.hpp"
+#include "core/common/util/return.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 #include "core/actor_system/runtime/i_actor_runtime.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
-#include "core/common/log/log.hpp"
-#include "core/common/util/return.hpp"
-#include "infra/hal/sys/sys_linux.hpp"
-#include "infra/hal/sys/sys_mock.hpp"
-#include "infra/hal/pmu/pmu_rsp5.hpp"
-#include "infra/hal/pmu/pmu_mock.hpp"
-#include <memory>
-#include <vector>
+#include "service/monitor/monitor_messages.hpp"
 
 #if V2_PLATFORM_LINUX
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-MonitorActor::MonitorActor(std::string name, uint64_t id, MonitorConfig config)
-    : Actor(std::move(name), id), config_(std::move(config)){
+MonitorActor::MonitorActor(std::string name, uint64_t id, MonitorConfig config, ISys* sys, IPmu* pmu)
+    : Actor(std::move(name), id), config_(std::move(config)), sys_(sys), pmu_(pmu){
+        //
 }
 
 MonitorActor::~MonitorActor(){
@@ -112,27 +109,6 @@ int MonitorActor::open(){
     }
     ::chmod(config_.socketPath.c_str(), 0777);
     startTime_ = Time::now();
-
-    sys_ = []() -> std::unique_ptr<ISys> {
-#if V2_PLATFORM_LINUX
-        return std::make_unique<SysLinux>();
-#else
-        return std::make_unique<SysMock>();
-#endif
-    }();
-    if(sys_->open() != 0){
-        V2_LOG_ERROR("MonitorActor: failed to open system resources HAL");
-    }
-
-    pmu_ = []() -> std::unique_ptr<IPmu> {
-#if V2_PLATFORM_LINUX && defined(__aarch64__)
-        return std::make_unique<PmuRsp5>();
-#else
-        return std::make_unique<PmuMock>();
-#endif
-    }();
-    if(pmu_) pmu_->open();
-
     subscribeListener();
     startTimer(Message::make(MonitorPoll{}), config_.pollIntervalMs, true);
     //
@@ -148,8 +124,8 @@ int MonitorActor::close(){
     //
     unsubscribeAll();
     server_.shutdown();
-    if(sys_){ sys_->close(); sys_.reset(); }
-    if(pmu_){ pmu_->close(); pmu_.reset(); }
+    sys_ = nullptr;
+    pmu_ = nullptr;
     //
     state_ = Closed;
     V2_LOG_INFO("Monitor Actor closed");

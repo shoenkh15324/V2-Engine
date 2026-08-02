@@ -2,8 +2,11 @@
 #include <memory>
 #include <string>
 #include <atomic>
-#include "core/actor_system/actor_system.hpp"
 #include "core/common/config/runtime_config.h"
+#include "core/common/di/service_container.hpp"
+#include "core/actor_system/actor_system.hpp"
+#include "infra/hal/pmu/i_pmu.hpp"
+#include "infra/hal/sys/i_sys.hpp"
 
 class MainApp{
 public:
@@ -20,10 +23,16 @@ public:
     
 private:
     void requestStop();
+    void configureRuntime();
+    void registerServices();
+    void createActors();
 
 private:
-    std::unique_ptr<ActorSystem> actorSystem_;
-    std::atomic<bool> isRunning_{false};
-    std::string name_ = "Main";
     RuntimeConfig cfg_;
+    ServiceContainer di_;
+    std::shared_ptr<IPmu> pmu_;
+    std::shared_ptr<ISys> sys_;
+    std::string name_ = "Main";
+    std::atomic<bool> isRunning_{false};
+    std::unique_ptr<ActorSystem> actorSystem_;
 };

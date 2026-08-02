@@ -21,7 +21,7 @@ struct MonitorConfig{
 
 class MonitorActor : public Actor{
 public:
-    MonitorActor(std::string name, uint64_t id, MonitorConfig config);
+    MonitorActor(std::string name, uint64_t id, MonitorConfig config, ISys* sys, IPmu* pmu);
     ~MonitorActor() override;
 
     MonitorActor(const MonitorActor&) = delete;
@@ -42,11 +42,11 @@ private:
     void prepareSnapshot(MonitorSnapshot& snap);
     void broadcastSnapshot(const MonitorSnapshot& snap);
 
+    ISys* sys_ = nullptr;
+    IPmu* pmu_ = nullptr;
     UdsServer server_;
-    Time::TimeStamp startTime_;
-    std::unique_ptr<ISys> sys_;
-    std::unique_ptr<IPmu> pmu_;
     MonitorConfig config_;
+    Time::TimeStamp startTime_;
     std::unordered_set<ConnHandle> connections_;
 };
 

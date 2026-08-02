@@ -10,7 +10,7 @@
 
 class CmdActor : public Actor{
 public:
-    CmdActor(std::string name, uint64_t id);
+    CmdActor(std::string name, uint64_t id, IPmu* pmu);
     ~CmdActor() override;
 
     CmdActor(const CmdActor&) = delete;
@@ -42,10 +42,10 @@ private:
     // Metrics helpers
     std::string formatMetricsSnapshot();
 
-    std::unordered_map<std::string, Handler> handlers_;
-    std::unique_ptr<IPmu> pmu_;
+    IPmu* pmu_ = nullptr;
     WifiScanResult lastScan_;
     WifiStatusResult lastStatus_;
     std::string lastConnectResult_;
     std::string lastDisconnectResult_;
+    std::unordered_map<std::string, Handler> handlers_;
 };
