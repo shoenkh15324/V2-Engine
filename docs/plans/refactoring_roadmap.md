@@ -21,7 +21,7 @@
 > - core는 **C++20 (프로젝트 전체 통일), std(+libc)만 사용**, 외부 라이브러리 링크 금지, **단독 빌드/실행 가능** (게임 엔진 코어 모델)
 > - **기존 `i_*` 파일이 이미 Port** — 신규 인터페이스는 `ITimeSource`, `IMemoryAllocator` **두 개만 추가** (과설계 방지)
 > - **Port는 각 도메인 폴더에 co-location** (별도 `common/interfaces/` 디렉토리 없음 — 기존 `i_actor_registry` 등과 동일 규칙)
-> - **OS 의존 구현체만 infra로 이관**: epoll, timerfd, pthread, signal_handler (타이머는 portable(스레드+CV) 구현을 core `common/time`에 유지하고, Linux 최적화인 timerfd만 infra `LinuxTimer`가 오버라이드)
+> - **OS 의존 구현체만 infra로 이관**: epoll, timerfd, pthread, signal_handler (타이머는 portable(스레드+세마포어) 구현을 core `common/timer`에 유지하고, Linux 최적화인 timerfd만 infra `LinuxTimer`가 오버라이드)
 > - 네이밍: `IClock` → **`ITimeSource`** (CPU 클럭 혼동 방지), `IAllocator` → **`IMemoryAllocator`** (할당 대상 명시)
 >
 > **추가 원칙 (Phase 1 보강)**
@@ -48,12 +48,12 @@ src/core/                                  # 내부 원: 도메인 (Entities + U
 │   │   ├── message.hpp/cpp
 │   │   └── message_traits.hpp
 │   ├── runtime/                           # [Use Cases] 처리 오케스트레이션
-|   |   ├── actor_runtime
-│   │   |   ├── actor_runtime/actor_runtime.hpp/cpp
-│   │   |   └── i_actor_runtime.hpp            # 유지
-|   |   ├── scheduler
-│   │   │   ├── i_scheduler.hpp                # 유지 (Port)
-│   │   │   └── scheduler/scheduler.hpp/cpp    # 유지 (ITimer 주입 — null이면 core portable Timer 기본)
+│   │   ├── actor_runtime/
+│   │   │   ├── actor_runtime.hpp/cpp
+│   │   │   └── i_actor_runtime.hpp            # 유지 (Port, co-location)
+│   │   ├── scheduler/
+│   │   │   ├── i_scheduler.hpp                # 유지 (Port, co-location)
+│   │   │   └── scheduler.hpp/cpp              # 유지 (ITimer 주입 — null이면 core portable Timer 기본)
 │   │   ├── dispatcher/
 │   │   │   ├── worker.hpp/cpp             # pthread 호출은 infra로 분리
 │   │   │   ├── i_work_dispatcher.hpp      # 유지 (Port)
@@ -70,18 +70,18 @@ src/core/                                  # 내부 원: 도메인 (Entities + U
 │   ├── config/                            # 설정 POCO 타입 + 컴파일타임 탐지만
 │   │   ├── platform_config.h              # 유지 — V2_PLATFORM_*/V2_COMPILER_* 탐지 (OS 호출 없음)
 │   │   ├── runtime_config.h               # 유지 — 설정 구조체만 (epoll 필드명은 eventLoop로 일반화)
-│   │   └── runtime_config.cpp             # (정리) — nlohmann 파싱 제거 → infra/config/로 이관
+│   │   └── runtime_config.cpp             # 삭제 완료 ✅ (nlohmann 파싱 → infra/config/json_config_loader.cpp)
 │   ├── container/                         # std-only 순수 컨테이너 (인터페이스도 core co-location)
 │   │   ├── cache_line.hpp                 # 유지 — 캐시라인 정렬
 │   │   ├── lock_free_mpsc_queue.hpp       # 유지 — MPSC 메일박스 큐 (구현체)
 │   │   └── ring_buffer.hpp/cpp            # 유지 — 바이트 링 버퍼 (IByteBuffer 분리는 Phase 4.4)
 │   ├── time/                              # 시간 도메인
-│   │   ├── i_time_source.hpp              # 유지 (IClock → ITimeSource) — Port
-│   │   ├── i_timer.hpp                    # NEW (1.1) — ITimer 포트 (common/time co-location, portable 기본)
-│   │   ├── timer_base.hpp/cpp             # NEW (1.1) — 타이머 공통 힙/풀/콜백 로직 (std-only)
-│   │   ├── timer.hpp/cpp                  # (복원) — portable Timer (스레드+CV), core 기본값
 │   │   ├── time.hpp/cpp                   # 유지 — 순수 수치 변환 + now() (std::chrono)
-│   │   └── sleep.hpp                      # MOVE: util/ → time/ (시간 관련 std-only)
+│   │   └── sleep.hpp                      # 유지 — MOVE 완료 (util/ → time/)
+│   ├── timer/                             # 타이머 도메인 (1.1 신설)
+│   │   ├── i_timer.hpp                    # NEW (1.1) — ITimer 포트 (co-location, portable 기본)
+│   │   ├── timer_base.hpp/cpp             # NEW (1.1) — 타이머 공통 힙/풀/콜백 로직 (std-only)
+│   │   └── timer.hpp/cpp                  # portable Timer (스레드+세마포어), core 기본값
 │   ├── memory/                            # 메모리 도메인 — 순수 구현
 │   │   ├── i_memory_allocator.hpp         # NEW (IAllocator → IMemoryAllocator) — Port
 │   │   ├── memory_pool.hpp                # 유지 — MemoryPoolT 순수 구현
@@ -157,27 +157,27 @@ app/                                       # CLI/TUI/main — Composition Root (
 
 ### 1.1 Core CMake 정리 + 독립 subproject 분리 (P0-1)
 
-> **현재 상태 (0.2 리팩토링 이후)**: `nlohmann_json`/`ftxui` 직접 링크는 이미 제거됨. 남은 위반은 `v2_core`가 **`v2_infra`를 PUBLIC으로 링크**하는 것 — core가 infra 구체 타입(`Timer`(timerfd), `EventLoopEpoll`)과 `nlohmann`(`runtime_config.cpp`)을 직접 참조하기 때문.
-> **목표**: `v2_core` 링크를 완전히 비우고 core를 **독립 CMake subproject**로 분리해 "단독 빌드/실행 가능" 원칙을 빌드가 강제하게 한다. (`add_library(v2_core INTERFACE)` 전환은 core에 `.cpp` 구현이 남아 있어 **보류** — Phase 2 이후 검토). **타이머 결정**: portable(스레드+CV) `Timer`를 core `common/time`에 복원해 core 단독 빌드에서도 **메시징+타이머가 동작**하게 하고, Linux 최적화(timerfd)는 infra `LinuxTimer`가 오버라이드. 선택은 Composition Root(app)가 함 — **"epoll 주입 = Linux 감지" → `LinuxTimer` 동반 주입**. core는 "주입 or 자기 기본"만 가짐.
+> **현재 상태 (1.1.1 완료)**: `v2_core` 소스의 infra/`nlohmann`/`ftxui` 참조는 전부 제거됨 (`rg 'infra/|nlohmann/|ftxui/' src/core` → 0건). 남은 위반은 `v2_core`가 **`v2_infra`를 PUBLIC으로 링크**하는 core.cmake의 잔재 링크 1줄뿐 (1.1.2에서 제거).
+> **목표**: `v2_core` 링크를 완전히 비우고 core를 **독립 CMake subproject**로 분리해 "단독 빌드/실행 가능" 원칙을 빌드가 강제하게 한다. (`add_library(v2_core INTERFACE)` 전환은 core에 `.cpp` 구현이 남아 있어 **보류** — Phase 2 이후 검토). **타이머 결정 (구현 완료)**: portable(스레드+세마포어) `Timer`를 core `common/timer`에 두어 core 단독 빌드에서도 **메시징+타이머가 동작**하게 하고, Linux 최적화(timerfd)는 infra `LinuxTimer`가 오버라이드. 선택은 Composition Root(app)가 함 — **"epoll 주입 = Linux 감지" → `LinuxTimer` 동반 주입**. core는 "주입 or 자기 기본"만 가짐.
 
 #### 1.1.1 core의 infra/외부 의존 제거
 
 | 의존 | 원인 | 조치 |
 |---|---|---|
-| `nlohmann_json` | `runtime_config.cpp` JSON 파싱 | 파싱 → `infra/config/json_config_loader.cpp` 이관, `runtime_config.cpp` 삭제 (선언은 core `runtime_config.h`에 유지 — 4.2 패턴) |
-| `Timer` (timerfd) | `scheduler.hpp`가 infra 구체 타입 멤버 보유 | `ITimer` 포트 신규 + portable `Timer`를 core `common/time`에 복원(스레드+CV), `Scheduler`가 주입. infra `LinuxTimer`(timerfd, `TimerBase` 파생)가 Linux에서 대체 |
-| `EventLoopEpoll` | `actor_system.hpp`가 구체 타입 멤버 보유 | `IEventLoop`에 `start/run/stop` 이미 존재(`override` 명시만), `ActorSystem`이 `unique_ptr<IEventLoop>` 주입받음 |
+| `nlohmann_json` | `runtime_config.cpp` JSON 파싱 | ✅ 완료 — 파싱 → `infra/config/json_config_loader.cpp` 이관, `runtime_config.cpp` 삭제 (선언은 core `runtime_config.h`에 유지 — 4.2 패턴) |
+| `Timer` (timerfd) | `scheduler.hpp`가 infra 구체 타입 멤버 보유 | ✅ 완료 — `ITimer` 포트 + portable `Timer`를 core `common/timer`에 둠(스레드+세마포어), `Scheduler`가 `unique_ptr<ITimer>` 주입. infra `LinuxTimer`(timerfd, `TimerBase` 파생)가 Linux에서 대체 |
+| `EventLoopEpoll` | `actor_system.hpp`가 구체 타입 멤버 보유 | ✅ 완료 — `IEventLoop`에 `start/run/stop`(`override` 명시), `ActorSystem`이 `unique_ptr<IEventLoop>` 주입받음 |
 
-- [ ] `RuntimeConfig::loadFromFile` 본문 → `infra/config/json_config_loader.cpp` 이동
-- [ ] `src/core/common/config/runtime_config.cpp` 삭제
-- [ ] `core/common/time/i_timer.hpp` — `ITimer` 신규 (common/time co-location; 1.3의 `ITimerService`로 승격 예정)
-- [ ] `core/common/time/timer_base.hpp/cpp` — 타이머 공통 힙/풀/콜백 로직 추출 (`TimerBase : ITimer`, std-only)
-- [ ] `core/common/time/timer.hpp/cpp` — portable `Timer` 복원 (스레드+CV; 기존 infra `timer_fd.cpp` `#else` 브랜치 이관), core 기본값
-- [ ] `Scheduler` → `ITimer*` 생성자 주입 (null → core portable `Timer` 기본 생성), infra include 제거
-- [ ] `EventLoopEpoll`의 `start()/run()/stop()`에 `override` 명시 (`IEventLoop`에는 이미 존재)
-- [ ] `ActorSystem` → `std::unique_ptr<IEventLoop>` + `std::unique_ptr<ITimer>` 생성자 주입 (null → core portable 기본; 구체 생성은 Composition Root=app)
-- [ ] `infra/platform/linux/timer_linux.hpp/cpp` — `LinuxTimer : TimerBase` (timerfd; 기존 Linux 브랜치 이관)
-- [ ] Composition Root(main_app) — Linux면 `LinuxTimer` + `EventLoopEpoll` **동시 주입** ("epoll 주입 = Linux 감지" 규칙). core는 LinuxTimer를 모름
+- [ ] `RuntimeConfig::loadFromFile` 본문 → `infra/config/json_config_loader.cpp` 이동 ✅
+- [ ] `src/core/common/config/runtime_config.cpp` 삭제 ✅
+- [ ] `core/common/timer/i_timer.hpp` — `ITimer` 신규 (common/timer co-location; 1.2.6의 `ITimerService`로 승격 예정) ✅
+- [ ] `core/common/timer/timer_base.hpp/cpp` — 타이머 공통 힙/풀/콜백 로직 추출 (`TimerBase : ITimer`, std-only) ✅
+- [ ] `core/common/timer/timer.hpp/cpp` — portable `Timer` 복원 (스레드+세마포어; 기존 infra `timer_fd.cpp` `#else` 브랜치 이관), core 기본값 ✅
+- [ ] `Scheduler` → `ITimer*` 생성자 주입 (null → core portable `Timer` 기본 생성), infra include 제거 ✅
+- [ ] `EventLoopEpoll`의 `start()/run()/stop()`에 `override` 명시 (`IEventLoop`에는 이미 존재) ✅
+- [ ] `ActorSystem` → `std::unique_ptr<IEventLoop>` + `std::unique_ptr<ITimer>` 생성자 주입 (null → core portable 기본; 구체 생성은 Composition Root=app) ✅
+- [ ] `infra/platform/linux/timer_linux.hpp/cpp` — `LinuxTimer : TimerBase` (timerfd; 기존 Linux 브랜치 이관) ✅
+- [ ] Composition Root(main_app) — Linux면 `LinuxTimer` + `EventLoopEpoll` **동시 주입** ("epoll 주입 = Linux 감지" 규칙). core는 LinuxTimer를 모름 ✅
 
 #### 1.1.2 독립 subproject 분리
 
@@ -198,19 +198,20 @@ add_executable(v2_core_smoke standalone/main.cpp)   # 단독 빌드/실행 증�
 - [ ] `src/core/standalone/main.cpp` smoke 타깃 — 모든 core 오브젝트 + trivial main을 링크해 "외부 심볼 무참조" 증명 (매 빌드 경계 강제). core portable `Timer` + std-only mock/블로킹 루프를 주입해 **메시징 + 타이머를 실제 실행** (fd 기능은 데모 범위 밖)
 - [ ] `v2_core`의 compile definitions(`V2_ENGINE_NAME/VERSION/V2_CONFIG_DIR`) → `app.cmake`로 이관 (전부 app에서만 사용됨)
 - [ ] `V2_CONFIG_DIR` 경로 버그 수정: 현재 `src/core/config`(존재하지 않음 → config 미로딩) → `${CMAKE_SOURCE_DIR}/config`
-- [ ] 의존 방향 교정: `v2_infra`에 `target_link_libraries(v2_infra PUBLIC v2_core)` 추가 (core→infra 링크 제거)
-- [ ] infra 의존 테스트(`test_timer`, `test_event_loop_epoll`, `test_scheduler`, `test_actor_system`, `test_actor_system_integration`, `test_timer_pipeline`)에 `v2_infra` 명시, `v2_bench`에도 `v2_infra` 링크
+- [ ] 의존 방향 교정: `v2_infra`에 `target_link_libraries(v2_infra PUBLIC v2_core)` 추가 **및 `v2_core`의 잔재 링크 `v2_infra` 제거** (core→infra 링크 제거)
+- [ ] infra 의존 테스트(`test_timer`, `test_event_loop_epoll`, `test_scheduler`, `test_actor_system`, `test_actor_system_integration`, `test_timer_pipeline`)에 `v2_infra` 명시 ✅(`v2_bench`는 `v2_infra` 링크 완료 — bench.cmake)
 
 #### 1.1.3 검증
-- [ ] `rg 'infra/|nlohmann/|ftxui/' src/core` → 결과 없음
+- [ ] `rg 'infra/|nlohmann/|ftxui/' src/core` → 결과 없음 ✅
 - [ ] standalone 빌드: `cmake -S src/core -B <dir> && cmake --build <dir>` 성공
 - [ ] `v2_core_smoke` 링크 성공 (외부 심볼 무참조 증명)
-- [ ] 전체 빌드 + `ctest` 전체 통과
+- [ ] 전체 빌드 + `ctest` 전체 통과 ✅ (123/123)
 - [ ] 순수 테스트(`test_ring_buffer` 등) 링크 라인에 `libv2_infra.a` 미포함
 
 ### 1.2 핵심 인터페이스 정의 (P0-2)
 
-#### 1.2.1 `core/common/time/i_time_source.hpp`
+#### 1.2.1 `core/common/time/i_time_source.hpp` ~~— 삭제됨 (1.1에서 정리)~~
+> `i_time_source.hpp`는 참조처가 없어 1.1에서 제거. `Time`(std::chrono 래퍼)만으로 충분. 신설 시 이 표준 코드 사용.
 ```cpp
 #pragma once
 #include <chrono>
@@ -321,7 +322,7 @@ public:
 ```cpp
 #pragma once
 #include <cstdint>
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/messages/message.hpp"
 
 class ITimerService {
@@ -688,7 +689,8 @@ src/
 │   ├── common/                       # std-only 순수 도메인 (포트 co-location)
 │   │   ├── config/                   # platform_config.h, runtime_config.h (구조체만)
 │   │   ├── container/                # cache_line, lock_free_mpsc_queue, ring_buffer
-│   │   ├── time/                     # i_time_source.hpp, i_timer.hpp, timer_base, timer(portable), time.hpp/cpp, sleep.hpp
+│   │   ├── time/                     # time.hpp/cpp, sleep.hpp
+│   │   ├── timer/                    # i_timer.hpp, timer_base.hpp/cpp, timer.hpp/cpp (portable)
 │   │   ├── memory/                   # i_memory_allocator.hpp, memory_pool, slab, size_class, chunk, free_list, thread_local_cache
 │   │   ├── log/                      # i_logger.hpp, log.hpp/cpp (기본 구현)
 │   │   └── util/                     # return.hpp, debug.hpp
@@ -754,11 +756,11 @@ class EpollEventLoop : public IEventLoop {
 };
 ```
 
-#### 2.2.2 `infra/platform/linux/timer_linux.hpp`
+#### 2.2.2 `infra/platform/linux/timer_linux.hpp` ✅ (1.1에서 구현 완료)
 ```cpp
-// core `common/time/timer_base.hpp` 파생 — portable Timer(스레드+CV)의 Linux timerfd 최적화판
+// core `common/timer/timer_base.hpp` 파생 — portable Timer(스레드+세마포어)의 Linux timerfd 최적화판
 // (portable Timer는 core 유지 — 단독 빌드/실행 가능 원칙; Phase 2에서 ITimerService로 승격 시 함께 갱신)
-#include "core/common/time/i_timer.hpp"
+#include "core/common/timer/i_timer.hpp"
 
 class LinuxTimer : public TimerBase {
     // 기존 timer_fd.cpp의 Linux 브랜치 거의 그대로: timerfd_create, scheduleNextTimer(timerfd_settime), fd() 등
