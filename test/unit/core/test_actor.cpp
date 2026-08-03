@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 #include "core/actor_system/actor/actor.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
-#include "core/actor_system/runtime/i_scheduler.hpp"
+#include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "service/tick/tick_messages.hpp"
 #include "core/common/util/return.hpp"

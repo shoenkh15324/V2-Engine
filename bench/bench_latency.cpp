@@ -1,6 +1,7 @@
 #include "bench_latency.hpp"
 #include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
 #include "service/tick/tick_messages.hpp"
@@ -39,7 +40,8 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
         std::vector<int64_t> sendTs(iters);
         std::atomic<uint64_t> ack{0};
 
-        ActorSystem sys(p.workers, p.maxbatch);
+        auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+        ActorSystem sys(p.workers, p.maxbatch, std::move(loop));
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iters) + 256;
         auto* act = sys.createActor<LatencyBenchActor>("latency_actor", mbSize, lats, sendTs, ack);
         sys.start();
@@ -62,7 +64,8 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
     std::vector<int64_t> sendTimestamps(p.iterations);
     std::atomic<uint64_t> ackCounter{0};
 
-    ActorSystem actorSystem(p.workers, p.maxbatch);
+    auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+    ActorSystem actorSystem(p.workers, p.maxbatch, std::move(loop));
     size_t mailboxSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(p.iterations) + 256;
     auto* actor = actorSystem.createActor<LatencyBenchActor>(
         "latency_actor", mailboxSize,

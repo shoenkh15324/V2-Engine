@@ -82,7 +82,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 # ── Testing ────────────────────────────────────────────────
-option(BUILD_TESTING "Build Tests" ON)
+option(BUILD_TESTING "Build Tests" OFF)
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(test)

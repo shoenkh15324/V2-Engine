@@ -2,6 +2,7 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
@@ -41,7 +42,8 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
     auto runOnce = [&](int numProducers, int64_t msgsPerProducer) -> uint64_t{
         int64_t total = static_cast<int64_t>(numProducers) * msgsPerProducer;
         std::atomic<uint64_t> cnt{0};
-        ActorSystem sys(p.workers, p.maxbatch);
+        auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+        ActorSystem sys(p.workers, p.maxbatch, std::move(loop));
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(total) + 256;
         auto* actor = sys.createActor<BenchActor>("contention_actor", mbSize, cnt);
         sys.start();

@@ -6,7 +6,12 @@
 #include "core/actor_system/runtime/supervisor/supervisor.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 
-ActorSystem::ActorSystem(int numWorkers, int maxBatch, int epollMaxEvents, int epollWaitTimeoutMs) : workDispatcher_(numWorkers), eventLoop_(epollMaxEvents, epollWaitTimeoutMs){
+ActorSystem::ActorSystem(
+    int numWorkers,
+    int maxBatch,
+    std::unique_ptr<IEventLoop> eventLoop,
+    std::unique_ptr<ITimer> timer
+) : workDispatcher_(numWorkers), scheduler_(std::move(timer)), eventLoop_(std::move(eventLoop)){
     Metrics::init(numWorkers);
     workers_.reserve(numWorkers);
     for(int i = 0; i < numWorkers; i++){
@@ -33,8 +38,8 @@ ActorSystem::~ActorSystem(){
 
 void ActorSystem::start(){
     workDispatcher_.start();
-    eventLoop_.start();
-    scheduler_.start(&eventLoop_);
+    eventLoop_->start();
+    scheduler_.start();
     for(auto& ctx : actorRuntimes_){
         int ret = ctx->actor()->open();
         if(ret != Ok) V2_LOG_ERROR("Actor {} failed to open", ctx->actor()->name().c_str());
@@ -46,7 +51,7 @@ void ActorSystem::start(){
 
 void ActorSystem::stop(){
     scheduler_.stop();
-    eventLoop_.stop();
+    eventLoop_->stop();
     workDispatcher_.beginDrain();
     for(auto& w : workers_){
         w->stop();
@@ -58,7 +63,7 @@ void ActorSystem::stop(){
 }
 
 void ActorSystem::run(){
-    eventLoop_.run();
+    eventLoop_->run();
 }
 
 void ActorSystem::requestStop(){

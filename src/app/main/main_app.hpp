@@ -34,5 +34,7 @@ private:
     std::shared_ptr<ISys> sys_;
     std::string name_ = "Main";
     std::atomic<bool> isRunning_{false};
+    std::unique_ptr<ITimer> timer_;
+    std::unique_ptr<IEventLoop> eventLoop_;
     std::unique_ptr<ActorSystem> actorSystem_;
 };

@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
-#include "infra/platform/linux/timer_fd.hpp"
-#include "core/common/config/platform_config.h"
+#include "core/common/timer/timer.hpp"
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -27,9 +26,6 @@ static void pushOrder(int, void* ctx){
 
 TEST(Timer, Create){
     Timer t;
-#if V2_PLATFORM_LINUX
-    EXPECT_GE(t.fd(), 0);
-#endif
 }
 
 TEST(Timer, CreateDestroy){

@@ -21,9 +21,9 @@ public:
     EventLoopEpoll(EventLoopEpoll&&) = delete;
     EventLoopEpoll& operator=(EventLoopEpoll&&) = delete;
 
-    void start();
-    void run();
-    void stop();
+    void start() override;
+    void run() override;
+    void stop() override;
     int subscribe(WatchedFd fd, Handler handler) override;
     int unsubscribe(WatchedFd fd) override;
 

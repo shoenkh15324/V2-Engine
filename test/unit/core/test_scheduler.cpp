@@ -2,7 +2,6 @@
 #include "core/actor_system/runtime/scheduler/scheduler.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
-#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "service/tick/tick_messages.hpp"
@@ -57,12 +56,8 @@ TEST(Scheduler, StartStop){
 }
 
 TEST(Scheduler, ConcurrentAddCancelDuringFire){
-    EventLoopEpoll loop;
-    loop.start();
-    std::thread loopThread([&loop]{ loop.run(); });
-
     Scheduler sched;
-    sched.start(&loop);
+    sched.start();
 
     auto actor = std::make_unique<TestActor>("stress", 1);
     ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(4096), nullptr, &sched, nullptr);
@@ -72,7 +67,7 @@ TEST(Scheduler, ConcurrentAddCancelDuringFire){
     std::vector<std::thread> workers;
     std::atomic<bool> keepFiring{true};
 
-    // 반복 타이머가 event loop 스레드에서 계속 fire되는 동안 add/cancel 반복
+    // 반복 타이머가 타이머 스레드에서 계속 fire되는 동안 add/cancel 반복
     std::thread fireThread([&]{
         while(keepFiring.load()){
             int id = sched.addTimer(&rt, Message::make(Tick{}), 1, true);
@@ -95,6 +90,4 @@ TEST(Scheduler, ConcurrentAddCancelDuringFire){
     fireThread.join();
 
     sched.stop();
-    loop.stop();
-    loopThread.join();
 }

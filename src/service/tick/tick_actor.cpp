@@ -2,7 +2,7 @@
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 #include "core/common/time/time.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/scheduler/scheduler.hpp"
 #include "service/tick/tick_messages.hpp"
 

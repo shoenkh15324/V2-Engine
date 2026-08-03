@@ -3,6 +3,8 @@
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
+#include "core/common/timer/i_timer.hpp"
+#include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/config/platform_config.h"
 #include "infra/hal/pmu/pmu_mock.hpp"
@@ -18,6 +20,11 @@
 #include "service/device_manager/device_manager_actor.hpp"
 #include "service/network_manager/network_manager_actor.hpp"
 #include "service/cmd/cmd_actor.hpp"
+
+#if V2_PLATFORM_LINUX
+    #include "infra/platform/linux/event_loop_epoll.hpp"
+    #include "infra/platform/linux/timer_linux.hpp"
+#endif
 
 
 MainApp::MainApp() = default;
@@ -73,6 +80,11 @@ void MainApp::configureRuntime(){
     // Set Signal
     SystemActor::onSignal(SIGINT, [this](int){ requestStop(); });
     SystemActor::onSignal(SIGTERM, [this](int){ requestStop(); });
+
+#if V2_PLATFORM_LINUX
+    eventLoop_ = std::make_unique<EventLoopEpoll>(cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
+    timer_ = std::make_unique<LinuxTimer>(eventLoop_.get());
+#endif
 }
 
 void MainApp::registerServices(){
@@ -93,7 +105,7 @@ void MainApp::registerServices(){
 }
 
 void MainApp::createActors(){
-actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
+    actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, std::move(eventLoop_), std::move(timer_));
     actorSystem_->createActor<SystemActor>("system_actor", cfg_.mailboxSize)->setEssential(true);
     actorSystem_->createActor<CmdActor>("cmd_actor", cfg_.mailboxSize, pmu_.get())->setEssential(true);
     actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);

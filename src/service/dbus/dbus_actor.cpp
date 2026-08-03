@@ -1,7 +1,7 @@
 #include "dbus_actor.hpp"
 #include "dbus_server_handler.hpp"
 #include "dbus_client_handler.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/common/log/log.hpp"
 
 #if V2_PLATFORM_LINUX

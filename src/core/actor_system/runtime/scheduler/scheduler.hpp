@@ -3,14 +3,12 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-#include "infra/platform/linux/timer_fd.hpp"
-#include "core/actor_system/runtime/i_scheduler.hpp"
-
-class IEventLoop;
+#include "core/common/timer/timer.hpp"
+#include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
 
 class Scheduler : public IScheduler{
 public:
-    Scheduler() = default;
+    explicit Scheduler(std::unique_ptr<ITimer> timer = nullptr);
     ~Scheduler();
 
     Scheduler(const Scheduler&) = delete;
@@ -18,7 +16,7 @@ public:
     Scheduler(Scheduler&&) = delete;
     Scheduler& operator=(Scheduler&&) = delete;
 
-    void start(IEventLoop* eventLoop = nullptr);
+    void start();
     void stop();
     int addTimer(IActorRuntime* target, Message msg, uint64_t timeMs, bool repeating = false) override;
     void cancel(int id) override;
@@ -29,13 +27,10 @@ private:
         Message msg;
     };
 
-    void subscribeTimer();
-    void unsubscribeTimer();
     void cleanupTimerCtxs();
     static void timerCallback(int id, void* ctx);
 
-    Timer timer_;
-    IEventLoop* eventLoop_ = nullptr;
     std::mutex mutex_;
+    std::unique_ptr<ITimer> timer_;
     std::unordered_map<int, std::unique_ptr<TimerCtx>> timerCtxs_;
 };

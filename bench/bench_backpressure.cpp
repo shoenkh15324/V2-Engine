@@ -2,6 +2,7 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
@@ -44,7 +45,8 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
     std::atomic<uint64_t> dropped{0};
     std::atomic<uint64_t> processed{0};
 
-    ActorSystem actorSystem(p.workers, p.maxbatch);
+    auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+    ActorSystem actorSystem(p.workers, p.maxbatch, std::move(loop));
     auto* actor = actorSystem.createActor<BenchActor>("bp_actor", p.mailbox, processed);
     size_t cap = actor->mailboxCapacity();
     int64_t totalToSend = std::max(static_cast<int64_t>(1), static_cast<int64_t>(p.floodRate) * p.floodDurationMs);

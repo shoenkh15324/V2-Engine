@@ -12,7 +12,7 @@ add_library(v2_bench OBJECT
     ${CMAKE_CURRENT_LIST_DIR}/benchmark.cpp
 )
 
-target_link_libraries(v2_bench PUBLIC v2_core)
+target_link_libraries(v2_bench PUBLIC v2_core v2_infra)
 
 target_include_directories(v2_bench PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../src

@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
+#include <memory>
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
 #include <thread>
@@ -33,14 +36,19 @@ public:
     std::atomic<int> tickCount{0};
 };
 
+static std::unique_ptr<ActorSystem> makeSystem(int numWorkers){
+    auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+    return std::make_unique<ActorSystem>(numWorkers, 32, std::move(loop), nullptr);
+}
+
 } // namespace
 
 TEST(ActorSystemIntegration, FullLifeCycle){
-    ActorSystem sys(1);
-    auto* a = sys.createActor<TestActor>("actor_a", 64);
+    auto sys = makeSystem(1);
+    auto* a = sys->createActor<TestActor>("actor_a", 64);
     EXPECT_EQ(a->getState(), Closed);
 
-    sys.start();
+    sys->start();
     EXPECT_EQ(a->getState(), Opened);
     EXPECT_EQ(a->openCount, 1);
 
@@ -50,69 +58,69 @@ TEST(ActorSystemIntegration, FullLifeCycle){
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_GE(a->tickCount, 1);
 
-    sys.stop();
+    sys->stop();
     EXPECT_EQ(a->getState(), Closed);
     EXPECT_EQ(a->closeCount, 1);
 }
 
 TEST(ActorSystemIntegration, SendBetweenActors){
-    ActorSystem sys(2);
+    auto sys = makeSystem(2);
 
-    auto* a = sys.createActor<TestActor>("sender", 64);
-    auto* b = sys.createActor<TestActor>("receiver", 64);
+    auto* a = sys->createActor<TestActor>("sender", 64);
+    auto* b = sys->createActor<TestActor>("receiver", 64);
 
-    sys.start();
+    sys->start();
 
     a->sendMsg("receiver", Message::make(Tick{}));
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_EQ(b->tickCount, 1);
     EXPECT_EQ(a->tickCount, 0);
 
-    sys.stop();
+    sys->stop();
 }
 
 TEST(ActorSystemIntegration, MultipleMessages){
-    ActorSystem sys(2);
+    auto sys = makeSystem(2);
 
-    auto* a = sys.createActor<TestActor>("a", 64);
-    auto* b = sys.createActor<TestActor>("b", 64);
+    auto* a = sys->createActor<TestActor>("a", 64);
+    auto* b = sys->createActor<TestActor>("b", 64);
 
-    sys.start();
+    sys->start();
     for(int i = 0; i < 10; i++){
         a->sendMsg("b", Message::make(Tick{}));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     EXPECT_EQ(b->tickCount, 10);
 
-    sys.stop();
+    sys->stop();
 }
 
 TEST(ActorSystemIntegration, OpenCloseOnce){
-    ActorSystem sys(1);
-    auto* a = sys.createActor<TestActor>("a", 64);
+    auto sys = makeSystem(1);
+    auto* a = sys->createActor<TestActor>("a", 64);
 
-    sys.start();
+    sys->start();
     EXPECT_EQ(a->openCount, 1);
 
-    sys.stop();
+    sys->stop();
     EXPECT_EQ(a->closeCount, 1);
 
     // restart
-    sys.start();
+    sys->start();
     EXPECT_EQ(a->openCount, 2);
 
-    sys.stop();
+    sys->stop();
     EXPECT_EQ(a->closeCount, 2);
 }
 
 TEST(ActorSystemIntegration, DrainProcessesPendingMessages){
-    ActorSystem sys(2);
-    auto* a = sys.createActor<TestActor>("drain_actor", 256);
-    sys.start();
+    auto sys = makeSystem(2);
+    auto* a = sys->createActor<TestActor>("drain_actor", 256);
+    sys->start();
     constexpr int N = 100;
     for(int i = 0; i < N; i++){
         a->sendMsg("drain_actor", Message::make(Tick{}));
     }
-    sys.stop();
+    sys->stop();
     EXPECT_EQ(a->tickCount, N);
 }

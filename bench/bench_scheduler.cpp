@@ -1,6 +1,7 @@
 #include "bench_scheduler.hpp"
 #include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
 #include "service/tick/tick_messages.hpp"
@@ -37,7 +38,8 @@ BenchmarkResult SchedulerBenchmark::run(const Args& args){
 
     auto measureTimer = [&](int durationMs) -> std::vector<uint64_t>{
         std::vector<uint64_t> times;
-        ActorSystem actorSystem(p.workers, p.maxbatch);
+        auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+        ActorSystem actorSystem(p.workers, p.maxbatch, std::move(loop));
         auto* actor = actorSystem.createActor<TimerBenchActor>("timer_actor", 4096, times);
         actorSystem.start();
 

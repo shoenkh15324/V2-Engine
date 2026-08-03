@@ -2,7 +2,7 @@
 #include "core/common/util/return.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"

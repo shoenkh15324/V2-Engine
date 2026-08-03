@@ -5,7 +5,7 @@
 #include "core/common/config/platform_config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
-#include "core/actor_system/runtime/i_actor_runtime.hpp"
+#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 #include "core/perf/metrics/metrics.hpp"

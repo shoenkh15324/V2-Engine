@@ -2,6 +2,7 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
@@ -40,7 +41,8 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
 
     auto measureThroughput = [&](int workers, int actors, int iterations) -> double{
         std::atomic<uint64_t> cnt{0};
-        ActorSystem sys(workers, p.maxbatch);
+        auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
+        ActorSystem sys(workers, p.maxbatch, std::move(loop));
         std::vector<BenchActor*> acts;
         for(int i = 0; i < actors; i++){
             std::string nm = "bench_" + std::to_string(i);

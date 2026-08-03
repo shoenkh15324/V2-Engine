@@ -18,11 +18,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         ${CMAKE_CURRENT_LIST_DIR}/platform/linux/epoll.cpp
         ${CMAKE_CURRENT_LIST_DIR}/platform/linux/event_loop_epoll.cpp
         ${CMAKE_CURRENT_LIST_DIR}/platform/linux/signal_handler.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/platform/linux/timer_fd.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/platform/linux/timer_linux.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/config/json_config_loader.cpp
     )
 endif()
 
-target_link_libraries(v2_infra PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(v2_infra PUBLIC 
+    nlohmann_json::nlohmann_json
+    ftxui::ftxui
+)
 
 target_include_directories(v2_infra PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src

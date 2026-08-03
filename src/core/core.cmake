@@ -17,7 +17,8 @@ target_sources(v2_core PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/common/log/log.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/container/ring_buffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/common/time/time.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/common/config/runtime_config.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/timer/timer_base.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/timer/timer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/perf/metrics/metrics.cpp
 )
 
@@ -29,8 +30,6 @@ target_compile_definitions(v2_core PUBLIC
 
 target_link_libraries(v2_core PUBLIC
     v2_infra
-    nlohmann_json::nlohmann_json
-    ftxui::ftxui
 )
 
 target_include_directories(v2_core PUBLIC
