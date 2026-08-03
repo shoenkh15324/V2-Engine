@@ -103,11 +103,11 @@ src/infra/                                 # 외부 원: Adapters — OS/외부 
 │   └── signal_handler.hpp/cpp             # MOVE: common/os/
 ├── threading/
 │   └── posix_thread.hpp/cpp               # worker의 pthread_setname_np 분리
-├── memory/
-│   └── memory_pool_allocator.hpp/cpp      # IMemoryAllocator 구현 (MemoryPoolT 어댑터)
+├── memory/                                # 특수/외부 할당자만 (기본 풀은 core 소유 — 1.2.2)
+│   └── (linux_arena.hpp/cpp 등)           # 플랫폼/외부 라이브러리 의존 전략만
 ├── config/json_config_loader.hpp/cpp      # nlohmann_json 의존
 ├── ui/ftxui_renderer.hpp/cpp              # ftxui 의존
-└── mock/                                  # MockTimeSource, MockAllocator, TestRegistry
+└── mock/                                  # MockAllocator, TestRegistry
 
 src/service/                             # Use Cases — 비즈니스 로직 (core + 자체 포트만 의존)
 ├── device_manager/
@@ -234,6 +234,14 @@ public:
 ```
 
 #### 1.2.2 `core/common/memory/i_memory_allocator.hpp`
+
+> **소유권 결정 (1.2 설계 확정)**: 할당자는 "포트 + 기본 구현"을 **core가 소유**, "특수/외부 구현"만 infra가 소유한다 (1.1 타이머 패턴과 동일: core portable `Timer` vs infra `LinuxTimer`).
+> - **포트** `IMemoryAllocator` — core (재사용 계약)
+> - **기본 구현** `MemoryPoolT`(현재 slab/TLS 풀) — **core 유지** (`::operator new`, `std::array`, `thread_local`, `cstring`만 사용 → std-only + portable 판정). core만으로 만든 다른 프로젝트가 재구현 없이 재사용 가능해야 함
+> - **특수 구현**(Linux arena/hugepage, jemalloc/tcmalloc wrapper 등) — infra만. 2.3에서 확정
+> - **파편화 정리**: 슬랩 설계(고정 SizeClass 블록 균일 재사용)는 파편화 방지 장치이므로 풀을 "하나로 강제"할 이유가 없음. 생산 기본은 공용 풀 인스턴스 1개, 테스트/서브시스템은 별도 인스턴스 생성 가능하게 (인스턴스 기반)
+> - **실제 제거 대상은 "위치"가 아니라 "전역 싱글톤"** (`MemoryPool::instance()` + `inline thread_local tlCache_`) — 1.5.3에서 처리
+
 ```cpp
 #pragma once
 #include <cstddef>
@@ -569,35 +577,31 @@ public:
 };
 ```
 
-#### 1.5.3 `Message` → `IAllocator` 주입
+#### 1.5.3 `Message` → `IMemoryAllocator` 주입
 ```cpp
 // src/core/actor_system/messages/message.hpp
 class Message {
-    // MemoryPool::instance() 제거
-    IAllocator* allocator_ = nullptr;  // 설정 시 주입
+    // MemoryPool::instance() 제거 — 전역 싱글톤 제거
+    IMemoryAllocator* allocator_ = nullptr;  // null → core 기본 풀 인스턴스로 폴백
     
 public:
-    // 정적 팩토리 대신 빌더 패턴 또는 팩토리 객체 사용
-    template<typename T>
-    static Message make(T&& value, IAllocator* allocator) {
-        Message msg;
-        msg.allocator_ = allocator;
-        // allocator_->allocate<T>(...) 사용
-        return msg;
-    }
-    
-    void setAllocator(IAllocator* alloc) { allocator_ = alloc; }
+    // 정적 팩토리 대신 MessageFactory 사용 (27개 호출처 침습 회피)
+    // allocator_ 는 move 시 함께 이전
+    // ops_ 함수포인터가 IMemoryAllocator* 파라미터를 받도록 변경
 };
 
-// 대안: MessageFactory 클래스 분리
+// 선택: MessageFactory — composition root가 pool을 만들어 주입
 class MessageFactory {
-    IAllocator* allocator_;
+    IMemoryAllocator* allocator_;  // 기본 = core 공용 풀 인스턴스
 public:
-    explicit MessageFactory(IAllocator* alloc) : allocator_(alloc) {}
+    explicit MessageFactory(IMemoryAllocator* alloc) : allocator_(alloc) {}
     template<typename T>
     Message make(T&& value) { /* allocator_ 사용 */ }
 };
 ```
+
+- **기본값은 core 풀 인스턴스** (`MemoryPoolT`를 인스턴스 기반으로 전환). core는 어떤 pool도 몰라도 동작 (v2_core_smoke 유지)
+- `inline thread_local tlCache_`(thread_local_cache.hpp) → **풀 인스턴스 소유로 이관** (전역 제거)
 
 ### 1.6 서비스 계층 경계 복원 — 포트 소유권 정리 (P0-7)
 
@@ -708,10 +712,8 @@ src/
 │   │   │   └── ...
 │   │   └── windows/
 │   │       └── ...
-│   ├── memory/
-│   │   ├── memory_pool_allocator.hpp/cpp    # IAllocator 구현
-│   │   ├── slab_allocator.hpp/cpp
-│   │   └── thread_local_cache.hpp
+│   ├── memory/                              # 특수/외부 할당자만 (기본 풀은 core 유지 — 1.2.2)
+│   │   └── linux_arena.hpp/cpp              # 예시: hugepage/mmap arena
 │   ├── logging/
 │   │   ├── file_logger.hpp/cpp              # ILogger 구현
 │   │   ├── console_logger.hpp/cpp
@@ -780,20 +782,26 @@ class PosixThread : public IThread {
 };
 ```
 
-### 2.3 메모리 할당자 구현체
+### 2.3 메모리 할당자 구현체 — 특수/외부 전략만 (기본 풀은 core 유지)
 
-#### 2.3.1 `infra/memory/memory_pool_allocator.hpp`
+> **수정됨 (1.2 설계 확정에 따라)**: 기본 portable 풀(`MemoryPoolT`, slab/TLS)은 **core에 유지**한다. infra에는 **플랫폼/외부 라이브러리 의존 특수 전략**만 둔다 — 1.2.2 소유권 결정 참고.
+
+#### 2.3.1 `infra/memory/` 특수 할당자 (예시)
 ```cpp
 #include "core/common/memory/i_memory_allocator.hpp"
-#include "core/common/memory/slab.hpp"
-#include "core/common/memory/size_class.hpp"
-#include "core/common/memory/thread_local_cache.hpp"
 
-class MemoryPoolAllocator : public IMemoryAllocator {
-    // 기존 MemoryPoolT 구현을 IAllocator로 래핑
-    // 디버그 정책, 할당 정책 템플릿 파라미터로 외부화
+// 예시 1: Linux hugepage/mmap 기반 arena (플랫폼 의존 → infra)
+class LinuxArenaAllocator : public IMemoryAllocator {
+    // mmap + madvise 등 Linux API 사용
+};
+
+// 예시 2: 외부 라이브러리 래퍼 (jemalloc/tcmalloc 등 → infra 링크)
+class JemallocAllocator : public IMemoryAllocator {
+    // ::malloc 등 외부 심볼 래핑
 };
 ```
+
+- 기본/대안 선택은 Composition Root가 함 (core 기본 풀 vs infra 특수 풀)
 
 ### 2.4 로거 구현체
 
@@ -1348,7 +1356,7 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 | `core/common/util/sleep.hpp` | `core/common/time/sleep.hpp` | 시간 관련 유틸 이관 |
 | `core/common/container/ring_buffer.hpp/cpp` | `core/common/container/ring_buffer.hpp/cpp` | 유지 — `IByteBuffer` 분리만 (구현은 core) |
 | `core/perf/metrics/metrics.hpp/cpp` | `core/perf/metrics/i_metrics.hpp` + `infra/metrics/metrics_collector.hpp/cpp` | 인터페이스/구현 분리 |
-| `core/common/memory/memory_pool.hpp` | `core/common/memory/i_memory_allocator.hpp` + `infra/memory/memory_pool_allocator.hpp/cpp` | 인터페이스/구현 분리 |
+| `core/common/memory/memory_pool.hpp` | `core/common/memory/i_memory_allocator.hpp`(포트) + **MemoryPoolT는 core 유지** (인스턴스 기반 전환), infra는 특수 할당자만 | 인터페이스/구현 분리 + 싱글톤 제거 |
 | `core/actor_system/messages/message.hpp` | `core/actor_system/messages/message.hpp` (인터페이스 유지) + `infra/messaging/message_factory.hpp` | 팩토리 분리 |
 | `core/actor_system/messages/cmd_messages.hpp` | `service/cmd/cmd_messages.hpp` | 서비스 전용 메시지 이관 |
 | `core/actor_system/messages/ipc_messages.hpp` | `service/ipc/ipc_messages.hpp` | 서비스 전용 메시지 이관 |
