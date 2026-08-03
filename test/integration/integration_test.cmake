@@ -5,5 +5,10 @@ function(add_v2_test name source)
     gtest_discover_tests(${name})
 endfunction()
 
-add_v2_test(test_actor_system_integration core/test_actor_system_integration.cpp)
-add_v2_test(test_timer_pipeline core/test_timer_pipeline.cpp)
+function(add_v2_test_infra name source)
+    add_v2_test(${name} ${source})
+    target_link_libraries(${name} PRIVATE v2_infra)
+endfunction()
+
+add_v2_test_infra(test_actor_system_integration core/test_actor_system_integration.cpp)
+add_v2_test_infra(test_timer_pipeline core/test_timer_pipeline.cpp)

@@ -22,7 +22,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(v2_service PUBLIC SDBusCpp::sdbus-c++)
 endif()
 
-target_link_libraries(v2_service PUBLIC v2_core)
+target_link_libraries(v2_service PUBLIC v2_core v2_infra)
 
 target_include_directories(v2_service PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src

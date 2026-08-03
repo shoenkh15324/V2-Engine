@@ -11,6 +11,11 @@ if(BUILD_MAIN_APP)
         ${CMAKE_CURRENT_LIST_DIR}/main/main.cpp
         ${CMAKE_CURRENT_LIST_DIR}/main/main_app.cpp
     )
+    target_compile_definitions(v2_main PRIVATE
+        V2_ENGINE_NAME="${PROJECT_NAME}"
+        V2_ENGINE_VERSION="${PROJECT_VERSION}"
+        V2_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config"
+    )
     target_include_directories(v2_main PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/../../src
     )
@@ -21,6 +26,11 @@ if(BUILD_CLI_APP)
     add_executable(v2_cli
         ${CMAKE_CURRENT_LIST_DIR}/cli/main.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cli/cli_app.cpp
+    )
+    target_compile_definitions(v2_cli PRIVATE
+        V2_ENGINE_NAME="${PROJECT_NAME}"
+        V2_ENGINE_VERSION="${PROJECT_VERSION}"
+        V2_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config"
     )
     target_include_directories(v2_cli PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/../../src
@@ -38,6 +48,11 @@ if(BUILD_TUI_APP)
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/system_panel.cpp
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/pmu_panel.cpp
         ${CMAKE_CURRENT_LIST_DIR}/tui/widgets/actor_list/actor_list.cpp
+    )
+    target_compile_definitions(v2_tui PRIVATE
+        V2_ENGINE_NAME="${PROJECT_NAME}"
+        V2_ENGINE_VERSION="${PROJECT_VERSION}"
+        V2_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config"
     )
     target_include_directories(v2_tui PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/../../src

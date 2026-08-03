@@ -13,3 +13,4 @@ include(GoogleTest)
 # ── Internal modules ───────────────────────────────────────
 include(${CMAKE_CURRENT_LIST_DIR}/unit/unit_test.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/integration/integration_test.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/standalone/standalone_test.cmake)

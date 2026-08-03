@@ -157,7 +157,7 @@ app/                                       # CLI/TUI/main — Composition Root (
 
 ### 1.1 Core CMake 정리 + 독립 subproject 분리 (P0-1)
 
-> **현재 상태 (1.1.1 완료)**: `v2_core` 소스의 infra/`nlohmann`/`ftxui` 참조는 전부 제거됨 (`rg 'infra/|nlohmann/|ftxui/' src/core` → 0건). 남은 위반은 `v2_core`가 **`v2_infra`를 PUBLIC으로 링크**하는 core.cmake의 잔재 링크 1줄뿐 (1.1.2에서 제거).
+> **현재 상태 (1.1 완료)**: `v2_core`는 std(+libc)만 사용하고 infra/`nlohmann`/`ftxui` 참조 0건. `v2_core`는 `Threads::Threads`만 링크하는 **독립 CMake subproject**로 분리됨. core→infra 링크 제거, compile definitions는 app.cmake로 이관 완료. 경계는 `v2_core_smoke`(v2_core만 링크) + 순수 테스트 링크 라인 검증으로 강제됨.
 > **목표**: `v2_core` 링크를 완전히 비우고 core를 **독립 CMake subproject**로 분리해 "단독 빌드/실행 가능" 원칙을 빌드가 강제하게 한다. (`add_library(v2_core INTERFACE)` 전환은 core에 `.cpp` 구현이 남아 있어 **보류** — Phase 2 이후 검토). **타이머 결정 (구현 완료)**: portable(스레드+세마포어) `Timer`를 core `common/timer`에 두어 core 단독 빌드에서도 **메시징+타이머가 동작**하게 하고, Linux 최적화(timerfd)는 infra `LinuxTimer`가 오버라이드. 선택은 Composition Root(app)가 함 — **"epoll 주입 = Linux 감지" → `LinuxTimer` 동반 주입**. core는 "주입 or 자기 기본"만 가짐.
 
 #### 1.1.1 core의 infra/외부 의존 제거
@@ -191,22 +191,22 @@ target_include_directories(v2_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)   # c
 # 링크 없음 — 외부 라이브러리 금지
 find_package(Threads REQUIRED)           # std::thread/pthread (std 계열)
 target_link_libraries(v2_core PUBLIC Threads::Threads)
-add_executable(v2_core_smoke standalone/main.cpp)   # 단독 빌드/실행 증명
+# smoke 타깃은 test/standalone/ 에 등록됨 (v2_core만 링크 — 경계 증명)
 ```
 
-- [ ] `src/core/CMakeLists.txt` 신규 → root에서 `include(core.cmake)` → `add_subdirectory(src/core)` 전환
-- [ ] `src/core/standalone/main.cpp` smoke 타깃 — 모든 core 오브젝트 + trivial main을 링크해 "외부 심볼 무참조" 증명 (매 빌드 경계 강제). core portable `Timer` + std-only mock/블로킹 루프를 주입해 **메시징 + 타이머를 실제 실행** (fd 기능은 데모 범위 밖)
-- [ ] `v2_core`의 compile definitions(`V2_ENGINE_NAME/VERSION/V2_CONFIG_DIR`) → `app.cmake`로 이관 (전부 app에서만 사용됨)
-- [ ] `V2_CONFIG_DIR` 경로 버그 수정: 현재 `src/core/config`(존재하지 않음 → config 미로딩) → `${CMAKE_SOURCE_DIR}/config`
-- [ ] 의존 방향 교정: `v2_infra`에 `target_link_libraries(v2_infra PUBLIC v2_core)` 추가 **및 `v2_core`의 잔재 링크 `v2_infra` 제거** (core→infra 링크 제거)
-- [ ] infra 의존 테스트(`test_timer`, `test_event_loop_epoll`, `test_scheduler`, `test_actor_system`, `test_actor_system_integration`, `test_timer_pipeline`)에 `v2_infra` 명시 ✅(`v2_bench`는 `v2_infra` 링크 완료 — bench.cmake)
+- [x] `src/core/CMakeLists.txt` 신규 → root에서 `add_subdirectory(src/core)` 직접 호출 (전환 완료 — `core.cmake` 위임 스텁은 삭제) ✅
+- [x] `test/standalone/main.cpp` smoke 타깃 — 모든 core 오브젝트 + trivial main을 링크해 "외부 심볼 무참조" 증명 (매 빌드 경계 강제). core portable `Timer` + std-only mock/블로킹 루프를 주입해 **메시징 + 타이머를 실제 실행** (fd 기능은 데모 범위 밖) ✅ (`test/standalone/mock_event_loop.hpp` + `main.cpp` + `standalone_test.cmake` — **v2_core만 링크**, `cmake -S src/core` 단독 빌드는 OBJECT lib 컴파일 독립성만 증명)
+- [x] `v2_core`의 compile definitions(`V2_ENGINE_NAME/VERSION/V2_CONFIG_DIR`) → `app.cmake`로 이관 (전부 app에서만 사용됨) ✅
+- [x] `V2_CONFIG_DIR` 경로 버그 수정: 현재 `src/core/config`(존재하지 않음 → config 미로딩) → `${CMAKE_SOURCE_DIR}/config` ✅
+- [x] 의존 방향 교정: `v2_infra`에 `target_link_libraries(v2_infra PUBLIC v2_core)` 추가 **및 `v2_core`의 잔재 링크 `v2_infra` 제거** (core→infra 링크 제거) ✅
+- [x] infra 의존 테스트(`test_event_loop_epoll`, `test_actor_system`, `test_actor_system_integration`, `test_timer_pipeline`)에 `v2_infra` 명시 ✅ (`test_timer`/`test_scheduler`는 portable만 사용이라 제외. `v2_bench`는 이미 `v2_infra` 링크 완료 — bench.cmake)
 
 #### 1.1.3 검증
-- [ ] `rg 'infra/|nlohmann/|ftxui/' src/core` → 결과 없음 ✅
-- [ ] standalone 빌드: `cmake -S src/core -B <dir> && cmake --build <dir>` 성공
-- [ ] `v2_core_smoke` 링크 성공 (외부 심볼 무참조 증명)
-- [ ] 전체 빌드 + `ctest` 전체 통과 ✅ (123/123)
-- [ ] 순수 테스트(`test_ring_buffer` 등) 링크 라인에 `libv2_infra.a` 미포함
+- [x] `rg 'infra/|nlohmann/|ftxui/' src/core` → 결과 없음 ✅
+- [x] standalone 빌드: `cmake -S src/core -B <dir> && cmake --build <dir>` 성공 (OBJECT lib 컴파일 독립성) ✅
+- [x] `v2_core_smoke` 빌드 + 실행 (`handled >= 3`, **v2_core만 링크** → 외부 심볼 무참조 증명) — root 빌드 `BUILD_TESTING=ON` + `ctest`로 검증 ✅ (Test #124)
+- [x] 전체 빌드 + `ctest` 전체 통과 (124/124) ✅
+- [x] 순수 테스트(`test_ring_buffer`) 링크 라인에 `libv2_infra.a` 미포함 ✅ (build.ninja에서 v2_core 객체만 링크 확인)
 
 ### 1.2 핵심 인터페이스 정의 (P0-2)
 
@@ -1110,7 +1110,7 @@ static Message make(T&& value, IAllocator* allocator) {
 
 ### 3.5벤치마크/메트릭 코어 선택적 링크 (P2-5)
 
-**파일**: `src/core/core.cmake`
+**파일**: `src/core/CMakeLists.txt`
 
 ```cmake
 # perf 모듈 별도 타겟으로 분리
@@ -1364,7 +1364,7 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 | `infra/hal/sys/sys_linux.hpp/cpp` | `infra/hal/sys/sys_linux.hpp/cpp` | 유지 — `ISys` 구현체 |
 | `infra/hal/i2c/i2c_linux.hpp/cpp` | `infra/hal/i2c/i2c_linux.hpp/cpp` | 유지 — `II2c` 구현체 |
 | `infra/transport/uds/uds_server.hpp/cpp` | `infra/transport/uds/uds_server.hpp/cpp` | 유지 — `IIpcServer` 구현 (포트는 `service/ipc/`) |
-| `core/core.cmake` | `core/core.cmake` (인터페이스만) + `infra/infra.cmake` (구현체) | CMake 분리 |
+| `src/core/CMakeLists.txt` | `src/core/CMakeLists.txt` (독립 subproject) + `infra/infra.cmake` (구현체) | CMake 분리 |
 | `service/network_manager/network_manager_actor.cpp` | (수정) `dbus_actor.hpp` 직접 include 제거 | 메시지 기반 통신으로 전환 |
 
 ---

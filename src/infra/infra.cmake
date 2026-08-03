@@ -28,6 +28,8 @@ target_link_libraries(v2_infra PUBLIC
     ftxui::ftxui
 )
 
+target_link_libraries(v2_infra PUBLIC v2_core)
+
 target_include_directories(v2_infra PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../src
 )
