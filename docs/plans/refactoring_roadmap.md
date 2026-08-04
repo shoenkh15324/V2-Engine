@@ -334,61 +334,66 @@ public:
 - `i_supervisor.hpp` — 기존 `ISupervisor` 유지
 - `i_dead_letter_queue.hpp` — `push`, `pop`, `count`, `capacity`
 
-### 1.3 ActorSystem 생성자 주입 리팩토링 (P0-3)
+### 1.3 ActorSystem 생성자 주입 리팩토링 (P0-3) ✅
 
-**파일**: `src/core/actor_system/actor_system.hpp`, `actor_system.cpp`
+> **목적 (이전 설계 대체)**: ActorSystem의 **공개 계약(헤더)에서 구체 타입 제로**. 모든 협력자는 생성자로 주입받고, **기본 조립은 클래스 밖 팩토리(Composition Root)가 담당**한다.
+>
+> **이전 설계에서 제거/수정한 지점**:
+> - `IActorRegistry&`(비소유 참조) → **`unique_ptr<IActorRegistry>` 소유** (소유권 모호성 해소, 전 의존성 일관)
+> - `IClock* clock_` → **제거** (`IClock` 타입은 1.1에서 `i_time_source.hpp` 삭제로 미존재)
+> - `IMetrics*`/`ILogger*` → **보류** (인스턴스 전환은 1.5.1/1.5.2의 몫 — 지금 추가는 데드 파라미터)
+> - `epollMaxEvents`/`epollWaitTimeoutMs` → **제거** (infra 전용이며 이벤트루프는 주입 전 이미 호출자가 구성)
+> - `createDefault()`가 core에서 이벤트루프를 못 만드는 문제 → **eventLoop는 팩토리 파라미터로 수신**
+
+**파일**: `src/core/actor_system/actor_system.hpp`, `actor_system.cpp`, `i_supervisor.hpp`
 
 ```cpp
-// Before: 내부에서 모든 구현체 생성
-class ActorSystem {
-    std::unique_ptr<WorkDispatcher> workDispatcher_;
-    std::unique_ptr<EventLoopEpoll> eventLoop_;
-    std::unique_ptr<Scheduler> scheduler_;
-    // ...
-public:
-    explicit ActorSystem(int numWorkers, int maxBatch = 32, int epollMaxEvents = 64, int epollWaitTimeoutMs = 1000);
-};
+// Before: 내부에서 모든 구현체 생성 (WorkDispatcher/Scheduler/Registry/DLQ/Supervisor)
+explicit ActorSystem(int numWorkers, int maxBatch = 32,
+                     std::unique_ptr<IEventLoop> eventLoop = nullptr,
+                     std::unique_ptr<ITimer> timer = nullptr);
 
-// After: 인터페이스만 받고, 팩토리/컨테이너에서 주입
+// After: 인터페이스만 받는 순수 계약 + 번들 struct (fat ctor 방지, 전부 소유)
 struct ActorSystemConfig {
     int numWorkers = 1;
     int maxBatch = 32;
-    int epollMaxEvents = 64;
-    int epollWaitTimeoutMs = 1000;
-    size_t defaultMailboxSize = 512;
+    size_t defaultMailboxSize = 512;   // epoll 필드 없음 (infra 전용)
+};
+
+struct ActorSystemDeps {
+    std::unique_ptr<IWorkDispatcher>   dispatcher;
+    std::unique_ptr<IEventLoop>        eventLoop;      // run()에 필수 — core가 못 만듦
+    std::unique_ptr<IScheduler>        scheduler;
+    std::unique_ptr<IDeadLetterQueue>  deadLetterQueue;
+    std::unique_ptr<ISupervisor>       supervisor;
+    std::unique_ptr<IActorRegistry>    registry;       // 소유 (참조 아님)
 };
 
 class ActorSystem {
-    std::unique_ptr<IWorkDispatcher> workDispatcher_;
-    std::unique_ptr<IEventLoop> eventLoop_;
-    std::unique_ptr<IScheduler> scheduler_;
-    std::unique_ptr<IDeadLetterQueue> deadLetterQueue_;
-    std::unique_ptr<ISupervisor> supervisor_;
-    IActorRegistry& actorRegistry_;  // 참조 (소유하지 않음)
-    IMetrics* metrics_ = nullptr;
-    ILogger* logger_ = nullptr;
-    IClock* clock_ = nullptr;
-
+    // 멤버 전부 unique_ptr<인터페이스> — 헤더에 구체 include 0개
 public:
-    ActorSystem(const ActorSystemConfig& config,
-                std::unique_ptr<IWorkDispatcher> dispatcher,
-                std::unique_ptr<IEventLoop> eventLoop,
-                std::unique_ptr<IScheduler> scheduler,
-                std::unique_ptr<IDeadLetterQueue> dlq,
-                std::unique_ptr<ISupervisor> supervisor,
-                IActorRegistry& registry,
-                IMetrics* metrics = nullptr,
-                ILogger* logger = nullptr,
-                IClock* clock = nullptr);
-
-    // 팩토리 메서드 제공 (편의용)
-    static std::unique_ptr<ActorSystem> createDefault(const ActorSystemConfig& config);
+    ActorSystem(const ActorSystemConfig& config, ActorSystemDeps deps);
+    // ...
 };
 ```
 
-- [ ] `ActorSystemConfig` 구조체로 매직 넘버 외부화
-- [ ] `createDefault()` 팩토리에서 기본 구현체 생성 (나중에 `infra`에서 오버라이드 가능)
-- [ ] 기존 테스트 코드 수정: `TestScheduler`, `TestRegistry` 등 mock 주입 가능하게
+```cpp
+// 기본 조립 (클래스 밖 — core/actor_system.cpp의 자유 함수)
+std::unique_ptr<ActorSystem> createDefaultActorSystem(
+    const ActorSystemConfig& config,
+    std::unique_ptr<IEventLoop> eventLoop,          // core가 못 만드는 유일한 것
+    std::unique_ptr<ITimer> timer = nullptr);       // → Scheduler 내부 조립
+// 팩토리가 WorkDispatcher/Scheduler(timer)/DeadLetterQueue/Supervisor(*dlq)/ActorRegistry를
+// 만들고 dlq↔supervisor를 배선한 뒤 DI ctor 호출. ActorSystem 클래스 자체는 구체를 모름.
+```
+
+- [ ] `ActorSystemConfig` + `ActorSystemDeps` struct 추가 (매직 넘버 외부화, epoll 필드 제외)
+- [ ] 멤버를 `unique_ptr<인터페이스>`로 교체, 헤더 include를 인터페이스만으로 정리 (구체 include 0)
+- [ ] `createDefaultActorSystem(config, eventLoop, timer)` 팩토리 분리 — 기본 구현체 조립 + dlq↔supervisor 배선
+- [ ] `i_supervisor.hpp`에 `setRestartAll(std::function<int()>)` 추가 (OneForAll 브로드캐스트는 ActorSystem이 런타임 집합을 아므로 내부 배선 필수 — 구체에 이미 존재, 인터페이스 승격만)
+- [ ] `start()/stop()/run()`에 `eventLoop_` null 가드 (루프 없이 생성 가능 — 테스트/조립 편의)
+- [ ] 기존 `(numWorkers, maxBatch, eventLoop, timer)` ctor 제거 → app/bench(~12곳)는 `createDefaultActorSystem`으로 치환
+- [ ] 단위 테스트(`test_actor_system` 등)를 `ActorSystemDeps` + mock(`TestScheduler`/`TestRegistry`/`MockEventLoop`/mock dispatcher) 주입으로 전환 → **infra 의존 없는 단위 테스트 달성**
 
 ### 1.4 ActorRuntime 분해 (P0-4)
 

@@ -26,7 +26,7 @@ public:
 
 static std::unique_ptr<ActorSystem> makeSystem(int numWorkers){
     auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-    return std::make_unique<ActorSystem>(numWorkers, 32, std::move(loop), nullptr);
+    return createDefaultActorSystem({numWorkers, 32}, std::move(loop));
 }
 
 } // namespace

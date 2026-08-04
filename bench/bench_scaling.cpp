@@ -2,6 +2,7 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
@@ -42,14 +43,14 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
     auto measureThroughput = [&](int workers, int actors, int iterations) -> double{
         std::atomic<uint64_t> cnt{0};
         auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-        ActorSystem sys(workers, p.maxbatch, std::move(loop));
+        auto sys = createDefaultActorSystem({workers, p.maxbatch}, std::move(loop));
         std::vector<BenchActor*> acts;
         for(int i = 0; i < actors; i++){
             std::string nm = "bench_" + std::to_string(i);
             size_t mbSize = static_cast<size_t>(iterations / actors) + 256;
-            acts.push_back(sys.createActor<BenchActor>(nm, mbSize, cnt));
+            acts.push_back(sys->createActor<BenchActor>(nm, mbSize, cnt));
         }
-        sys.start();
+        sys->start();
         auto st = Time::now();
         for(int i = 0; i < iterations; i++){
             acts[i % actors]->receiveMsg(Message::make(Tick{}));
@@ -59,7 +60,7 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
             if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
         }
         auto et = Time::now();
-        sys.stop();
+        sys->stop();
         uint64_t ns = Time::toNs(et - st);
         return (ns > 0) ? (static_cast<double>(iterations) * 1000000000.0 / static_cast<double>(ns)) : 0.0;
     };

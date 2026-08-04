@@ -2,6 +2,7 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
@@ -43,10 +44,10 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
         int64_t total = static_cast<int64_t>(numProducers) * msgsPerProducer;
         std::atomic<uint64_t> cnt{0};
         auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-        ActorSystem sys(p.workers, p.maxbatch, std::move(loop));
+        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(total) + 256;
-        auto* actor = sys.createActor<BenchActor>("contention_actor", mbSize, cnt);
-        sys.start();
+        auto* actor = sys->createActor<BenchActor>("contention_actor", mbSize, cnt);
+        sys->start();
         auto st = Time::now();
         std::vector<std::thread> producers;
         for(int i = 0; i < numProducers; i++){
@@ -62,7 +63,7 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
             if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
         }
         auto et = Time::now();
-        sys.stop();
+        sys->stop();
         return Time::toNs(et - st);
     };
 

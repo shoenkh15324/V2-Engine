@@ -44,7 +44,7 @@ public:
 
     // OneForAll 시 전체 런타임에 ActorRestartRequest를 브로드캐스트하는 콜백.
     // 실제로 재시작이 요청된 액터 수를 반환해야 한다.
-    void setRestartAll(std::function<int()> restartAll);
+    void setRestartAll(std::function<int()> restartAll) override;
 
     // 실패 처리 (여러 워커에서 동시 호출 가능)
     void onActorFailed(ISupervised* runtime, Message failedMsg, const std::string& reason) override;

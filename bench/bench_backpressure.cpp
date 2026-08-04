@@ -2,6 +2,7 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
@@ -46,14 +47,14 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
     std::atomic<uint64_t> processed{0};
 
     auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-    ActorSystem actorSystem(p.workers, p.maxbatch, std::move(loop));
-    auto* actor = actorSystem.createActor<BenchActor>("bp_actor", p.mailbox, processed);
+    auto actorSystem = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
+    auto* actor = actorSystem->createActor<BenchActor>("bp_actor", p.mailbox, processed);
     size_t cap = actor->mailboxCapacity();
     int64_t totalToSend = std::max(static_cast<int64_t>(1), static_cast<int64_t>(p.floodRate) * p.floodDurationMs);
 
     if(p.mode == 0){
         // Mode 0: Empty start - workers 먼저 시작, producer가 consumer보다 빠르게 생성
-        actorSystem.start();
+        actorSystem->start();
 
         auto floodStart = Time::now();
         for(int64_t i = 0; i < totalToSend; i++){
@@ -75,7 +76,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         uint64_t floodDuration = Time::toNs(floodEnd - floodStart);
         uint64_t drainDuration = Time::toNs(drainEnd - drainStart);
 
-        actorSystem.stop();
+        actorSystem->stop();
 
         uint64_t sentVal = sent.load(std::memory_order_relaxed);
         uint64_t droppedVal = dropped.load(std::memory_order_relaxed);
@@ -107,13 +108,13 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         auto floodEnd = Time::now();
 
         uint64_t sentBefore = sent.load(std::memory_order_relaxed);
-        actorSystem.start();
+        actorSystem->start();
         auto drainStart = Time::now();
         while(processed.load(std::memory_order_relaxed) < sentBefore){
         }
         auto drainEnd = Time::now();
 
-        actorSystem.stop();
+        actorSystem->stop();
 
         uint64_t sentVal = sent.load(std::memory_order_relaxed);
         uint64_t droppedVal = dropped.load(std::memory_order_relaxed);
@@ -142,7 +143,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
             sent.fetch_add(1, std::memory_order_relaxed);
         }
 
-        actorSystem.start();
+        actorSystem->start();
 
         for(int64_t i = fillTarget; i < totalToSend; i++){
             bool ok = (actor->mailboxCount() < cap);
@@ -160,7 +161,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         }
         auto drainEnd = Time::now();
 
-        actorSystem.stop();
+        actorSystem->stop();
 
         uint64_t sentVal = sent.load(std::memory_order_relaxed);
         uint64_t droppedVal = dropped.load(std::memory_order_relaxed);

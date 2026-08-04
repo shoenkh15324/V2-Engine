@@ -6,7 +6,7 @@
 #include "core/perf/metrics/metrics.hpp"
 #include <pthread.h>
 
-Worker::Worker(WorkDispatcher* workDispatcher, int id, int maxBatch) : workDispatcher_(workDispatcher), id_(id), maxBatch_(maxBatch){
+Worker::Worker(IWorkDispatcher* workDispatcher, int id, int maxBatch) : workDispatcher_(workDispatcher), id_(id), maxBatch_(maxBatch){
     threadName_ = "v2-worker" + std::to_string(id_);
 }
 

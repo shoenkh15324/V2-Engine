@@ -1,25 +1,39 @@
 #include "actor_system.hpp"
+#include <cassert>
 #include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/dispatcher/worker.hpp"
-#include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
+#include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
+#include "core/actor_system/runtime/scheduler/scheduler.hpp"
 #include "core/actor_system/runtime/supervisor/supervisor.hpp"
+#include "core/actor_system/runtime/supervisor/dead_letter_queue.hpp"
+#include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
+#include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
+#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/common/timer/i_timer.hpp"
+#include "core/perf/metrics/metrics.hpp"
+#include "core/common/log/log.hpp"
 
-ActorSystem::ActorSystem(
-    int numWorkers,
-    int maxBatch,
-    std::unique_ptr<IEventLoop> eventLoop,
-    std::unique_ptr<ITimer> timer
-) : workDispatcher_(numWorkers), scheduler_(std::move(timer)), eventLoop_(std::move(eventLoop)){
-    Metrics::init(numWorkers);
-    workers_.reserve(numWorkers);
-    for(int i = 0; i < numWorkers; i++){
-        workers_.push_back(std::unique_ptr<Worker>(new Worker(&workDispatcher_, i, maxBatch)));
+ActorSystem::ActorSystem(const ActorSystemConfig& config, ActorSystemDeps deps)
+    : deadLetterQueue_(std::move(deps.deadLetterQueue)),
+        supervisor_(std::move(deps.supervisor)),
+        dispatcher_(std::move(deps.dispatcher)),
+        scheduler_(std::move(deps.scheduler)),
+        registry_(std::move(deps.registry)),
+        eventLoop_(std::move(deps.eventLoop)),
+        maxBatch_(config.maxBatch)
+{
+    assert(dispatcher_ && scheduler_ && supervisor_ && deadLetterQueue_ && registry_);
+    
+    Metrics::init(config.numWorkers);
+    workers_.reserve(config.numWorkers);
+    for(int i = 0; i < config.numWorkers; i++){
+        workers_.push_back(std::make_unique<Worker>(dispatcher_.get(), i, config.maxBatch));
     }
-    supervisor_.setRestartAll([this]() -> int {
+    supervisor_->setRestartAll([this]() -> int {
         int count = 0;
-        actorRegistry_.forEachActor([&](ActorHandle h){
+        registry_->forEachActor([&](ActorHandle h){
             Actor* a = h.get();
             if(!a || !a->runtime()) return;
             ActorRestartRequest req;
@@ -32,14 +46,14 @@ ActorSystem::ActorSystem(
 }
 
 ActorSystem::~ActorSystem(){
-    actorRegistry_.clear();
+    registry_->clear();
     stop();
 }
 
 void ActorSystem::start(){
-    workDispatcher_.start();
-    eventLoop_->start();
-    scheduler_.start();
+    dispatcher_->start();
+    if(eventLoop_) eventLoop_->start();
+    scheduler_->start();
     for(auto& ctx : actorRuntimes_){
         int ret = ctx->actor()->open();
         if(ret != Ok) V2_LOG_ERROR("Actor {} failed to open", ctx->actor()->name().c_str());
@@ -50,22 +64,56 @@ void ActorSystem::start(){
 }
 
 void ActorSystem::stop(){
-    scheduler_.stop();
-    eventLoop_->stop();
-    workDispatcher_.beginDrain();
+    scheduler_->stop();
+    if(eventLoop_) eventLoop_->stop();
+    dispatcher_->beginDrain();
     for(auto& w : workers_){
         w->stop();
     }
-    workDispatcher_.stop();
+    dispatcher_->stop();
     for(auto& ctx : actorRuntimes_){
         ctx->actor()->close();
     }
 }
 
 void ActorSystem::run(){
-    eventLoop_->run();
+    if(eventLoop_) eventLoop_->run();
 }
 
 void ActorSystem::requestStop(){
     stop();
+}
+
+void ActorSystem::attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, uint64_t id){
+    auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(mailboxSize);
+    auto rt = std::make_unique<ActorRuntime>(
+        std::move(actor),
+        std::move(mailbox),
+        dispatcher_.get(),
+        scheduler_.get(),
+        registry_.get(),
+        eventLoop_.get(),
+        supervisor_.get()
+    );
+    registry_->add(rt->actor());
+    actorRuntimes_.push_back(std::move(rt));
+    Metrics::registerActor(id);
+}
+
+std::unique_ptr<ActorSystem> createDefaultActorSystem(const ActorSystemConfig& config, std::unique_ptr<IEventLoop> eventLoop, std::unique_ptr<ITimer> timer){
+    auto deadLetterQueue = std::make_unique<DeadLetterQueue>();
+    auto supervisor = std::make_unique<Supervisor>(*deadLetterQueue);
+    auto registry = std::make_unique<ActorRegistry>();
+    auto dispatcher = std::make_unique<WorkDispatcher>(config.numWorkers);
+    auto scheduler = std::make_unique<Scheduler>(std::move(timer));
+
+    ActorSystemDeps deps;
+    deps.deadLetterQueue = std::move(deadLetterQueue);
+    deps.supervisor = std::move(supervisor);
+    deps.registry = std::move(registry);
+    deps.dispatcher = std::move(dispatcher);
+    deps.scheduler = std::move(scheduler);
+    deps.eventLoop = std::move(eventLoop);
+
+    return std::make_unique<ActorSystem>(config, std::move(deps));
 }

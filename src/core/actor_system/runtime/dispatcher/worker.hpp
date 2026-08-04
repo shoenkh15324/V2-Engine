@@ -5,21 +5,23 @@
 #include <memory>
 #include "core/common/config/platform_config.h"
 
-class WorkDispatcher;
+class IWorkDispatcher;
 
 class Worker{
-friend class ActorSystem;
-friend struct std::default_delete<Worker>;
-
-private:
-    explicit Worker(WorkDispatcher* workDispatcher, int id, int maxBatch);
+public:
+    explicit Worker(IWorkDispatcher* workDispatcher, int id, int maxBatch);
     ~Worker();
+
+    Worker(const Worker&) = delete; // std::thread 보유라 복사 금지
+    Worker& operator=(const Worker&) = delete;
 
     void start();
     void stop();
+
+private:
     void runLoop();
 
-    WorkDispatcher* workDispatcher_;
+    IWorkDispatcher* workDispatcher_;
     std::thread thread_;
     std::atomic<bool> running_{false};
     std::string threadName_;

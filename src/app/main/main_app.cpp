@@ -105,7 +105,7 @@ void MainApp::registerServices(){
 }
 
 void MainApp::createActors(){
-    actorSystem_ = std::make_unique<ActorSystem>(cfg_.workerCount, cfg_.workerMaxBatch, std::move(eventLoop_), std::move(timer_));
+    actorSystem_ = createDefaultActorSystem({cfg_.workerCount, cfg_.workerMaxBatch, static_cast<size_t>(cfg_.mailboxSize)}, std::move(eventLoop_), std::move(timer_));
     actorSystem_->createActor<SystemActor>("system_actor", cfg_.mailboxSize)->setEssential(true);
     actorSystem_->createActor<CmdActor>("cmd_actor", cfg_.mailboxSize, pmu_.get())->setEssential(true);
     actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);

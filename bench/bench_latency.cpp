@@ -1,6 +1,7 @@
 #include "bench_latency.hpp"
 #include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
@@ -41,10 +42,10 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
         std::atomic<uint64_t> ack{0};
 
         auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-        ActorSystem sys(p.workers, p.maxbatch, std::move(loop));
+        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iters) + 256;
-        auto* act = sys.createActor<LatencyBenchActor>("latency_actor", mbSize, lats, sendTs, ack);
-        sys.start();
+        auto* act = sys->createActor<LatencyBenchActor>("latency_actor", mbSize, lats, sendTs, ack);
+        sys->start();
         auto st = Time::now();
         for(int i = 0; i < iters; i++){
             sendTs[i] = Time::nowNs();
@@ -55,7 +56,7 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
             }
         }
         auto et = Time::now();
-        sys.stop();
+        sys->stop();
     };
 
     if(p.warmup > 0) runOnce(p.warmup);
@@ -65,14 +66,14 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
     std::atomic<uint64_t> ackCounter{0};
 
     auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-    ActorSystem actorSystem(p.workers, p.maxbatch, std::move(loop));
+    auto actorSystem = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
     size_t mailboxSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(p.iterations) + 256;
-    auto* actor = actorSystem.createActor<LatencyBenchActor>(
+    auto* actor = actorSystem->createActor<LatencyBenchActor>(
         "latency_actor", mailboxSize,
         latencies, sendTimestamps, ackCounter
     );
 
-    actorSystem.start();
+    actorSystem->start();
     auto startTime = Time::now();
 
     for(int i = 0; i < p.iterations; i++){
@@ -85,7 +86,7 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
     }
 
     auto endTime = Time::now();
-    actorSystem.stop();
+    actorSystem->stop();
 
     std::sort(latencies.begin(), latencies.end());
     size_t n = latencies.size();

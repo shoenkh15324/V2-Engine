@@ -23,17 +23,17 @@ public:
 
 int main(){
     auto loop = std::make_unique<MockEventLoop>();
-    ActorSystem sys(1, 32, std::move(loop), nullptr);   // timer=null → core portable Timer
-    auto* a = sys.createActor<SmokeActor>("smoke", 64);
-    sys.start();
+    auto sys = createDefaultActorSystem({1, 32}, std::move(loop));   // timer=null → core portable Timer
+    auto* a = sys->createActor<SmokeActor>("smoke", 64);
+    sys->start();
 
-    std::thread t([&]{ sys.run(); });
+    std::thread t([&]{ sys->run(); });
 
     a->sendMsg("smoke", Message::make(SignalNotify{1}));            // 메시징
     a->startTimer(Message::make(SignalNotify{2}), 20, true);        // 타이머 (반복)
     Sleep::sleepMs(100);
 
-    sys.requestStop();
+    sys->requestStop();
     t.join();
 
     int n = a->handled_.load(std::memory_order_relaxed);

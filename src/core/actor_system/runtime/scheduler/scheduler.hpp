@@ -16,8 +16,8 @@ public:
     Scheduler(Scheduler&&) = delete;
     Scheduler& operator=(Scheduler&&) = delete;
 
-    void start();
-    void stop();
+    void start() override;
+    void stop() override;
     int addTimer(IActorRuntime* target, Message msg, uint64_t timeMs, bool repeating = false) override;
     void cancel(int id) override;
 

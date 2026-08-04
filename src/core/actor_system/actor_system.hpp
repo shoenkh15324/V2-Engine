@@ -3,29 +3,46 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include "core/actor_system/actor/actor_registry.hpp"
-#include "core/actor_system/runtime/scheduler/scheduler.hpp"
-#include "core/actor_system/runtime/supervisor/supervisor.hpp"
+#include <cstddef>
+#include <type_traits>
+#include <utility>
+#include "core/actor_system/actor/i_actor_registry.hpp"
+#include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
+#include "core/actor_system/runtime/supervisor/i_supervisor.hpp"
+#include "core/actor_system/runtime/supervisor/i_dead_letter_queue.hpp"
+#include "core/actor_system/runtime/dispatcher/i_work_dispatcher.hpp"
 #include "core/actor_system/runtime/dispatcher/io/i_event_loop.hpp"
-#include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
-#include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
-#include "core/actor_system/runtime/supervisor/dead_letter_queue.hpp"
-#include "core/common/log/log.hpp"
-#include "core/common/util/debug.hpp"
+#include "core/actor_system/actor/actor.hpp"
 #include "core/common/timer/i_timer.hpp"
-#include "core/common/container/lock_free_mpsc_queue.hpp"
-#include "core/perf/metrics/metrics.hpp"
 
+class ActorSystem;
 class Worker;
+class ActorRuntime;
 
-class ActorSystem{
+struct ActorSystemConfig {
+    int numWorkers = 1;
+    int maxBatch = 32;
+    size_t defaultMailboxSize = 512;
+};
+
+struct ActorSystemDeps {
+    std::unique_ptr<IEventLoop> eventLoop;
+    std::unique_ptr<IScheduler> scheduler;
+    std::unique_ptr<ISupervisor> supervisor;
+    std::unique_ptr<IActorRegistry> registry;
+    std::unique_ptr<IWorkDispatcher> dispatcher;
+    std::unique_ptr<IDeadLetterQueue> deadLetterQueue;
+};
+
+std::unique_ptr<ActorSystem> createDefaultActorSystem(
+    const ActorSystemConfig& config,
+    std::unique_ptr<IEventLoop> eventLoop,
+    std::unique_ptr<ITimer> timer = nullptr
+);
+
+class ActorSystem {
 public:
-    explicit ActorSystem(
-        int numWorkers,
-        int maxBatch = 32,
-        std::unique_ptr<IEventLoop> eventLoop = nullptr,
-        std::unique_ptr<ITimer> timer = nullptr
-    );
+    ActorSystem(const ActorSystemConfig& config, ActorSystemDeps deps);
     ~ActorSystem();
     
     ActorSystem(const ActorSystem&) = delete;
@@ -35,7 +52,12 @@ public:
 
     template<typename T, typename ... Args>
     T* createActor(const std::string& name, size_t mailboxSize = 512, Args&& ... args){
-        return createActorImpl<T>(name, mailboxSize, std::forward<Args>(args)...);
+        static_assert(std::is_base_of_v<Actor, T>, "T must derive from Actor");
+        uint64_t id = nextActorId_++;
+        auto actor = std::make_unique<T>(std::move(name), id, std::forward<Args>(args)...);
+        T* raw = actor.get();
+        attachActor(std::move(actor), mailboxSize, id); // .cpp 비멤버 도우미
+        return raw;
     }
 
     void start();
@@ -44,28 +66,18 @@ public:
     void requestStop();
 
 private:
-    template <typename T, typename ... Args>
-    T* createActorImpl(std::string name, size_t mailboxSize, Args&& ... args){
-        V2_ASSERT((std::is_base_of_v<Actor, T>), "T must derive from Actor");
-        uint64_t id = nextActorId_++;
-        auto actor = std::make_unique<T>(std::move(name), id, std::forward<Args>(args)...);
-        auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(mailboxSize);
-        auto actorRuntime = std::make_unique<ActorRuntime>(std::move(actor), std::move(mailbox), &workDispatcher_, &scheduler_, &actorRegistry_, eventLoop_.get(), &supervisor_);
-        T* ptr = static_cast<T*>(actorRuntime->actor());
-        actorRegistry_.add(ptr);
-        actorRuntimes_.push_back(std::move(actorRuntime));
-        Metrics::registerActor(id);
-        V2_LOG_INFO("Create actor / name: {}, id: {}, mailbox: {}", name.c_str(), id, mailboxSize);
-        return ptr;
-    }
+    // ActorRuntime + mailbox 생성은 .cpp의 attachActor()에서 (헤더에서 concrete 제거 목적)
+    void attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, uint64_t id);
 
-    WorkDispatcher workDispatcher_;
-    Scheduler scheduler_;
-    ActorRegistry actorRegistry_;
-    DeadLetterQueue deadLetterQueue_;
-    Supervisor supervisor_{deadLetterQueue_};
+    std::unique_ptr<IDeadLetterQueue> deadLetterQueue_;
+    std::unique_ptr<ISupervisor> supervisor_;
+    std::unique_ptr<IWorkDispatcher> dispatcher_;
+    std::unique_ptr<IScheduler> scheduler_;
+    std::unique_ptr<IActorRegistry> registry_;
     std::unique_ptr<IEventLoop> eventLoop_;
+    int maxBatch_ = 32;
+    std::atomic<uint64_t> nextActorId_{0};
     std::vector<std::unique_ptr<Worker>> workers_;
     std::vector<std::unique_ptr<ActorRuntime>> actorRuntimes_;
-    std::atomic<uint64_t> nextActorId_{0};
+
 };

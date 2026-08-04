@@ -25,6 +25,9 @@ public:
 struct TestScheduler : IScheduler{
     TestScheduler() = default;
 
+    void start() override{}
+    void stop() override{}
+
     int addTimer(IActorRuntime* target, Message, uint64_t delayMs, bool repeating) override{
         lastTarget = target;
         lastDelayMs = delayMs;
