@@ -1,119 +1,101 @@
 #pragma once
-#include <mutex>
-#include <list>
-#include <vector>
-#include <memory>
+#include <new>
 #include <cstdint>
+#include <cstddef>
 #include <cassert>
-#include <unordered_map>
-#include "core/common/memory/chunk.hpp"
+#include "core/common/memory/free_list.hpp"
+
+enum class SlabState{
+    Empty,
+    Partial,
+    Full
+};
 
 class Slab{
 public:
-    Slab() = default;
-    ~Slab() = default;
+    explicit Slab(std::size_t blockSize) : blockSize_(blockSize), totalBlocks_(kSlabSize / blockSize){
+        assert(blockSize >= sizeof(FreeList::kNodeSize));
+        assert(totalBlocks_ > 0);
+
+        memory_ = static_cast<uint8_t*>(::operator new(kSlabSize, std::align_val_t{kSlabSize}));
+        assert((reinterpret_cast<std::uintptr_t>(memory_) % kSlabSize) == 0);
+
+        for(std::size_t i = 0; i < totalBlocks_; ++i){
+            freeList_.push(memory_ + i * blockSize_);
+        }
+    }
+
+    ~Slab(){ ::operator delete(memory_, std::align_val_t{kSlabSize}); }
 
     Slab(const Slab&) = delete;
     Slab& operator=(const Slab&) = delete;
     Slab(Slab&&) = delete;
     Slab& operator=(Slab&&) = delete;
 
-    void init(std::size_t blockSize){
-        assert(blockSize != 0);
-        blockSize_ = blockSize;
+    void* allocate() noexcept {
+        if(freeList_.empty()) return nullptr;
+        ++usedCount_;
+        return freeList_.pop();
     }
 
-    void* allocate(){
-        std::lock_guard<std::mutex> guard(mutex_);
-        Chunk* chunk = partialChunks_.empty() ? addChunk() : partialChunks_.front();
-        ChunkState before = chunk->state();
-        void* ptr = chunk->allocate();
-        assert(ptr != nullptr);
-        ++allocatedBlocks_;
-        transitionState(before, chunk);
-        return ptr;
-    }
-
-    void deallocate(void* ptr){
-        assert(ptr != nullptr);
-        std::lock_guard<std::mutex> guard(mutex_);
-        Chunk* chunk = findChunk(ptr);
-        if(!chunk) return;
-        ChunkState before = chunk->state();
-        chunk->deallocate(ptr);
-        --allocatedBlocks_;
-        transitionState(before, chunk);
-    }
-
-    std::size_t fetchBatch(void** out, std::size_t batchSize){
-        assert(out != nullptr);
-        assert(batchSize > 0);
-        std::lock_guard<std::mutex> guard(mutex_);
-        std::size_t fetched = 0;
-        for(auto it = partialChunks_.begin(); it != partialChunks_.end() && (fetched < batchSize);){
-            Chunk* chunk = *it++;
-            ChunkState before = chunk->state();
-            fetched += chunk->allocateBatch(out + fetched, batchSize - fetched);
-            transitionState(before, chunk);
+    std::size_t allocateBatch(void** out, std::size_t maxCount) noexcept {
+        std::size_t count = 0;
+        while((count < maxCount) && !freeList_.empty()){
+            out[count] = freeList_.pop();
+            ++count;
         }
-        while(fetched < batchSize){
-            Chunk* chunk = addChunk();
-            ChunkState before = chunk->state();
-            fetched += chunk->allocateBatch(out + fetched, batchSize - fetched);
-            transitionState(before, chunk);
-            if(chunk->full()) break;
-        }
-        allocatedBlocks_ += fetched;
-        return fetched;
+        usedCount_ += count;
+        return count;
     }
 
-    std::size_t returnBatch(void** in, std::size_t count){
-        assert(in != nullptr);
-        std::lock_guard<std::mutex> guard(mutex_);
-        std::size_t returned = 0;
+    void deallocate(void* ptr) noexcept {
+        freeList_.push(ptr);
+        --usedCount_;
+    }
+
+    std::size_t deallocateBatch(void** blocks, std::size_t count) noexcept {
+        assert(count <= usedCount_);
         for(std::size_t i = 0; i < count; ++i){
-            Chunk* chunk = findChunk(in[i]);
-            assert(chunk != nullptr);
-            ChunkState before = chunk->state();
-            chunk->deallocate(in[i]);
-            transitionState(before, chunk);
-            ++returned;
+            freeList_.push(blocks[i]);
         }
-        allocatedBlocks_ -= returned;
-        return returned;
+        usedCount_ -= count;
+        return count;
     }
 
-    std::size_t blockSize() const noexcept{ return blockSize_; }
-    std::size_t allocatedBlocks() const noexcept{ return allocatedBlocks_; }
+    // ptr이 이 슬랩의 메모리 범위 내에 있으면 true를 반환
+    bool owns(void* ptr) const noexcept {
+        auto* p = static_cast<uint8_t*>(ptr);
+        return (p >= memory_) && (p < (memory_ + kSlabSize));
+    }
+
+    // ptr이 이 슬랩 내에서 유효하고 블록 정렬된 주소이면 true를 반환
+    bool contains(void* ptr) const noexcept {
+        if(!owns(ptr)) return false;
+        auto* p = static_cast<uint8_t*>(ptr);
+        std::uintptr_t offset = static_cast<std::uintptr_t>(p - memory_);
+        return (offset % blockSize_) == 0;
+    }
+
+    SlabState state() const noexcept{
+        if(usedCount_ == 0) return SlabState::Empty;
+        if(usedCount_ == totalBlocks_) return SlabState::Full;
+        return SlabState::Partial;
+    }
+
+    uint8_t* begin() const noexcept { return memory_; }
+    uint8_t* end() const noexcept { return memory_ + kSlabSize; }
+    bool full() const noexcept { return freeList_.empty(); }
+    bool empty() const noexcept { return freeList_.count() == totalBlocks_; }
+    std::size_t usedBlocks() const noexcept { return usedCount_; }
+    std::size_t totalBlocks() const noexcept { return totalBlocks_; }
+    std::size_t blockSize() const noexcept { return blockSize_; }
 
 private:
-    static constexpr std::size_t kChunkSize = 4096;
-    static_assert((kChunkSize & (kChunkSize - 1)) == 0, "Chunk size must be power of two");
+    static constexpr std::size_t kSlabSize = 4096;
 
-    Chunk* addChunk(){
-        auto chunk = std::make_unique<Chunk>(blockSize_);
-        Chunk* raw = chunk.get();
-        chunkMap_.emplace(reinterpret_cast<std::uintptr_t>(raw->begin()), raw); // 주소를 key로 저장
-        chunks_.push_back(std::move(chunk));
-        return raw;
-    }
-
-    Chunk* findChunk(void* ptr){
-        auto it = chunkMap_.find(reinterpret_cast<std::uintptr_t>(ptr) & ~(kChunkSize - 1));
-        return (it != chunkMap_.end()) ? it->second : nullptr;
-    }
-
-    void transitionState(ChunkState before, Chunk* chunk){
-        ChunkState after = chunk->state();
-        if(before == after) return;
-        if(before == ChunkState::Partial) partialChunks_.remove(chunk);
-        if(after == ChunkState::Partial) partialChunks_.push_back(chunk);
-    }
-
-    std::mutex mutex_;
-    std::size_t blockSize_ = 0;
-    std::size_t allocatedBlocks_ = 0;
-    std::list<Chunk*> partialChunks_;
-    std::vector<std::unique_ptr<Chunk>> chunks_;
-    std::unordered_map<std::uintptr_t, Chunk*> chunkMap_;
+    uint8_t* memory_;
+    std::size_t blockSize_;
+    std::size_t totalBlocks_;
+    std::size_t usedCount_ = 0;
+    FreeList freeList_;
 };

@@ -210,7 +210,7 @@ target_link_libraries(v2_core PUBLIC Threads::Threads)
 
 ### 1.2 핵심 인터페이스 정의 (P0-2)
 
-#### 1.2.1 `core/common/time/i_time_source.hpp` ~~— 삭제됨 (1.1에서 정리)~~
+#### 1.2.1 `core/common/time/i_time_source.hpp` ~~— 삭제됨 (1.1에서 정리)~~ ✅
 > `i_time_source.hpp`는 참조처가 없어 1.1에서 제거. `Time`(std::chrono 래퍼)만으로 충분. 신설 시 이 표준 코드 사용.
 ```cpp
 #pragma once
@@ -233,7 +233,7 @@ public:
 };
 ```
 
-#### 1.2.2 `core/common/memory/i_memory_allocator.hpp`
+#### 1.2.2 `core/common/memory/i_memory_allocator.hpp` ✅
 
 > **소유권 결정 (1.2 설계 확정)**: 할당자는 "포트 + 기본 구현"을 **core가 소유**, "특수/외부 구현"만 infra가 소유한다 (1.1 타이머 패턴과 동일: core portable `Timer` vs infra `LinuxTimer`).
 > - **포트** `IMemoryAllocator` — core (재사용 계약)
@@ -602,6 +602,26 @@ public:
 
 - **기본값은 core 풀 인스턴스** (`MemoryPoolT`를 인스턴스 기반으로 전환). core는 어떤 pool도 몰라도 동작 (v2_core_smoke 유지)
 - `inline thread_local tlCache_`(thread_local_cache.hpp) → **풀 인스턴스 소유로 이관** (전역 제거)
+
+#### 1.5.4 메시지 생성 은닉 API (Payload-전용 send/sendMsg 오버로드) — 추후 진행
+> **동기**: `actor.send(target, Message::make(CmdRequest{...}))`처럼 호출자가 매번 `Message::make`를 쓰는 것을 없애고, **payload 타입만 넘기면 send 내부에서 `Message` 생성(그리고 그 안의 allocator 결정)을 은닉**한다. 1.5.3의 allocator 주입과 강하게 연관 — 주입 결정 지점이 은닉 레이어 안에만 생기면 되므로 **1.5.3과 함께 진행 권장**.
+> **id 자동 추론**: 각 메시지 타입은 `static constexpr MessageId kId`를 보유 (`message_traits.hpp` + 각 messages 헤더). payload 타입만으로 `DT::kId`가 추론되므로 **호출자가 id를 알 필요 없음**.
+
+```cpp
+// src/core/actor_system/actor/actor.hpp (+ actor_handle.hpp의 ActorHandle::send)
+template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+void sendMsg(const std::string& name, M&& msg){
+    sendMsg(name, Message::make(std::forward<M>(msg)));   // payload → Message 내부 변환
+}
+// sendMsg(uint64_t), sendMsgAfter(name/id, delay), receiveMsg, startTimer 동일 패턴
+```
+- caller: `sendMsg("target", CmdRequest{...})` — `Message` 생성 완전 은닉
+- `Message` 직접 전달 → **non-template 오버로드가 선택**되어 기존 호출(테스트/bench 포함 수백 곳) 호환 유지 (SFINAE로 템플릿이 `Message`를 안 잡게 함)
+- 오버로드 규칙: `Message` 객체 → non-template 승리 / payload 타입 → 템플릿이 `Message::make`로 감쌈
+- **의도한 아님 폼**: `send(id, args...)` (id + 개별 인자)는 메시지마다 생성 인자가 달라 **일반화 불가** → payload 구조체를 넘기는 방식만 허용
+
+- [ ] `Actor`의 sendMsg × 2, sendMsgAfter × 2, receiveMsg, startTimer + `ActorHandle::send`에 payload 템플릿 오버로드 추가 (첨가형, 기존 호출 무변경)
+- [ ] 도메인(`service/*`)의 핫 루트 호출을 payload 형태로 전환해 `Message::make` 누들을 정리 — allocator 주입(1.5.3)과 함께 처리
 
 ### 1.6 서비스 계층 경계 복원 — 포트 소유권 정리 (P0-7)
 

@@ -1,15 +1,18 @@
 #pragma once
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cassert>
 #include "core/common/memory/free_list.hpp"
-#include "core/common/memory/slab.hpp"
+#include "core/common/memory/central_cache.hpp"
 #include "core/common/memory/size_class.hpp"
+
+inline constexpr std::size_t kMaxPools = 16;
 
 class ThreadLocalCache{
 public:
-    void init(const std::array<Slab*, SizeClass::kNumSizeClasses>& slabs){
-        slabs_ = slabs;
+    void init(const std::array<CentralCache*, SizeClass::kNumSizeClasses>& centralCaches){
+        central_ = centralCaches;
         initialized_ = true;
     }
 
@@ -52,10 +55,10 @@ private:
     };
 
     void* fetchFromCentral(std::size_t idx){
-        assert(slabs_[idx] != nullptr);
+        assert(central_[idx] != nullptr);
         std::size_t batch = SizeClass::batchSize(idx);
         void* buf[kMaxBatchSize];
-        std::size_t fetched = slabs_[idx]->fetchBatch(buf, batch);
+        std::size_t fetched = central_[idx]->fetchBatch(buf, batch);
 
         if(fetched == 0) return nullptr;
         for(std::size_t i = 1; i < fetched; ++i){
@@ -65,7 +68,7 @@ private:
     }
 
     void returnToCentral(std::size_t idx){
-        assert(slabs_[idx] != nullptr);
+        assert(central_[idx] != nullptr);
         auto& cache = caches_[idx];
         std::size_t batch = SizeClass::batchSize(idx);
         std::size_t returnCount = (cache.freeList.count() < batch) ? cache.freeList.count() : batch;
@@ -75,14 +78,15 @@ private:
             buf[i] = cache.freeList.pop();
         }
 
-        std::size_t returned = slabs_[idx]->returnBatch(buf, returnCount);
+        std::size_t returned = central_[idx]->returnBatch(buf, returnCount);
         assert(returned == returnCount);
         (void)returned;
     }
 
     bool initialized_ = false;
-    std::array<Slab*, SizeClass::kNumSizeClasses> slabs_{};
+    std::array<CentralCache*, SizeClass::kNumSizeClasses> central_{};
     std::array<CacheLine, SizeClass::kNumSizeClasses> caches_;
 };
 
-inline thread_local ThreadLocalCache tlCache_;
+inline std::atomic<std::size_t> nextPoolId{0};
+inline thread_local std::array<ThreadLocalCache, kMaxPools> poolCaches;
