@@ -24,11 +24,11 @@ public:
     void start() override;
     void run() override;
     void stop() override;
+    void post(std::function<void()> op) override;
     int subscribe(WatchedFd fd, Handler handler) override;
     int unsubscribe(WatchedFd fd) override;
 
 private:
-    void post(std::function<void()> op);
     void drainPendingOps();
 
     std::atomic<bool> running_{false};

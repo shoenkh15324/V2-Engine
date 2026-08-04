@@ -16,18 +16,18 @@ public:
     WorkDispatcher(WorkDispatcher&&) = delete;
     WorkDispatcher& operator=(WorkDispatcher&&) = delete;
 
-    void start();
-    void stop();
+    void start() override;
+    void stop() override;
     bool dispatch(ActorRuntime* actorRuntime) override;
     bool redispatch(ActorRuntime* actorRuntime) override;
     ActorRuntime* acquire(int workerId) override;
     bool isRunning() const override { return running_.load(std::memory_order_relaxed); }
 
     // drain
-    void beginDrain();
-    bool isDraining() const { return draining_.load(std::memory_order_relaxed); }
-    size_t pendingWork() const { return pendingWork_.load(std::memory_order_relaxed); }
-    void onWorkDone();
+    void beginDrain() override;
+    bool isDraining() const override { return draining_.load(std::memory_order_relaxed); }
+    size_t pendingWork() const override { return pendingWork_.load(std::memory_order_relaxed); }
+    void onWorkDone() override;
 
 private:
     bool enqueueEntry(ActorRuntime* actorRuntime);

@@ -11,6 +11,7 @@ public:
     virtual void start() = 0;
     virtual void run() = 0;
     virtual void stop() = 0;
+    virtual void post(std::function<void()> op) = 0;
     virtual int subscribe(WatchedFd fd, Handler handler) = 0;
     virtual int unsubscribe(WatchedFd fd) = 0;
 };

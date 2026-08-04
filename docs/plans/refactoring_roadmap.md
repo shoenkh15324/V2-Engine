@@ -257,7 +257,7 @@ public:
 };
 ```
 
-#### 1.2.3 `core/common/log/i_logger.hpp`
+#### 1.2.3 `core/common/log/i_logger.hpp` ✅
 ```cpp
 #pragma once
 #include <string_view>
@@ -275,7 +275,7 @@ public:
 };
 ```
 
-#### 1.2.4 `core/perf/metrics/i_metrics.hpp`
+#### 1.2.4 `core/perf/metrics/i_metrics.hpp` ✅
 ```cpp
 #pragma once
 #include <cstdint>
@@ -309,7 +309,7 @@ public:
 };
 ```
 
-#### 1.2.5 `core/actor_system/runtime/i_mailbox.hpp`
+#### 1.2.5 `core/actor_system/runtime/i_mailbox.hpp` ✅
 ```cpp
 #pragma once
 #include "core/actor_system/messages/message.hpp"
@@ -326,40 +326,7 @@ public:
 };
 ```
 
-#### 1.2.6 `core/actor_system/runtime/i_timer_service.hpp`
-```cpp
-#pragma once
-#include <cstdint>
-#include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
-#include "core/actor_system/messages/message.hpp"
-
-class ITimerService {
-public:
-    virtual ~ITimerService() = default;
-    virtual int addTimer(IActorRuntime* target, Message msg, uint64_t delayMs, bool repeating) = 0;
-    virtual void cancelTimer(int timerId) = 0;
-    virtual void cancelAllTimers() = 0;
-    virtual size_t timerCount() const = 0;
-    virtual void start() = 0;
-    virtual void stop() = 0;
-};
-```
-
-#### 1.2.7 `core/actor_system/runtime/i_lifecycle_handler.hpp`
-```cpp
-#pragma once
-#include "core/actor_system/actor/actor.hpp"
-#include <string>
-
-class ILifecycleHandler {
-public:
-    virtual ~ILifecycleHandler() = default;
-    virtual bool handleLifecycle(Actor* actor, const Message& msg) = 0;  // true: 처리됨, false: 사용자 핸들러로 전달
-    virtual void performRestart(Actor* actor, const std::string& reason) = 0;
-};
-```
-
-#### 1.2.8 나머지 인터페이스들도 동일 패턴으로 정의
+#### 1.2.5 나머지 인터페이스들도 동일 패턴으로 정의 ✅
 - `i_event_loop.hpp` — `subscribe`, `unsubscribe`, `run`, `stop`, `post`
 - `i_work_dispatcher.hpp` — `dispatch`, `redispatch`, `acquire`, `start`, `stop`, `drainAndStop`, `beginDrain`, `isDraining`, `pendingWork`, `onWorkDone`
 - `i_scheduler.hpp` — `ITimerService`와 통합 또는 별도
