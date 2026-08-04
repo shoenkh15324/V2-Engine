@@ -3,13 +3,7 @@
 #include <format>
 #include <cstdint>
 #include <string_view>
-
-enum class LogLevel : uint8_t {
-    Verbose = 0,
-    Info = 1,
-    Warn = 2,
-    Error = 3,
-};
+#include "core/common/log/i_logger.hpp"
 
 void setLogLevel(LogLevel level);
 LogLevel getLogLevel();
