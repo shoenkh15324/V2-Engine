@@ -18,7 +18,7 @@ public:
 
     void start() override;
     void stop() override;
-    int addTimer(IActorRuntime* target, Message msg, uint64_t timeMs, bool repeating = false) override;
+    int addTimer(IActorRuntime* target, Message msg, uint64_t delayMs, bool repeating = false) override;
     void cancel(int id) override;
 
 private:

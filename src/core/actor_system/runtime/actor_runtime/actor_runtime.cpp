@@ -43,47 +43,19 @@ void ActorRuntime::enqueue(Message msg){
     }
 }
 
-int ActorRuntime::run(int maxBatch, bool* moreWork){
-    if(moreWork) *moreWork = false; 
-    if(stopped_.load(std::memory_order_relaxed)) return 0;
+int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
+    if(hasMoreWork) *hasMoreWork = false;
     auto startTime = Time::now();
-    Message msg;
-    int processed = 0;
-    while((maxBatch < 0) || (processed < maxBatch)){
-        if(!mailbox_->pop(msg)) break;
-        if(!handleLifecycle(msg)){
-            try{
-                actor_->handle(msg);
-            }catch(const std::exception& e){
-                if(supervisor_){
-                    supervisor_->onActorFailed(this, std::move(msg), e.what());
-                }else{
-                    V2_LOG_ERROR("Actor {} threw: {}", actor_->name().c_str(), e.what());
-                }
-                break;
-            }catch(...){
-                if(supervisor_){
-                    supervisor_->onActorFailed(this, std::move(msg), "unknown exception");
-                }else{
-                    V2_LOG_ERROR("Actor {} threw unknown exception", actor_->name().c_str());
-                }
-                break;
-            }
-        }
-        processed++;
+    auto r = processBatch(maxBatch);
+    uint64_t gapNs = Time::toNs(Time::now() - startTime);
+    if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), r.processed, gapNs);
+    if(r.hasMoreWork && workDispatcher_){
+        if(hasMoreWork) *hasMoreWork = workDispatcher_->redispatch(this);
     }
-    auto endTime = Time::now();
-    uint64_t gapNs = Time::toNs(endTime - startTime);
-    if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), processed, gapNs);
-
-    if(!mailbox_->empty() && workDispatcher_){
-        bool ok = workDispatcher_->redispatch(this);
-        if(moreWork) *moreWork = ok;
-    }
-    return processed;
+    return r.processed;
 }
 
-bool ActorRuntime::handleLifecycle(const Message& msg){
+bool ActorRuntime::tryConsumeLifecycle(const Message& msg){
     switch(msg.id()){
     case MessageId::ActorEnableRequest:
         if(actor_->getState() == Closed){
@@ -119,7 +91,7 @@ bool ActorRuntime::tryRestart(const std::string& reason, int maxRestarts){
     return true;
 }
 
-bool ActorRuntime::drainMailbox(Message& msg){
+bool ActorRuntime::popMessage(Message& msg){
     return mailbox_->pop(msg);
 }
 
@@ -177,4 +149,34 @@ void ActorRuntime::cancelAllTimers(){
 size_t ActorRuntime::timerCount() const {
     std::lock_guard lock(timerMutex_);
     return timerIds_.size();
+}
+
+ActorRuntime::BatchResult ActorRuntime::processBatch(int maxBatch){
+    if(stopped_.load(std::memory_order_relaxed)) return {};
+    Message msg;
+    int processed = 0;
+    while((maxBatch < 0) || (processed < maxBatch)){
+        if(!mailbox_->pop(msg)) break;
+        if(!tryConsumeLifecycle(msg)){
+            try{
+                actor_->handle(msg);
+            }catch(const std::exception& e){
+                if(supervisor_){
+                    supervisor_->onActorFailed(this, std::move(msg), e.what());
+                }else{
+                    V2_LOG_ERROR("Actor {} threw: {}", actor_->name().c_str(), e.what());
+                }
+                break;
+            }catch(...){
+                if(supervisor_){
+                    supervisor_->onActorFailed(this, std::move(msg), "unknown exception");
+                }else{
+                    V2_LOG_ERROR("Actor {} threw unknown exception", actor_->name().c_str());
+                }
+                break;
+            }
+        }
+        processed++;
+    }
+    return { processed, !mailbox_->empty() };
 }

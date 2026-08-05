@@ -408,7 +408,7 @@ std::unique_ptr<ActorSystem> createDefaultActorSystem(
 - **IClock 없음**: 1.1에서 `i_time_source.hpp` 제거됨 → 시간 측정은 core `Time`(static 유틸) 직접 사용 (`Time::now()`, `Time::toNs()`)
 - **타이머는 IScheduler 위임**: 별도 `ITimerService` 없음. `addTimer/cancelTimer/cancelAllTimers/timerCount`가 `scheduler_`로 위임
 - **Metrics/Log는 전역 정적 사용**: `Metrics::isEnabled()/recordHandle()`, `V2_LOG_*` 매크로 (static singleton). 인스턴스(멤버) 전환은 **1.5.1/1.5.2의 몫** — 1.4에서 `IMetrics*`/`ILogger*` 멤버 추가는 하지 않음 (데드 파라미터 회피)
-- **라이프사이클은 private 메서드로 인라인**: `handleLifecycle()`/`performRestart()`가 `ActorRuntime` 내부에 있음 (별도 `ILifecycleHandler` 없음)
+- **라이프사이클은 private 메서드로 인라인**: `tryConsumeLifecycle()`/`performRestart()`가 `ActorRuntime` 내부에 있음 (별도 `ILifecycleHandler` 없음 — 1.4.4 결정 사항)
 
 #### 1.4.1 대상 클래스 구조 (현재 코드 기준)
 ```
@@ -443,84 +443,63 @@ ActorRuntime(std::unique_ptr<Actor> actor,
 
 > **경계점 (근거)**: `LockFreeMpscQueue`는 core `container/`의 std-only 순수 구현이라 위치상 경계 위반은 아니지만, `ActorRuntime` 헤더가 구체 큐를 include하면 포트 체계와 안 맞아 **타입 결합**을 제거했다. 구체 큐는 이제 어댑터(구현)에만 존재하고 선택은 조립 측이 한다.
 
-#### 1.4.3 `run()` 순수화 (메시지 루프 ↔ 부수효과 분리)
-현재 `run()`이 메시지 루프·라이프사이클·예외·측정·메트릭·재디스패치를 한 메서드에 섞고 있다. **순수 루프(`runPure`)와 부수효과 래퍼(`run`)** 로 나눈다. 시간 측정은 `IClock`이 아니라 core `Time`(static)을 유지하고, 메트릭/로깅은 1.5 전까지 전역 `Metrics`/`V2_LOG`를 그대로 쓴다.
+#### 1.4.3 `run()` 순수화 (메시지 루프 ↔ 부수효과 분리) ✅
+`run()`이 메시지 루프·라이프사이클·예외·측정·메트릭·재디스패치를 한 메서드에 섞고 있던 것을, **순수 메시지 처리(`processBatch`)와 부수효과 래퍼(`run`)** 로 나눈다. 시간 측정은 core `Time`(static)을 유지하고, 메트릭/로깅은 1.5 전까지 전역 `Metrics`/`V2_LOG`를 그대로 쓴다.
 
 ```cpp
-// Before (현재): run() 한 개에 전부 혼재
-int ActorRuntime::run(int maxBatch, bool* moreWork){
-    if(moreWork) *moreWork = false;
-    if(stopped_.load(std::memory_order_relaxed)) return 0;
-    auto startTime = Time::now();                     // 측정
+// After (구현 완료): 순수 메시지 처리·라이프사이클·예외만
+struct BatchResult { int processed = 0; bool hasMoreWork = false; };   // ActorRuntime private 중첩
+
+ActorRuntime::BatchResult ActorRuntime::processBatch(int maxBatch){
+    if(stopped_.load(std::memory_order_relaxed)) return {};
     Message msg;
     int processed = 0;
     while((maxBatch < 0) || (processed < maxBatch)){
         if(!mailbox_->pop(msg)) break;
-        if(!handleLifecycle(msg)){
-            try{ actor_->handle(msg); }
-            catch(const std::exception& e){
-                if(supervisor_){ supervisor_->onActorFailed(this, std::move(msg), e.what()); }
-                else{ V2_LOG_ERROR(...); }
-                break;
-            }
-            catch(...){ break; }
-        }
-        processed++;
-    }
-    auto endTime = Time::now();
-    uint64_t gapNs = Time::toNs(endTime - startTime); // 측정
-    if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), processed, gapNs); // 메트릭
-    if(!mailbox_->empty() && workDispatcher_){        // 재디스패치
-        bool ok = workDispatcher_->redispatch(this);
-        if(moreWork) *moreWork = ok;
-    }
-    return processed;
-}
-
-// After: 순수 메시지 처리·라이프사이클·예외만 (측정·메트릭·재디스패치는 래퍼로 이동)
-struct RunResult { int processed = 0; bool moreWork = false; bool stopped = false; };
-
-RunResult ActorRuntime::runPure(int maxBatch){
-    if(stopped_.load(std::memory_order_relaxed)) return {0, false, true};
-    Message msg;
-    int processed = 0;
-    while((maxBatch < 0) || (processed < maxBatch)){
-        if(!mailbox_->pop(msg)) break;
-        if(!handleLifecycle(msg)){
+        if(!tryConsumeLifecycle(msg)){          // 라이프사이클 메시지면 소비 (handle() 호출 안 함)
             try{ actor_->handle(msg); }
             catch(const std::exception& e){
                 if(supervisor_){ supervisor_->onActorFailed(this, std::move(msg), e.what()); }
                 else{ V2_LOG_ERROR("Actor {} threw: {}", actor_->name().c_str(), e.what()); }
-                return {processed, false, false};   // 예외 발생 시 중단
+                break;                          // ⚠️ 예외 시에도 래퍼에서 측정·메트릭·재디스패치 수행 (원본과 동일)
             }
             catch(...){
                 if(supervisor_){ supervisor_->onActorFailed(this, std::move(msg), "unknown exception"); }
                 else{ V2_LOG_ERROR("Actor {} threw unknown exception", actor_->name().c_str()); }
-                return {processed, false, false};
+                break;
             }
         }
         processed++;
     }
-    return {processed, !mailbox_->empty(), false};
+    return { processed, !mailbox_->empty() };   // hasMoreWork = 큐에 잔량 존재 여부
 }
 
-// 외부 래퍼: 측정·메트릭·재디스패치 (부수효과)
-int ActorRuntime::run(int maxBatch, bool* moreWork){
+// 래퍼: 측정·메트릭·재디스패치 (부수효과)
+int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
+    if(hasMoreWork) *hasMoreWork = false;
     auto startTime = Time::now();
-    auto r = runPure(maxBatch);
+    auto r = processBatch(maxBatch);
     uint64_t gapNs = Time::toNs(Time::now() - startTime);
     if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), r.processed, gapNs);
-    if(moreWork) *moreWork = (r.moreWork && workDispatcher_) && workDispatcher_->redispatch(this);
+    if(r.hasMoreWork && workDispatcher_){
+        if(hasMoreWork) *hasMoreWork = workDispatcher_->redispatch(this);
+    }
     return r.processed;
 }
 ```
 
-- [ ] `RunResult` 구조체 + `runPure()` 분리 (메시지 루프·라이프사이클·예외만)
-- [ ] `run()` → `runPure` + 측정·메트릭·재디스패치 래퍼로 얇게 (공개 시그니처 `int run(int,bool*)` 불변 — 기존 호출부 무변경)
-- [ ] `stopped_`·타이머 해제·레지스트리 해제 등 기존 로직 유지 확인 (`test_actor_runtime` 통과)
+> **설계 메모**
+> - 네이밍: `runPure`/`RunResult` → **`processBatch`/`BatchResult`** — "최대 `maxBatch`개 큐 소모 처리"라는 임무를 이름에 반영. 공개 `run`은 `processBatch` + 계측/스케줄링 조합.
+> - **예외 `break` vs `return`**: 실패 메시지는 `processed++`되지 않고, 이후 래퍼에서 여전히 측정·메트릭·재디스패치를 수행 (원본 `run`의 동작 1:1 보존). 초안의 `return`은 동작이 달라지므로 폐기.
+> - **`stopped_` 차이 (의도적)**: 원본은 `stopped_`에서 메트릭 기록 없이 즉시 `return 0`했지만, 새 코드는 `run()`이 0배치로 `batches+1`을 기록. `stopped_`는 `shutdown()` 후에만 참이고 정상 셧다운은 drain 후 워커가 `run()`을 호출하지 않아 실질 영향 없음 → "run 호출 시 항상 기록"이 더 일관적이라 유지.
+> - **네이밍 정리 (함께 적용)**: `drainMailbox`→`popMessage`(단일 pop 의미 명확화), `handleLifecycle`→`tryConsumeLifecycle`(반환 bool = "소비했는가" 명시), `moreWork`→`hasMoreWork`, Scheduler `timeMs`→`delayMs`(addTimer 파라미터 통일).
+
+- [x] `BatchResult` 구조체 + `processBatch()` 분리 (메시지 루프·라이프사이클·예외만) ✅
+- [x] `run()` → `processBatch` + 측정·메트릭·재디스패치 래퍼로 얇게 (공개 시그니처 `int run(int,bool*)` 불변 — 기존 호출부 무변경) ✅
+- [x] `stopped_`·타이머 해제·레지스트리 해제 등 기존 로직 유지 확인 (`test_actor_runtime` 통과) ✅
 
 #### 1.4.4 라이프사이클 처리 (인라인 유지 vs 별도 핸들러 — 결정 필요)
-라이프사이클(`ActorEnable/Disable/RestartRequest`) 처리는 현재 `ActorRuntime`의 **private 메서드**(`handleLifecycle`/`performRestart`)로 인라인되어 있고, `ActorRestartRequest`는 **OneForAll 브로드캐스트** 동작(Opened 액터만 재시작, `restartCount_` 증가 없음)을 주석으로 명시한다. 이는 OneForOne(`tryRestart`, `restartCount_` CAS)와 구분되어 유지돼야 한다.
+라이프사이클(`ActorEnable/Disable/RestartRequest`) 처리는 현재 `ActorRuntime`의 **private 메서드**(`tryConsumeLifecycle`/`performRestart`)로 인라인되어 있고, `ActorRestartRequest`는 **OneForAll 브로드캐스트** 동작(Opened 액터만 재시작, `restartCount_` 증가 없음)을 주석으로 명시한다. 이는 OneForOne(`tryRestart`, `restartCount_` CAS)와 구분되어 유지돼야 한다.
 
 분리 옵션:
 - **A (기본, 권장): 인라인 유지** — 로직이 25줄 미만이고 Actor의 상태에 직결되어 있어, 지금 추출은 오버엔지니어링. 1.5 종료 후 필요 시 재평가
@@ -528,7 +507,7 @@ int ActorRuntime::run(int maxBatch, bool* moreWork){
 
 ```cpp
 // 현재: ActorRuntime private 메서드 (출처: actor_runtime.cpp)
-bool ActorRuntime::handleLifecycle(const Message& msg){
+bool ActorRuntime::tryConsumeLifecycle(const Message& msg){
     switch(msg.id()){
     case MessageId::ActorEnableRequest:
         if(actor_->getState() == Closed) actor_->open();
@@ -546,7 +525,7 @@ bool ActorRuntime::handleLifecycle(const Message& msg){
 ```
 
 - [ ] **결정**: (A) 인라인 유지로 1.4 마무리 vs (B) `ILifecycleHandler` 추출 — **A 기본 권장**
-- [ ] `tryRestart`(OneForOne, restartCount_ CAS) ↔ `handleLifecycle`(OneForAll) **구분 주석 유지**
+- [ ] `tryRestart`(OneForOne, restartCount_ CAS) ↔ `tryConsumeLifecycle`(OneForAll) **구분 주석 유지**
 - [ ] 라이프사이클 롤백 없이 동작 보존 (`test_actor_runtime`)
 
 #### 1.4.5 검증
@@ -1006,7 +985,7 @@ DeadLetter Supervisor::createDeadLetter(ISupervised* runtime, const std::string&
 
 void Supervisor::drainToDeadLetter(ISupervised* runtime, uint64_t timestampNs) {
     Message msg;
-    while (runtime->drainMailbox(msg)) {
+    while (runtime->popMessage(msg)) {
         DeadLetter rest{runtime->actorId(), runtime->actorName(), "drained", timestampNs, std::move(msg)};
         if (!deadLetterQueue_.push(std::move(rest))) {
             V2_LOG_WARN("Dead letter queue full, dropping drained message from {}", runtime->actorName());

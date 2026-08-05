@@ -50,7 +50,7 @@ public:
         shutdownCalls.fetch_add(1, std::memory_order_relaxed);
     }
 
-    bool drainMailbox(Message& msg) override {
+    bool popMessage(Message& msg) override {
         if(pending.empty()) return false;
         msg = std::move(pending.front());
         pending.erase(pending.begin());

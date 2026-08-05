@@ -58,7 +58,7 @@ void Supervisor::onActorFailed(ISupervised* runtime, Message failedMsg, const st
         V2_LOG_WARN("Dead letter queue full, dropping failed message from {}", runtime->actorName().c_str());
     }
     Message msg;
-    while(runtime->drainMailbox(msg)){
+    while(runtime->popMessage(msg)){
         DeadLetter rest{runtime->actorId(), runtime->actorName(), reason, nowNs, std::move(msg)};
         if(!deadLetterQueue_.push(std::move(rest))){
             V2_LOG_WARN("Dead letter queue full, dropping drained message from {}", runtime->actorName().c_str());

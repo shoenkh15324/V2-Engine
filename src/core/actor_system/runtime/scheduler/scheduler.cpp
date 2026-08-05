@@ -21,13 +21,13 @@ void Scheduler::stop(){
     timerCtxs_.clear();
 }
 
-int Scheduler::addTimer(IActorRuntime* target, Message msg, uint64_t timeMs, bool repeating){
+int Scheduler::addTimer(IActorRuntime* target, Message msg, uint64_t delayMs, bool repeating){
     std::lock_guard<std::mutex> lock(mutex_);
     cleanupTimerCtxs(); // 매 add시 비활성 ctx 정리
     auto ctx = std::make_unique<TimerCtx>();
     ctx->target = target;
     ctx->msg = std::move(msg);
-    int id = timer_->add(timeMs, repeating, timerCallback, this);
+    int id = timer_->add(delayMs, repeating, timerCallback, this);
     timerCtxs_[id] = std::move(ctx);
     return id;
 }

@@ -26,7 +26,7 @@ public:
     ActorRuntime& operator=(ActorRuntime&&) = delete;
 
     void enqueue(Message msg) override;
-    int run(int maxBatch, bool* moreWork = nullptr);
+    int run(int maxBatch, bool* hasMoreWork = nullptr);
     Actor* actor() const override { return actor_.get(); }
     IActorRegistry* actorRegistry() const override { return actorRegistry_; }
     IEventLoop* eventLoop() const override { return eventLoop_; }
@@ -41,14 +41,20 @@ public:
     // ISupervised
     bool tryRestart(const std::string& reason, int maxRestarts) override;
     void shutdown() override;
-    bool drainMailbox(Message& msg) override;
+    bool popMessage(Message& msg) override;
     int restartCount() const override;
     uint64_t actorId() const override;
     const std::string& actorName() const override;
 
 private:
-    bool handleLifecycle(const Message& msg);
+    struct BatchResult {
+        int processed = 0;
+        bool hasMoreWork = false;
+    };
+
+    bool tryConsumeLifecycle(const Message& msg);
     void performRestart(const std::string& reason);
+    BatchResult processBatch(int maxBatch);
 
     std::unique_ptr<Actor> actor_;
     std::unique_ptr<IMailbox> mailbox_;
