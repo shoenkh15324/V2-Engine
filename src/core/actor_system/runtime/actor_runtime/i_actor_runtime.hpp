@@ -11,6 +11,7 @@ class IEventLoop;
 class IActorRuntime{
 public:
     virtual ~IActorRuntime() = default;
+    
     virtual void enqueue(Message msg) = 0;
     virtual Actor* actor() const = 0;
     virtual IActorRegistry* actorRegistry() const = 0;

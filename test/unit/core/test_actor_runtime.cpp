@@ -6,7 +6,7 @@
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
-#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/actor_system/runtime/mailbox/mailbox.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <memory>
 
@@ -30,7 +30,7 @@ public:
 TEST(ActorRuntime, Create){
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    ActorRuntime ctx(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
 
     EXPECT_EQ(ctx.actor(), a);
     EXPECT_EQ(ctx.mailboxCount(), 0);
@@ -41,7 +41,7 @@ TEST(ActorRuntime, CreateWithRegistry){
     ActorRegistry reg;
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    ActorRuntime ctx(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+    ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, &reg);
     reg.add(a);
     EXPECT_EQ(reg.findByName("a").get(), a);
     EXPECT_EQ(reg.findById(1).get(), a);
@@ -50,13 +50,13 @@ TEST(ActorRuntime, CreateWithRegistry){
 // Enqueue
 
 TEST(ActorRuntime, Enqueue){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
     ctx.enqueue(Message::make(Tick{}));
     EXPECT_EQ(ctx.mailboxCount(), 1);
 }
 
 TEST(ActorRuntime, EnqueueMultiple){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
     ctx.enqueue(Message::make(Tick{}));
     ctx.enqueue(Message::make(Tick{}));
     ctx.enqueue(Message::make(Tick{}));
@@ -66,14 +66,14 @@ TEST(ActorRuntime, EnqueueMultiple){
 // Run
 
 TEST(ActorRuntime, RunEmpty){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
     ctx.run(-1);
     EXPECT_EQ(a->handleCount, 0);
 }
 
 TEST(ActorRuntime, RunSingle){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
     ctx.enqueue(Message::make(Tick{}));
     ctx.run(-1);
@@ -82,7 +82,7 @@ TEST(ActorRuntime, RunSingle){
 }
 
 TEST(ActorRuntime, RunMultiple){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
     ctx.enqueue(Message::make(Tick{}));
     ctx.enqueue(Message::make(Tick{}));
@@ -93,7 +93,7 @@ TEST(ActorRuntime, RunMultiple){
 
 TEST(ActorRuntime, RunMaxBatch){
     WorkDispatcher d(1);
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), &d, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), &d, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
 
     for(int i = 0; i < 5; i++){
@@ -106,7 +106,7 @@ TEST(ActorRuntime, RunMaxBatch){
 
 TEST(ActorRuntime, RunAll){
     WorkDispatcher d(1);
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), &d, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), &d, nullptr, nullptr);
     auto* a = static_cast<TestActor*>(ctx.actor());
 
     for(int i = 0; i < 5; i++){
@@ -122,7 +122,7 @@ TEST(ActorRuntime, RunAll){
 TEST(ActorRuntime, DestructorRemovesFromRegistry){
     ActorRegistry reg;
     {
-        ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, &reg);
+        ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, &reg);
         reg.add(ctx.actor());
         EXPECT_TRUE(reg.findByName("a").valid());
     }

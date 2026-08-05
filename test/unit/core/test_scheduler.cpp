@@ -2,7 +2,7 @@
 #include "core/actor_system/runtime/scheduler/scheduler.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
-#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/actor_system/runtime/mailbox/mailbox.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
@@ -30,7 +30,7 @@ TEST(Scheduler, Create){
 TEST(Scheduler, AddTimer){
     Scheduler sched;
     auto actor = std::make_unique<TestActor>("t", 1);
-    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, &sched, nullptr);
     int id = sched.addTimer(&rt, Message::make(Tick{}), 100, false);
     EXPECT_GT(id, 0);
 }
@@ -38,7 +38,7 @@ TEST(Scheduler, AddTimer){
 TEST(Scheduler, Cancel){
     Scheduler sched;
     auto actor = std::make_unique<TestActor>("t", 1);
-    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, &sched, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, &sched, nullptr);
     int id = sched.addTimer(&rt, Message::make(Tick{}), 100, false);
     EXPECT_GT(id, 0);
     sched.cancel(id);
@@ -60,7 +60,7 @@ TEST(Scheduler, ConcurrentAddCancelDuringFire){
     sched.start();
 
     auto actor = std::make_unique<TestActor>("stress", 1);
-    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(4096), nullptr, &sched, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(4096), nullptr, &sched, nullptr);
 
     constexpr int kThreads = 4;
     constexpr int kIters = 5000;

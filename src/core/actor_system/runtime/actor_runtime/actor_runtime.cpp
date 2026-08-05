@@ -9,7 +9,7 @@
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
 
-ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop, ISupervisor* supervisor)
+ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop, ISupervisor* supervisor)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
     actor_->setRuntime(this);
     workDispatcher_ = workDispatcher;

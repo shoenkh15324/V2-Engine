@@ -3,7 +3,7 @@
 #include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
-#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/actor_system/runtime/mailbox/mailbox.hpp"
 #include "core/common/util/return.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <thread>
@@ -42,7 +42,7 @@ TEST(WorkDispatcher, DispatchAcquire){
     d.start();
 
     auto actor = std::make_unique<TestActor>("test", 1);
-    auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    auto mailbox = std::make_unique<Mailbox>(16);
     ActorRuntime ctx(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
 
     d.dispatch(&ctx);
@@ -57,15 +57,15 @@ TEST(WorkDispatcher, DispatchFifo){
     d.start();
 
     auto a1 = std::make_unique<TestActor>("a", 1);
-    auto m1 = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    auto m1 = std::make_unique<Mailbox>(16);
     ActorRuntime ctx1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
 
     auto a2 = std::make_unique<TestActor>("b", 2);
-    auto m2 = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    auto m2 = std::make_unique<Mailbox>(16);
     ActorRuntime ctx2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
 
     auto a3 = std::make_unique<TestActor>("c", 3);
-    auto m3 = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    auto m3 = std::make_unique<Mailbox>(16);
     ActorRuntime ctx3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
 
     d.dispatch(&ctx1);
@@ -84,7 +84,7 @@ TEST(WorkDispatcher, AcquireOnEmpty){
     d.start();
 
     auto actor = std::make_unique<TestActor>("test", 1);
-    auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(16);
+    auto mailbox = std::make_unique<Mailbox>(16);
     ActorRuntime ctx(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
 
     std::thread t([&](){

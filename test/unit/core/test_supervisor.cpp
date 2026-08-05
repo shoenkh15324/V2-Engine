@@ -10,7 +10,7 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
 #include "service/tick/tick_messages.hpp"
-#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/actor_system/runtime/mailbox/mailbox.hpp"
 
 namespace{
 
@@ -209,7 +209,7 @@ TEST(Supervisor, ActorRestartRequestRestartsOpenedActor){
     auto actor = std::make_unique<LifecycleActor>("a", 1);
     auto* a = actor.get();
     a->open();
-    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
 
     ActorRestartRequest req;
     req.reason = "one-for-all";
@@ -223,7 +223,7 @@ TEST(Supervisor, ActorRestartRequestRestartsOpenedActor){
 TEST(Supervisor, ActorRestartRequestSkipsClosedActor){
     auto actor = std::make_unique<LifecycleActor>("a", 1);
     auto* a = actor.get();
-    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
 
     ActorRestartRequest req;
     req.reason = "one-for-all";
@@ -269,7 +269,7 @@ TEST(Supervisor, ShutdownRuntimeStopsProcessing){
     auto actor = std::make_unique<LifecycleActor>("a", 1);
     auto* a = actor.get();
     a->open();
-    ActorRuntime rt(std::move(actor), std::make_unique<LockFreeMpscQueue<Message>>(64), nullptr, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
 
     rt.shutdown();
     rt.enqueue(Message::make(Tick{}));

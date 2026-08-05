@@ -10,7 +10,7 @@
 #include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
 #include "core/actor_system/messages/system_messages.hpp"
-#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/actor_system/runtime/mailbox/mailbox.hpp"
 #include "core/common/timer/i_timer.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/log/log.hpp"
@@ -85,7 +85,7 @@ void ActorSystem::requestStop(){
 }
 
 void ActorSystem::attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, uint64_t id){
-    auto mailbox = std::make_unique<LockFreeMpscQueue<Message>>(mailboxSize);
+    auto mailbox = std::make_unique<Mailbox>(mailboxSize);
     auto rt = std::make_unique<ActorRuntime>(
         std::move(actor),
         std::move(mailbox),

@@ -397,123 +397,162 @@ std::unique_ptr<ActorSystem> createDefaultActorSystem(
 
 ### 1.4 ActorRuntime 분해 (P0-4)
 
-**파일**: `src/core/actor_system/runtime/actor_runtime.hpp/cpp` → 분해
+**파일**: `src/core/actor_system/runtime/actor_runtime/actor_runtime.hpp/cpp` → 분해
 
-#### 1.4.1 새로운 클래스 구조
+#### 1.4.0 현재 상태 (1.1–1.3 반영)
+
+지난 작업(1.1–1.3)으로 `ActorRuntime`은 인터페이스 주입을 이미 상당 부분 달성했다. 하지만 **`run()`이 순수 메시지 루프와 부수효과(측정·메트릭·재디스패치)를 한 메서드에 섞고** 있고, 몇 가지 잔여 결합이 남는다:
+
+- **생성자 (1.4.2 완료 반영)**: `(unique_ptr<Actor>, unique_ptr<IMailbox>, IWorkDispatcher*, IScheduler*, IActorRegistry*, IEventLoop*, ISupervisor*)`
+  - `actor`만 소유·구체 타입, `mailbox`는 `unique_ptr<IMailbox>` 인터페이스 소유 (구체 큐는 `Mailbox` 어댑터 내부에만 — **1.4.2에서 해소**)
+- **IClock 없음**: 1.1에서 `i_time_source.hpp` 제거됨 → 시간 측정은 core `Time`(static 유틸) 직접 사용 (`Time::now()`, `Time::toNs()`)
+- **타이머는 IScheduler 위임**: 별도 `ITimerService` 없음. `addTimer/cancelTimer/cancelAllTimers/timerCount`가 `scheduler_`로 위임
+- **Metrics/Log는 전역 정적 사용**: `Metrics::isEnabled()/recordHandle()`, `V2_LOG_*` 매크로 (static singleton). 인스턴스(멤버) 전환은 **1.5.1/1.5.2의 몫** — 1.4에서 `IMetrics*`/`ILogger*` 멤버 추가는 하지 않음 (데드 파라미터 회피)
+- **라이프사이클은 private 메서드로 인라인**: `handleLifecycle()`/`performRestart()`가 `ActorRuntime` 내부에 있음 (별도 `ILifecycleHandler` 없음)
+
+#### 1.4.1 대상 클래스 구조 (현재 코드 기준)
 ```
-ActorRuntime (핵심: 메시지 루프만 담당)
-├── IMailbox* mailbox_                    // 메시지 큐 위임
-├── ILifecycleHandler* lifecycle_         // open/close/restart 위임
-├── ITimerService* timers_                // 타이머 위임
-├── ISupervisor* supervisor_              // 실패 알림만
-├── IActorRegistry* registry_             // 액터 조회만
-├── IEventLoop* eventLoop_                // 이벤트 등록만
-├── IWorkDispatcher* dispatcher_          // 재디스패치만
-├── IMetrics* metrics_                    // 메트릭 기록만 (옵션)
-├── ILogger* logger_                      // 로깅만 (옵션)
-└── IClock* clock_                        // 시간 측정만 (옵션)
+ActorRuntime (메시지 루프 + 라이프사이클 + 타이머 위임)
+├── unique_ptr<Actor> actor_
+├── unique_ptr<IMailbox> mailbox_                     // 1.4.2 완료 — 구체 큐는 Mailbox 어댑터 내부
+├── IWorkDispatcher* workDispatcher_                  // 재디스패치만
+├── IScheduler* scheduler_                            // 타이머 위임 (addTimer/cancel/...)
+├── IActorRegistry* actorRegistry_                    // 등록·해제만
+├── IEventLoop* eventLoop_                            // 이벤트 등록만
+├── ISupervisor* supervisor_                          // 실패 알림만
+├── (타이머 추적: timerIds_/timerMutex_, 재시작: restartCount_, 정지: stopped_)
+└── (Metrics/Log는 1.5 전까지 전역 static — 멤버 미추가)
 ```
 
-#### 1.4.2 `ActorRuntime::run()` 순수화
 ```cpp
-// Before: 시간, 메트릭, 예외, 라이프사이클 모두 섞임
-int ActorRuntime::run(int maxBatch, bool* moreWork) { ... }
+// 현재 생성자 시그니처 (1.4.2 완료 — IMailbox 인터페이스 주입)
+ActorRuntime(std::unique_ptr<Actor> actor,
+             std::unique_ptr<IMailbox> mailbox,
+             IWorkDispatcher* workDispatcher, IScheduler* scheduler,
+             IActorRegistry* actorRegistry, IEventLoop* eventLoop = nullptr,
+             ISupervisor* supervisor = nullptr);
+```
 
-// After: 순수 메시지 처리만
-struct RunResult {
-    int processed = 0;
-    bool moreWork = false;
-    uint64_t durationNs = 0;
-    bool stopped = false;
-};
+#### 1.4.2 mailbox → `IMailbox` 주입 (구체 타입 결합 제거) ✅
+| 항목 | 변경 내용 |
+|---|---|
+| 어댑터 | `runtime/mailbox/mailbox.hpp` — `Mailbox : IMailbox` 신설 (`LockFreeMpscQueue<Message>` 래핑, `clear()`은 drain 루프) ✅ |
+| 생성자 | `unique_ptr<LockFreeMpscQueue<Message>>` → `unique_ptr<IMailbox>` (header에서 구체 큐 include 제거) ✅ |
+| 생성 측 | `ActorSystem::attachActor` + 단위 테스트 5개 → `std::make_unique<Mailbox>(N)` 전환 ✅ |
+| 소유권 | `Mailbox`(구체) 생성은 조립 측, `ActorRuntime`은 `IMailbox`로 소유 ✅ |
 
-RunResult ActorRuntime::runPure(int maxBatch) {
-    if (stopped_.load(std::memory_order_relaxed)) return {0, false, 0, true};
-    
-    auto startTime = clock_ ? clock_->now() : TimePoint{};
+> **경계점 (근거)**: `LockFreeMpscQueue`는 core `container/`의 std-only 순수 구현이라 위치상 경계 위반은 아니지만, `ActorRuntime` 헤더가 구체 큐를 include하면 포트 체계와 안 맞아 **타입 결합**을 제거했다. 구체 큐는 이제 어댑터(구현)에만 존재하고 선택은 조립 측이 한다.
+
+#### 1.4.3 `run()` 순수화 (메시지 루프 ↔ 부수효과 분리)
+현재 `run()`이 메시지 루프·라이프사이클·예외·측정·메트릭·재디스패치를 한 메서드에 섞고 있다. **순수 루프(`runPure`)와 부수효과 래퍼(`run`)** 로 나눈다. 시간 측정은 `IClock`이 아니라 core `Time`(static)을 유지하고, 메트릭/로깅은 1.5 전까지 전역 `Metrics`/`V2_LOG`를 그대로 쓴다.
+
+```cpp
+// Before (현재): run() 한 개에 전부 혼재
+int ActorRuntime::run(int maxBatch, bool* moreWork){
+    if(moreWork) *moreWork = false;
+    if(stopped_.load(std::memory_order_relaxed)) return 0;
+    auto startTime = Time::now();                     // 측정
     Message msg;
     int processed = 0;
-    
-    while ((maxBatch < 0) || (processed < maxBatch)) {
-        if (!mailbox_->pop(msg)) break;
-        
-        if (!lifecycle_->handleLifecycle(actor_.get(), msg)) {
-            try {
-                actor_->handle(msg);
-            } catch (const std::exception& e) {
-                if (supervisor_) {
-                    supervisor_->onActorFailed(this, std::move(msg), e.what());
-                } else if (logger_) {
-                    logger_->log(LogLevel::Error, __FILE__, __LINE__, __func__, 
-                                std::format("Actor {} threw: {}", actor_->name(), e.what()));
-                }
-                return {processed, false, 0, false};  // 예외 발생 시 중단
-            } catch (...) {
-                if (supervisor_) {
-                    supervisor_->onActorFailed(this, std::move(msg), "unknown exception");
-                }
-                return {processed, false, 0, false};
+    while((maxBatch < 0) || (processed < maxBatch)){
+        if(!mailbox_->pop(msg)) break;
+        if(!handleLifecycle(msg)){
+            try{ actor_->handle(msg); }
+            catch(const std::exception& e){
+                if(supervisor_){ supervisor_->onActorFailed(this, std::move(msg), e.what()); }
+                else{ V2_LOG_ERROR(...); }
+                break;
+            }
+            catch(...){ break; }
+        }
+        processed++;
+    }
+    auto endTime = Time::now();
+    uint64_t gapNs = Time::toNs(endTime - startTime); // 측정
+    if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), processed, gapNs); // 메트릭
+    if(!mailbox_->empty() && workDispatcher_){        // 재디스패치
+        bool ok = workDispatcher_->redispatch(this);
+        if(moreWork) *moreWork = ok;
+    }
+    return processed;
+}
+
+// After: 순수 메시지 처리·라이프사이클·예외만 (측정·메트릭·재디스패치는 래퍼로 이동)
+struct RunResult { int processed = 0; bool moreWork = false; bool stopped = false; };
+
+RunResult ActorRuntime::runPure(int maxBatch){
+    if(stopped_.load(std::memory_order_relaxed)) return {0, false, true};
+    Message msg;
+    int processed = 0;
+    while((maxBatch < 0) || (processed < maxBatch)){
+        if(!mailbox_->pop(msg)) break;
+        if(!handleLifecycle(msg)){
+            try{ actor_->handle(msg); }
+            catch(const std::exception& e){
+                if(supervisor_){ supervisor_->onActorFailed(this, std::move(msg), e.what()); }
+                else{ V2_LOG_ERROR("Actor {} threw: {}", actor_->name().c_str(), e.what()); }
+                return {processed, false, false};   // 예외 발생 시 중단
+            }
+            catch(...){
+                if(supervisor_){ supervisor_->onActorFailed(this, std::move(msg), "unknown exception"); }
+                else{ V2_LOG_ERROR("Actor {} threw unknown exception", actor_->name().c_str()); }
+                return {processed, false, false};
             }
         }
         processed++;
     }
-    
-    auto endTime = clock_ ? clock_->now() : TimePoint{};
-    uint64_t durationNs = clock_ ? std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count() : 0;
-    
-    bool more = !mailbox_->empty();
-    return {processed, more, durationNs, false};
+    return {processed, !mailbox_->empty(), false};
 }
 
-// 외부 래퍼에서 메트릭/디스패치 처리
-int ActorRuntime::run(int maxBatch, bool* moreWork) {
-    auto result = runPure(maxBatch);
-    if (metrics_) metrics_->recordHandle(actor_->id(), result.processed, result.durationNs);
-    if (result.more && dispatcher_) {
-        bool ok = dispatcher_->redispatch(this);
-        if (moreWork) *moreWork = ok;
-    } else if (moreWork) {
-        *moreWork = false;
-    }
-    return result.processed;
+// 외부 래퍼: 측정·메트릭·재디스패치 (부수효과)
+int ActorRuntime::run(int maxBatch, bool* moreWork){
+    auto startTime = Time::now();
+    auto r = runPure(maxBatch);
+    uint64_t gapNs = Time::toNs(Time::now() - startTime);
+    if(Metrics::isEnabled()) Metrics::recordHandle(actor_->id(), r.processed, gapNs);
+    if(moreWork) *moreWork = (r.moreWork && workDispatcher_) && workDispatcher_->redispatch(this);
+    return r.processed;
 }
 ```
 
-#### 1.4.3 라이프사이클 핸들러 분리
+- [ ] `RunResult` 구조체 + `runPure()` 분리 (메시지 루프·라이프사이클·예외만)
+- [ ] `run()` → `runPure` + 측정·메트릭·재디스패치 래퍼로 얇게 (공개 시그니처 `int run(int,bool*)` 불변 — 기존 호출부 무변경)
+- [ ] `stopped_`·타이머 해제·레지스트리 해제 등 기존 로직 유지 확인 (`test_actor_runtime` 통과)
+
+#### 1.4.4 라이프사이클 처리 (인라인 유지 vs 별도 핸들러 — 결정 필요)
+라이프사이클(`ActorEnable/Disable/RestartRequest`) 처리는 현재 `ActorRuntime`의 **private 메서드**(`handleLifecycle`/`performRestart`)로 인라인되어 있고, `ActorRestartRequest`는 **OneForAll 브로드캐스트** 동작(Opened 액터만 재시작, `restartCount_` 증가 없음)을 주석으로 명시한다. 이는 OneForOne(`tryRestart`, `restartCount_` CAS)와 구분되어 유지돼야 한다.
+
+분리 옵션:
+- **A (기본, 권장): 인라인 유지** — 로직이 25줄 미만이고 Actor의 상태에 직결되어 있어, 지금 추출은 오버엔지니어링. 1.5 종료 후 필요 시 재평가
+- **B (선택): `ILifecycleHandler` 추출** — 이후 라이프사이클 정책이 다양해질 때만. `i_lifecycle_handler.hpp`(co-location) + `default_lifecycle_handler.hpp/cpp`
+
 ```cpp
-// src/core/actor_system/runtime/lifecycle_handler.hpp
-class DefaultLifecycleHandler : public ILifecycleHandler {
-public:
-    bool handleLifecycle(Actor* actor, const Message& msg) override {
-        switch (msg.id()) {
-            case MessageId::ActorEnableRequest:
-                if (actor->getState() == ActorState::Closed) actor->open();
-                return true;
-            case MessageId::ActorDisableRequest:
-                if (actor->getState() == ActorState::Opened && !actor->isEssential()) actor->close();
-                return true;
-            case MessageId::ActorRestartRequest:
-                if (actor->getState() == ActorState::Opened) {
-                    performRestart(actor, msg.as<ActorRestartRequest>().reason);
-                }
-                return true;
-            default:
-                return false;
-        }
+// 현재: ActorRuntime private 메서드 (출처: actor_runtime.cpp)
+bool ActorRuntime::handleLifecycle(const Message& msg){
+    switch(msg.id()){
+    case MessageId::ActorEnableRequest:
+        if(actor_->getState() == Closed) actor_->open();
+        return true;
+    case MessageId::ActorDisableRequest:
+        if(actor_->getState() == Opened && !actor_->isEssential()) actor_->close();
+        return true;
+    case MessageId::ActorRestartRequest:        // OneForAll 브로드캐스트
+        if(actor_->getState() == Opened) performRestart(msg.as<ActorRestartRequest>().reason);
+        return true;
+    default:
+        return false;
     }
-    
-    void performRestart(Actor* actor, const std::string& reason) override {
-        if (logger_) logger_->log(LogLevel::Info, __FILE__, __LINE__, __func__,
-                                  std::format("Restarting actor {} reason: {}", actor->name(), reason));
-        actor->close();
-        if (actor->getState() == ActorState::Closed) actor->open();
-    }
-    
-    void setLogger(ILogger* logger) { logger_ = logger; }
-private:
-    ILogger* logger_ = nullptr;
-};
+}
 ```
+
+- [ ] **결정**: (A) 인라인 유지로 1.4 마무리 vs (B) `ILifecycleHandler` 추출 — **A 기본 권장**
+- [ ] `tryRestart`(OneForOne, restartCount_ CAS) ↔ `handleLifecycle`(OneForAll) **구분 주석 유지**
+- [ ] 라이프사이클 롤백 없이 동작 보존 (`test_actor_runtime`)
+
+#### 1.4.5 검증
+- [ ] `rg 'IClock|ITimerService|lifecycle_|timers_|clock_' src/core/actor_system/runtime` → 결과 없음 (잔재 Port 제거 확인)
+- [ ] `core/actor_system/runtime`에 구체 큐(`lock_free_mpsc_queue.hpp`) include가 `ActorRuntime` 헤더에 남지 않음 ✅
+- [ ] `test_actor_runtime` 포함 전체 ctest 통과 + `v2_core_smoke` 유지 (core 단독 경계)
 
 ### 1.5 전역 상태 제거: Metrics, Log, MemoryPool (P0-5, P0-6)
 

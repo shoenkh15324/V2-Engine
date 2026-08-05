@@ -4,9 +4,9 @@
 #include <mutex>
 #include <string>
 #include <unordered_set>
-#include "core/common/container/lock_free_mpsc_queue.hpp"
 #include "core/actor_system/messages/message.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
+#include "core/actor_system/runtime/mailbox/i_mailbox.hpp"
 #include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
 #include "core/actor_system/runtime/supervisor/i_supervised.hpp"
 #include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
@@ -17,7 +17,7 @@ class ISupervisor;
 
 class ActorRuntime : public IActorRuntime, public ISupervised {
 public:
-    ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<LockFreeMpscQueue<Message>> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop = nullptr, ISupervisor* supervisor = nullptr);
+    ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop = nullptr, ISupervisor* supervisor = nullptr);
     ~ActorRuntime();
 
     ActorRuntime(const ActorRuntime&) = delete;
@@ -51,7 +51,7 @@ private:
     void performRestart(const std::string& reason);
 
     std::unique_ptr<Actor> actor_;
-    std::unique_ptr<LockFreeMpscQueue<Message>> mailbox_;
+    std::unique_ptr<IMailbox> mailbox_;
     IWorkDispatcher* workDispatcher_ = nullptr;
     IScheduler* scheduler_ = nullptr;
     IActorRegistry* actorRegistry_ = nullptr;
