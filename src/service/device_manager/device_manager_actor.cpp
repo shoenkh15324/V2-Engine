@@ -63,7 +63,7 @@ void DeviceManagerActor::handle(const Message& msg){
             rsp.types.push_back(static_cast<uint8_t>(d.type));
             rsp.buses.push_back(d.bus);
         }
-        sendMsg(m.requesterName, Message::make(std::move(rsp)));
+        sendMsg(m.requesterName, std::move(rsp));
         break;
     }
     default:

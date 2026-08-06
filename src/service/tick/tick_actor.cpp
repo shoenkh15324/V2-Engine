@@ -14,7 +14,7 @@ int TickActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    startTimer(Message::make(Tick{}), tickMs_, true);
+    startTimer(Tick{}, tickMs_, true);
     //
     state_ = Opened;
     V2_LOG_INFO("Tick Actor opened");

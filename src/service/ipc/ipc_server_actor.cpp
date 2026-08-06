@@ -58,7 +58,7 @@ void IpcServerActor::unsubscribeAll(){
 
 int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
     V2_LOG_INFO("IpcServerActor: command received (conn={}) [{}]", conn, cmd.c_str());
-    sendMsg("cmd_actor", Message::make(CmdRequest{conn, cmd}));
+    sendMsg("cmd_actor", CmdRequest{conn, cmd});
     return Ok;
 }
 

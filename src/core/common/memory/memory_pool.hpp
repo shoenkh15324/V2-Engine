@@ -47,11 +47,6 @@ template<
 >
 class MemoryPoolT : public IMemoryAllocator {
 public:
-    static MemoryPoolT& instance(){
-        static MemoryPoolT pool;
-        return pool;
-    }
-
     MemoryPoolT(){
         poolId_ = nextPoolId.fetch_add(1, std::memory_order_relaxed);
         assert(poolId_ < kMaxPools);
@@ -162,3 +157,8 @@ private:
 
 using MemoryPool = MemoryPoolT<NoDebugPolicy, ThrowAllocPolicy>;
 using DebugMemoryPool = MemoryPoolT<PoisonDebugPolicy, ThrowAllocPolicy>;
+
+inline MemoryPool& defaultMemoryPool(){
+    static MemoryPool pool;
+    return pool;
+}

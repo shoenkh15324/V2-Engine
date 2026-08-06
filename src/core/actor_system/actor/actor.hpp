@@ -38,6 +38,24 @@ public:
     int sendMsgAfter(uint64_t targetId, Message msg, uint64_t delayMs);
     void receiveMsg(Message msg);
 
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    void sendMsg(const std::string& name, M&& m){ sendMsg(name, Message::make(std::forward<M>(m))); }
+
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    void sendMsg(uint64_t id, M&& m){ sendMsg(id, Message::make(std::forward<M>(m))); }
+
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    int sendMsgAfter(const std::string& targetName, M&& m, uint64_t delayMs){ return sendMsgAfter(targetName, Message::make(std::forward<M>(m)), delayMs); }
+
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    int sendMsgAfter(uint64_t targetId, M&& m, uint64_t delayMs){ return sendMsgAfter(targetId, Message::make(std::forward<M>(m)), delayMs); }
+
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    void receiveMsg(M&& m){ receiveMsg(Message::make(std::forward<M>(m))); }
+
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    int startTimer(M&& m, uint64_t delayMs, bool repeating){ return startTimer(Message::make(std::forward<M>(m)), delayMs, repeating); }
+
     int startTimer(Message msg, uint64_t delayMs, bool repeating);
     void cancelTimer(int timerId);
     void cancelAllTimers();

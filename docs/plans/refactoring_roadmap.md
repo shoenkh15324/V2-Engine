@@ -239,7 +239,7 @@ public:
 > - **기본 구현** `MemoryPoolT`(현재 slab/TLS 풀) — **core 유지** (`::operator new`, `std::array`, `thread_local`, `cstring`만 사용 → std-only + portable 판정). core만으로 만든 다른 프로젝트가 재구현 없이 재사용 가능해야 함
 > - **특수 구현**(Linux arena/hugepage, jemalloc/tcmalloc wrapper 등) — infra만. 2.3에서 확정
 > - **파편화 정리**: 슬랩 설계(고정 SizeClass 블록 균일 재사용)는 파편화 방지 장치이므로 풀을 "하나로 강제"할 이유가 없음. 생산 기본은 공용 풀 인스턴스 1개, 테스트/서브시스템은 별도 인스턴스 생성 가능하게 (인스턴스 기반)
-> - **실제 제거 대상은 "위치"가 아니라 "전역 싱글톤"** (`MemoryPool::instance()` + `inline thread_local tlCache_`) — 1.5.3에서 처리
+> - **실제 제거 대상은 "위치"가 아니라 "전역 싱글톤"** (`MemoryPool::instance()` + `inline thread_local tlCache_`) — `instance()`는 1.5.3에서 제거 ✅, `tlCache_`는 **후속(B)으로 연기** (1.5.3 판정 참고: 비정적 멤버 `thread_local` 불가 → 레지스트리 재설계 필요, 2.3 arena와 함께)
 
 ```cpp
 #pragma once
@@ -605,33 +605,29 @@ Logger& activeLogger();   void setActiveLogger(Logger*);   void clearActiveLogge
 > - abort는 **정말 복구 불가 시에만** `V2_PANIC`(NDEBUG 무관 항상 on) + 로그로 원인 남기고 즉사.
 > - 지금 단계: `V2_ASSERT` 사용처(ring_buffer/event_loop)는 **유지하되 릴리즈 의존하지 말 것** — 디버그 가드일 뿐이라는 주석과 함께 이관 대상 목록으로 남김.
 
-#### 1.5.3 `Message` → `IMemoryAllocator` 주입
+#### 1.5.3 `Message` → `IMemoryAllocator` 주입 ✅
 ```cpp
 // src/core/actor_system/messages/message.hpp
 class Message {
-    // MemoryPool::instance() 제거 — 전역 싱글톤 제거
+    // MemoryPool::instance() 제거 — 전역 싱글톤 제거 ✅
     IMemoryAllocator* allocator_ = nullptr;  // null → core 기본 풀 인스턴스로 폴백
-    
-public:
-    // 정적 팩토리 대신 MessageFactory 사용 (27개 호출처 침습 회피)
     // allocator_ 는 move 시 함께 이전
     // ops_ 함수포인터가 IMemoryAllocator* 파라미터를 받도록 변경
 };
-
-// 선택: MessageFactory — composition root가 pool을 만들어 주입
-class MessageFactory {
-    IMemoryAllocator* allocator_;  // 기본 = core 공용 풀 인스턴스
-public:
-    explicit MessageFactory(IMemoryAllocator* alloc) : allocator_(alloc) {}
-    template<typename T>
-    Message make(T&& value) { /* allocator_ 사용 */ }
-};
 ```
 
-- **기본값은 core 풀 인스턴스** (`MemoryPoolT`를 인스턴스 기반으로 전환). core는 어떤 pool도 몰라도 동작 (v2_core_smoke 유지)
-- `inline thread_local tlCache_`(thread_local_cache.hpp) → **풀 인스턴스 소유로 이관** (전역 제거)
+- [x] `MemoryPool::instance()` 제거 → `defaultMemoryPool()` 모듈-로컬 폴백 (전역 접근 API 제거, 호출부 0건)
+- [x] `Message::allocator_` 스냅샷 + ops에 `IMemoryAllocator*` 파라미터 (move 이전, inline은 풀 미사용)
+- [x] pool 경로 할당 실패 시 `throw std::bad_alloc{}` (기존 `ThrowAllocPolicy` 동작 유지)
+- **기본값은 core 풀 인스턴스** (`MemoryPoolT`를 인스턴스 기반으로 전환). core는 어떤 pool도 몰라도 동작 (v2_core_smoke 유지) ✅
 
-#### 1.5.4 메시지 생성 은닉 API (Payload-전용 send/sendMsg 오버로드) — 추후 진행
+> **소유권 판정 (구현 확정)**: 기본 소유 = core의 프로세스-수명 폴백 `defaultMemoryPool()`. **MessageFactory는 보류 (YAGNI)** — 현재 소비자(비-기본 풀 주입이 필요한 곳)가 없고 로드맵상 "선택"이라, 필요가 생기는 시점(2.3 arena 주입·테스트 격리)에 `Message::make(value, alloc)` 오버로드 + 팩토리 형태로 추가.
+
+> **TLS 이관은 후속으로 연기 (B)**: 아래 항목(242행의 `inline thread_local tlCache_` — `thread_local_cache.hpp`)은 이번 1.5.3에 포함하지 않았다. 이유: C++에서 **비정적 멤버에 `thread_local`을 붙일 수 없어**(static/전역 전용) "풀 인스턴스 소유 thread cache"는 결국 `thread_local` 레지스트리(예: `map<풀*,캐시>`) 재설계가 필요하고, 이는 여전히 스레드별 전역 구조라 '전역 제거'에 트레이드오프가 있다. hot path(성능)에 영향 가능 — **2.3 arena 논의와 함께 별도 리팩토링으로 변경**.
+
+> **참고 (후속)**: pool 경로가 raw 인터페이스를 쓰므로 `MemoryPoolT`의 `DebugPolicy` 후크가 메시지 할당 경계에서 bypass됨 (기본 `NoDebugPolicy`라 동작 동일, `DebugMemoryPool` 사용 시 poison 미적용) — 2.3에서 정리.
+
+#### 1.5.4 메시지 생성 은닉 API (Payload-전용 send/sendMsg 오버로드) ✅ (1.5.3과 함께 구현)
 > **동기**: `actor.send(target, Message::make(CmdRequest{...}))`처럼 호출자가 매번 `Message::make`를 쓰는 것을 없애고, **payload 타입만 넘기면 send 내부에서 `Message` 생성(그리고 그 안의 allocator 결정)을 은닉**한다. 1.5.3의 allocator 주입과 강하게 연관 — 주입 결정 지점이 은닉 레이어 안에만 생기면 되므로 **1.5.3과 함께 진행 권장**.
 > **id 자동 추론**: 각 메시지 타입은 `static constexpr MessageId kId`를 보유 (`message_traits.hpp` + 각 messages 헤더). payload 타입만으로 `DT::kId`가 추론되므로 **호출자가 id를 알 필요 없음**.
 
@@ -648,8 +644,10 @@ void sendMsg(const std::string& name, M&& msg){
 - 오버로드 규칙: `Message` 객체 → non-template 승리 / payload 타입 → 템플릿이 `Message::make`로 감쌈
 - **의도한 아님 폼**: `send(id, args...)` (id + 개별 인자)는 메시지마다 생성 인자가 달라 **일반화 불가** → payload 구조체를 넘기는 방식만 허용
 
-- [ ] `Actor`의 sendMsg × 2, sendMsgAfter × 2, receiveMsg, startTimer + `ActorHandle::send`에 payload 템플릿 오버로드 추가 (첨가형, 기존 호출 무변경)
-- [ ] 도메인(`service/*`)의 핫 루트 호출을 payload 형태로 전환해 `Message::make` 누들을 정리 — allocator 주입(1.5.3)과 함께 처리
+- [x] `Actor`의 sendMsg × 2, sendMsgAfter × 2, receiveMsg, startTimer + `ActorHandle::send`에 payload 템플릿 오버로드 추가 (첨가형, 기존 호출 무변경)
+- [x] 도메인(`service/*`)의 핫 루트 호출을 payload 형태로 전환해 `Message::make` 누들을 정리 — allocator 주입(1.5.3)과 함께 처리
+  - 전환 범위: send/sendMsg/sendMsgAfter/startTimer/h.send (cmd·network_manager·monitor·tick·ipc·device_manager·dbus)
+  - **유지**: `ctx->enqueue(...)`/`runtime()->enqueue(...)`는 가상 인터페이스 경유라 payload 오버로드가 어색 → `Message::make` 공용 API로 유지
 
 ### 1.6 서비스 계층 경계 복원 — 포트 소유권 정리 (P0-7)
 

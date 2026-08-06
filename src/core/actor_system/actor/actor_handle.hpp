@@ -17,6 +17,9 @@ public:
     Actor* get() const;
     void send(Message msg) const;
 
+    template<typename M, typename = std::enable_if_t<!std::is_same_v<std::decay_t<M>, Message>>>
+    void send(M&& m) const { send(Message::make(std::forward<M>(m))); }
+
     uint64_t id() const { return id_; }
     uint64_t generation() const { return generation_; }
 

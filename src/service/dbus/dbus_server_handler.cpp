@@ -59,7 +59,7 @@ void DbusServerHandler::handleRegisterMethod(const DbusRegisterMethod& msg){
                     .args = std::move(args),
                     .senderActorName = actor_.name(),
                 };
-                actor_.sendMsg(owner, Message::make(std::move(msg)));
+                actor_.sendMsg(owner, std::move(msg));
             };
             obj->addVTable(std::move(methodItem)).forInterface(sdbus::InterfaceName(iface));
         }

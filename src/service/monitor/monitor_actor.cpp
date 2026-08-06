@@ -110,7 +110,7 @@ int MonitorActor::open(){
     ::chmod(config_.socketPath.c_str(), 0777);
     startTime_ = Time::now();
     subscribeListener();
-    startTimer(Message::make(MonitorPoll{}), config_.pollIntervalMs, true);
+    startTimer(MonitorPoll{}, config_.pollIntervalMs, true);
     //
     state_ = Opened;
     V2_LOG_INFO("Monitor Actor opened");

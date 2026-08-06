@@ -52,7 +52,7 @@ void CmdActor::handle(const Message& msg){
     case MessageId::CmdRequest:{
         const auto& m = msg.as<CmdRequest>();
         auto response = dispatch(m.cmd);
-        sendMsg("ipc_server", Message::make(CmdResponse{m.conn, std::move(response)}));
+        sendMsg("ipc_server", CmdResponse{m.conn, std::move(response)});
         break;
     }
     case MessageId::WifiScanResult:
@@ -147,10 +147,10 @@ std::string CmdActor::doActorToggle(bool enable, const std::string& name){
     if(!a) return "error: not found '" + name + "'\n";
     if(enable && a->isEssential()) return "error: '" + name + "' is essential\n";
     if(enable){
-        h.send(Message::make(ActorEnableRequest{}));
+        h.send(ActorEnableRequest{});
     }else{
         if(a->isEssential()) return "error: '" + name + "' is essential\n";
-        h.send(Message::make(ActorDisableRequest{}));
+        h.send(ActorDisableRequest{});
     }
     return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
 }
@@ -181,7 +181,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     if(args.empty()) return "error: missing subcommand\n";
     auto& cmd = args[0];
     if(cmd == "scan"){
-        sendMsg("network_manager", Message::make(WifiScanRequest{}));
+        sendMsg("network_manager", WifiScanRequest{});
         return "Scanning...\n";
     }
     if(cmd == "list"){
@@ -190,11 +190,11 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     }
     if(cmd == "connect"){
         if(args.size() < 2) return "error: wifi connect <ssid> [password]\n";
-        sendMsg("network_manager", Message::make(WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""}));
+        sendMsg("network_manager", WifiConnectRequest{args[1], args.size() >= 3 ? args[2] : ""});
         return "Connecting to '" + args[1] + "'...\n";
     }
     if(cmd == "disconnect"){
-        sendMsg("network_manager", Message::make(WifiDisconnectRequest{}));
+        sendMsg("network_manager", WifiDisconnectRequest{});
         return "Disconnecting...\n";
     }
     if(cmd == "status"){
@@ -203,7 +203,7 @@ std::string CmdActor::handleWifi(const std::vector<std::string>& args){
     if(cmd == "autoconnect"){
         if(args.size() < 2) return "error: wifi autoconnect <on|off>\n";
         bool enable = (args[1] == "on");
-        sendMsg("network_manager", Message::make(WifiAutoReconnectRequest{enable}));
+        sendMsg("network_manager", WifiAutoReconnectRequest{enable});
         return enable ? "Auto-reconnect enabled\n" : "Auto-reconnect disabled\n";
     }
     return "error: unknown wifi subcommand '" + cmd + "'\n";

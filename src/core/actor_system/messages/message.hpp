@@ -17,7 +17,7 @@ public:
     Message(const Message&) = delete;
     Message& operator=(const Message&) = delete;
 
-    Message(Message&& other) noexcept : id_(other.id_), mode_(other.mode_), ops_(other.ops_){
+    Message(Message&& other) noexcept : id_(other.id_), mode_(other.mode_), ops_(other.ops_), allocator_(other.allocator_){
         if(mode_ == StorageMode::Inline){
             ops_->move(storage_.inlineData, other.storage_.inlineData);
         }else if(mode_ == StorageMode::Pool){
@@ -26,6 +26,7 @@ public:
         other.id_ = static_cast<MessageId>(0);
         other.mode_ = StorageMode::Empty;
         other.ops_ = nullptr;
+        other.allocator_ = nullptr;
     }
 
     Message& operator=(Message&& other) noexcept {
@@ -34,6 +35,7 @@ public:
             id_ = other.id_;
             mode_ = other.mode_;
             ops_ = other.ops_;
+            allocator_ = other.allocator_;
             if(mode_ == StorageMode::Inline){
                 ops_->move(storage_.inlineData, other.storage_.inlineData);
             }else if(mode_ == StorageMode::Pool){
@@ -42,6 +44,7 @@ public:
             other.id_ = static_cast<MessageId>(0);
             other.mode_ = StorageMode::Empty;
             other.ops_ = nullptr;
+            other.allocator_ = nullptr;
         }
         return *this;
     }
@@ -60,7 +63,11 @@ public:
             ::new (msg.storage_.inlineData) DT(std::forward<T>(value));
         }else{
             msg.mode_ = StorageMode::Pool;
-            msg.storage_.ptr = MemoryPool::instance().allocate<DT>(std::forward<T>(value));
+            IMemoryAllocator* alloc = &defaultMemoryPool();
+            void* mem = alloc->allocate(sizeof(DT), alignof(DT));
+            if(!mem) throw std::bad_alloc{};
+            msg.storage_.ptr = ::new(mem) DT(std::forward<T>(value));
+            msg.allocator_ = alloc;
         }
         return msg;
     }
@@ -79,10 +86,12 @@ public:
         }
         
         if(!ops_->cloneAllocate) return {};
-        result.storage_.ptr = ops_->cloneAllocate(data());
+        IMemoryAllocator* alloc = allocator_ ? allocator_ : &defaultMemoryPool();
+        result.storage_.ptr = ops_->cloneAllocate(data(), alloc);
         result.id_ = id_;
         result.ops_ = ops_;
         result.mode_ = StorageMode::Pool;
+        result.allocator_ = alloc;
         return result;
     }
 
@@ -107,10 +116,10 @@ private:
     };
 
     struct MessageOps{
-        void (*destroy)(void*);
+        void (*destroy)(void*, IMemoryAllocator*);
         void (*move)(void* dst, void* src);
         void (*cloneConstruct)(void* dst, const void* src);
-        void* (*cloneAllocate)(const void* src);
+        void* (*cloneAllocate)(const void* src, IMemoryAllocator* alloc);
     };
 
     template<typename T>
@@ -120,7 +129,10 @@ private:
         if constexpr (isPool){
             static constexpr MessageOps ops = []{
                 MessageOps ops{
-                    .destroy = [](void* p){ MemoryPool::instance().deallocate(static_cast<T*>(p)); },
+                    .destroy = [](void* p, IMemoryAllocator* alloc){
+                        static_cast<T*>(p)->~T();
+                        alloc->deallocate(p, sizeof(T), alignof(T));
+                    },
                     .move = [](void* dst, void* src){
                         ::new(dst) T(std::move(*static_cast<T*>(src)));
                         static_cast<T*>(src)->~T();
@@ -129,8 +141,10 @@ private:
                     .cloneAllocate = nullptr,
                 };
                 if constexpr (isCopyable){
-                    ops.cloneAllocate = [](const void* src) -> void*{
-                        return MemoryPool::instance().allocate<T>(*static_cast<const T*>(src));
+                    ops.cloneAllocate = [](const void* src, IMemoryAllocator* alloc) -> void*{
+                        void* mem = alloc->allocate(sizeof(T), alignof(T));
+                        if(!mem) throw std::bad_alloc{};
+                        return ::new(mem) T(*static_cast<const T*>(src));
                     };
                 }
                 return ops;
@@ -139,7 +153,7 @@ private:
         }else{
             static constexpr MessageOps ops = []{
                 MessageOps ops{
-                    .destroy = [](void* p){ static_cast<T*>(p)->~T(); },
+                    .destroy = [](void* p, IMemoryAllocator*){ static_cast<T*>(p)->~T(); },
                     .move = [](void* dst, void* src){
                         ::new(dst) T(std::move(*static_cast<T*>(src)));
                         static_cast<T*>(src)->~T();
@@ -168,11 +182,12 @@ private:
 
     void destroy(){
         if((mode_ == StorageMode::Empty) || !ops_) return;
-        ops_->destroy(data());
+        ops_->destroy(data(), allocator_ ? allocator_ : &defaultMemoryPool());
     }
 
     MessageId id_{static_cast<MessageId>(0)};
     StorageMode mode_{StorageMode::Empty};
     const MessageOps* ops_{nullptr};
+    IMemoryAllocator* allocator_ = nullptr;
     Storage storage_;
 };
