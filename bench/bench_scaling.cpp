@@ -35,10 +35,10 @@ ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
 }
 
 BenchmarkResult ScalingBenchmark::run(const Args& args){
-    bool wasMetricsEnabled = Metrics::isEnabled();
+    bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     ScalingParams p = ScalingParams::parse(args);
 
-    Metrics::setEnabled(false);
+    V2_METRICS()->setEnabled(false);
 
     auto measureThroughput = [&](int workers, int actors, int iterations) -> double{
         std::atomic<uint64_t> cnt{0};
@@ -100,7 +100,7 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
     res.scaling.workerScaling = std::move(workerResults);
     res.scaling.actorScaling = std::move(actorResults);
 
-    Metrics::setEnabled(wasMetricsEnabled);
+    V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;
 }
 

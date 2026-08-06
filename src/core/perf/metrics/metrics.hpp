@@ -1,9 +1,9 @@
 #pragma once
-#include <cstdint>
 #include <string>
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <cstdint>
 #include "core/common/container/cache_line.hpp"
 
 struct ActorMetrics{
@@ -106,24 +106,25 @@ struct DispatcherMetrics{
 
 class Metrics{
 public:
-    Metrics() = delete;
+    explicit Metrics(size_t numWorkers = 0);
+    ~Metrics() = default;
 
     Metrics(const Metrics&) = delete;
     Metrics& operator=(const Metrics&) = delete;
     Metrics(Metrics&&) = delete;
     Metrics& operator=(Metrics&&) = delete;
 
-    static void init(size_t numbers);
-    static void registerActor(uint64_t actorId);
+    void init(size_t numbers);
+    void registerActor(uint64_t actorId);
 
-    static void setEnabled(bool enabled){ enabled_ = enabled; }
-    static bool isEnabled(){ return enabled_; }
+    void setEnabled(bool enabled){ enabled_ = enabled; }
+    bool isEnabled(){ return enabled_; }
 
-    static void recordEnqueue(uint64_t actorId, bool success, size_t depth);
-    static void recordHandle(uint64_t actorId, size_t count, uint64_t durationNs);
-    static void recordBatch(int workerId, size_t msgCount, uint64_t busyNs, uint64_t idleNs);
-    static void recordDispatch(bool deduped, size_t queueDepth);
-    static void recordAcquire();
+    void recordEnqueue(uint64_t actorId, bool success, size_t depth);
+    void recordHandle(uint64_t actorId, size_t count, uint64_t durationNs);
+    void recordBatch(int workerId, size_t msgCount, uint64_t busyNs, uint64_t idleNs);
+    void recordDispatch(bool deduped, size_t queueDepth);
+    void recordAcquire();
 
     struct Snapshot{
         struct ActorSnap{
@@ -136,14 +137,20 @@ public:
         DispatcherMetrics::Snapshot dispatcher;
     };
 
-    static Snapshot snapshot();
-    static void reset();
+    Snapshot snapshot();
+    void reset();
 
 private:
-    static void updatePeak(std::atomic<size_t>& peak, size_t current);
+    void updatePeak(std::atomic<size_t>& peak, size_t current);
 
-    static inline bool enabled_{false};
-    static inline std::vector<std::unique_ptr<ActorMetrics>> actors_;
-    static inline std::vector<std::unique_ptr<WorkerMetrics>> workers_;
-    static inline DispatcherMetrics dispatcher_;
+    bool enabled_{false};
+    std::vector<std::unique_ptr<ActorMetrics>> actors_;
+    std::vector<std::unique_ptr<WorkerMetrics>> workers_;
+    DispatcherMetrics dispatcher_;
 };
+
+Metrics& activeMetrics(); // 활성 미설정 시 프로세스 기본 인스턴스 풀백
+void setActiveMetrics(Metrics* m); // Composition Root(main app)이 1회 설정
+void clearActiveMetrics(); // 테스트 / 해제용
+
+#define V2_METRICS() (&activeMetrics())

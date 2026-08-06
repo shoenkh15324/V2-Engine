@@ -5,6 +5,7 @@
 #include "core/common/config/runtime_config.h"
 #include "core/common/di/service_container.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "infra/hal/pmu/i_pmu.hpp"
 #include "infra/hal/sys/i_sys.hpp"
 
@@ -28,6 +29,7 @@ private:
     void createActors();
 
 private:
+    Metrics metrics_;
     RuntimeConfig cfg_;
     ServiceContainer di_;
     std::shared_ptr<IPmu> pmu_;

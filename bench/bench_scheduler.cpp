@@ -32,10 +32,10 @@ SchedulerParams SchedulerParams::parse(const IBenchmark::Args& args){
 }
 
 BenchmarkResult SchedulerBenchmark::run(const Args& args){
-    bool wasMetricsEnabled = Metrics::isEnabled();
+    bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     SchedulerParams p = SchedulerParams::parse(args);
 
-    Metrics::setEnabled(false);
+    V2_METRICS()->setEnabled(false);
 
     auto measureTimer = [&](int durationMs) -> std::vector<uint64_t>{
         std::vector<uint64_t> times;
@@ -108,7 +108,7 @@ BenchmarkResult SchedulerBenchmark::run(const Args& args){
     res.scheduler.p99 = p99;
     res.scheduler.p999 = p999;
 
-    Metrics::setEnabled(wasMetricsEnabled);
+    V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;
 }
 

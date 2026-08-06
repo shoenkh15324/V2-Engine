@@ -31,10 +31,10 @@ LatencyParams LatencyParams::parse(const IBenchmark::Args& args){
 }
 
 BenchmarkResult LatencyBenchmark::run(const Args& args){
-    bool wasMetricsEnabled = Metrics::isEnabled();
+    bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     LatencyParams p = LatencyParams::parse(args);
 
-    Metrics::setEnabled(false);
+    V2_METRICS()->setEnabled(false);
 
     auto runOnce = [&](int iters){
         std::vector<uint64_t> lats(iters);
@@ -112,7 +112,7 @@ BenchmarkResult LatencyBenchmark::run(const Args& args){
     res.latency.percentiles.p999 = static_cast<double>(latencies[std::min(n * 999 / 1000, n - 1)]);
     res.actorSnaps.push_back({"latency_actor", actor->mailboxCapacity(), actor->processed()});
 
-    Metrics::setEnabled(wasMetricsEnabled);
+    V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;
 }
 

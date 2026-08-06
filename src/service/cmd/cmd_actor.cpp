@@ -257,25 +257,25 @@ std::string CmdActor::handleMetrics(const std::vector<std::string>& args){
     if(args.empty()) return "error: missing subcommand\n";
     auto& cmd = args[0];
     if(cmd == "enable"){
-        Metrics::setEnabled(true);
+        V2_METRICS()->setEnabled(true);
         return "ok: metrics enabled\n";
     }
     if(cmd == "disable"){
-        Metrics::setEnabled(false);
+        V2_METRICS()->setEnabled(false);
         return "ok: metrics disabled\n";
     }
     if(cmd == "snapshot"){
-        return (Metrics::isEnabled() ? formatMetricsSnapshot() : "error: metrics is disabled\n");
+        return (V2_METRICS()->isEnabled() ? formatMetricsSnapshot() : "error: metrics is disabled\n");
     }
     if(cmd == "reset"){
-        Metrics::reset();
+        V2_METRICS()->reset();
         return "ok: metrics reset\n";
     }
     return "error: unknown metrics subcommand '" + cmd + "'\n";
 }
 
 std::string CmdActor::formatMetricsSnapshot(){
-    auto snap = Metrics::snapshot();
+    auto snap = V2_METRICS()->snapshot();
     for(auto& a : snap.actors){
         ActorHandle h = runtime()->actorRegistry()->findById(a.id);
         Actor* actor = h.get();
@@ -283,7 +283,7 @@ std::string CmdActor::formatMetricsSnapshot(){
     }
     std::ostringstream oss;
     oss << "=== Metrics ===\n"
-        << "Status: " << (Metrics::isEnabled() ? "enabled" : "disabled") << "\n";
+        << "Status: " << (V2_METRICS()->isEnabled() ? "enabled" : "disabled") << "\n";
 
     oss << "\n[Actors]\n";
     oss << std::left

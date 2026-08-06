@@ -37,10 +37,10 @@ BackpressureParams BackpressureParams::parse(const IBenchmark::Args& args){
 }
 
 BenchmarkResult BackpressureBenchmark::run(const Args& args){
-    bool wasMetricsEnabled = Metrics::isEnabled();
+    bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     BackpressureParams p = BackpressureParams::parse(args);
 
-    Metrics::setEnabled(false);
+    V2_METRICS()->setEnabled(false);
 
     std::atomic<uint64_t> sent{0};
     std::atomic<uint64_t> dropped{0};
@@ -91,7 +91,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         res.backpressure.dropRate = dropRate;
         res.backpressure.floodDurationNs = floodDuration;
         res.backpressure.drainDurationNs = drainDuration;
-        Metrics::setEnabled(wasMetricsEnabled);
+        V2_METRICS()->setEnabled(wasMetricsEnabled);
         return res;
     }
     else if(p.mode == 1){
@@ -131,7 +131,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         res.backpressure.dropRate = dropRate;
         res.backpressure.floodDurationNs = floodDuration;
         res.backpressure.drainDurationNs = drainDuration;
-        Metrics::setEnabled(wasMetricsEnabled);
+        V2_METRICS()->setEnabled(wasMetricsEnabled);
         return res;
     }
     else{
@@ -178,7 +178,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         res.backpressure.dropRate = dropRate;
         res.backpressure.floodDurationNs = floodDuration;
         res.backpressure.drainDurationNs = drainDuration;
-        Metrics::setEnabled(wasMetricsEnabled);
+        V2_METRICS()->setEnabled(wasMetricsEnabled);
         return res;
     }
 }

@@ -26,7 +26,7 @@ ActorSystem::ActorSystem(const ActorSystemConfig& config, ActorSystemDeps deps)
 {
     assert(dispatcher_ && scheduler_ && supervisor_ && deadLetterQueue_ && registry_);
     
-    Metrics::init(config.numWorkers);
+    V2_METRICS()->init(config.numWorkers);
     workers_.reserve(config.numWorkers);
     for(int i = 0; i < config.numWorkers; i++){
         workers_.push_back(std::make_unique<Worker>(dispatcher_.get(), i, config.maxBatch));
@@ -97,7 +97,7 @@ void ActorSystem::attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, 
     );
     registry_->add(rt->actor());
     actorRuntimes_.push_back(std::move(rt));
-    Metrics::registerActor(id);
+    V2_METRICS()->registerActor(id);
 }
 
 std::unique_ptr<ActorSystem> createDefaultActorSystem(const ActorSystemConfig& config, std::unique_ptr<IEventLoop> eventLoop, std::unique_ptr<ITimer> timer){

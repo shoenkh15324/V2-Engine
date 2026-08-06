@@ -35,10 +35,10 @@ ContentionParams ContentionParams::parse(const IBenchmark::Args& args){
 }
 
 BenchmarkResult ContentionBenchmark::run(const Args& args){
-    bool wasMetricsEnabled = Metrics::isEnabled();
+    bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     ContentionParams p = ContentionParams::parse(args);
 
-    Metrics::setEnabled(false);
+    V2_METRICS()->setEnabled(false);
 
     auto runOnce = [&](int numProducers, int64_t msgsPerProducer) -> uint64_t{
         int64_t total = static_cast<int64_t>(numProducers) * msgsPerProducer;
@@ -81,7 +81,7 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
     res.throughput.totalDurationNs = totalNs;
     res.throughput.msgsPerSec = (totalNs > 0) ? (static_cast<double>(actualTotal) * 1000000000.0 / static_cast<double>(totalNs)) : 0.0;
 
-    Metrics::setEnabled(wasMetricsEnabled);
+    V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;
 }
 

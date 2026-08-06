@@ -1,5 +1,31 @@
 #include "metrics.hpp"
 
+namespace {
+    std::atomic<Metrics*> gMetrics{nullptr};
+
+    Metrics& fallbackMetrics(){
+        static Metrics fallback; // v2_core_smoke처럼 미설정 환경용 기본
+        return fallback;
+    }
+}; // namespace
+
+Metrics& activeMetrics(){
+    Metrics* m = gMetrics.load(std::memory_order_relaxed);
+    return m ? *m : fallbackMetrics();
+}
+
+void setActiveMetrics(Metrics* m){
+    gMetrics.store(m, std::memory_order_relaxed);
+}
+
+void clearActiveMetrics(){
+    gMetrics.store(nullptr, std::memory_order_relaxed);
+}
+
+Metrics::Metrics(size_t numWorkers){
+    if(numWorkers > 0) init(numWorkers);
+}
+
 void Metrics::init(size_t numWorkers){
     workers_.clear();
     workers_.reserve(numWorkers);
@@ -86,8 +112,7 @@ void Metrics::reset(){
 void Metrics::updatePeak(std::atomic<size_t>& peak, size_t current){
     size_t p = peak.load(std::memory_order_relaxed);
     while(current > p){
-        if(peak.compare_exchange_weak(p, current, std::memory_order_relaxed)){
-            break;
-        }
+        if(peak.compare_exchange_weak(p, current, std::memory_order_relaxed)) break;
     }
 }
+

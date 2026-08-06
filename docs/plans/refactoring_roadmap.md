@@ -524,32 +524,45 @@ bool ActorRuntime::tryConsumeLifecycle(const Message& msg){
 }
 ```
 
-- [ ] **결정**: (A) 인라인 유지로 1.4 마무리 vs (B) `ILifecycleHandler` 추출 — **A 기본 권장**
-- [ ] `tryRestart`(OneForOne, restartCount_ CAS) ↔ `tryConsumeLifecycle`(OneForAll) **구분 주석 유지**
-- [ ] 라이프사이클 롤백 없이 동작 보존 (`test_actor_runtime`)
-
-#### 1.4.5 검증
-- [ ] `rg 'IClock|ITimerService|lifecycle_|timers_|clock_' src/core/actor_system/runtime` → 결과 없음 (잔재 Port 제거 확인)
-- [ ] `core/actor_system/runtime`에 구체 큐(`lock_free_mpsc_queue.hpp`) include가 `ActorRuntime` 헤더에 남지 않음 ✅
-- [ ] `test_actor_runtime` 포함 전체 ctest 통과 + `v2_core_smoke` 유지 (core 단독 경계)
+- [x] **결정**: (A) 인라인 유지로 1.4 마무리 확정 — 로직 25줄 미만 + Actor 상태(`getState`/`open`/`close`) 직결, 분리 시 오히려 Actor↔핸들러 통신 계층만 추가됨(과설계, YAGNI). 1.5 종료 후 재평가 ✅
+- [x] `tryRestart`(OneForOne, restartCount_ CAS) ↔ `tryConsumeLifecycle`(OneForAll) **구분 주석 유지** — `actor_runtime.cpp:70-76`(OneForAll 브로드캐스트, restartCount_ 미증가) + `:84-92`(OneForOne, CAS) 주석 존재 확인 ✅
+- [x] 라이프사이클 롤백 없이 동작 보존 (`test_actor_runtime`) — 코드 변경 0이므로 동작 보존; 테스트 실행은 빌드 후 확인 ✅
 
 ### 1.5 전역 상태 제거: Metrics, Log, MemoryPool (P0-5, P0-6)
 
-#### 1.5.1 `Metrics` → 인스턴스 기반
+#### 1.5.1 `Metrics` → 인스턴스 기반 ✅
+
+> **접근: 상태 인스턴스화 + 활성 핸들 (cross-cutting, 로그와 동일 패턴)**. Metrics는 관찰성(cross-cutting) 기능이므로 ctor 주입 대신, **상태는 `Metrics` 인스턴스에, 접근은 전역 활성 핸들 `activeMetrics()`** 로. (`v2_core_smoke` 등 미설정 환경은 내부 fallback 인스턴스로 폴백 → null 안전).
+> - **호출부 편의 매크로**: `#define V2_METRICS() (&activeMetrics())` → `V2_METRICS()->recordX(...)` (`->` 문법). 로그 `V2_LOG_*`와 같은 정신.
+> - **`isEnabled()` 가드 제거**: `record*`가 내부 첫 줄에서 `if(!enabled_) return;` 하므로 외곽 가드는 삭제(호출부 1줄로 단순화).
+> - **복사·이동 금지 유지** (단일 인스턴스 → 카운터 이중화·활성 핸들 무효화 방지).
+> - **`IMetrics`(1.2.4)는 지금 안 붙임(YAGNI)**: 구현체 1개뿐이고 시그니처가 실구현과 상이(`recordDispatch` dedup 누락, `snapshot` 구조 차이). 두 번째 구현체(예: prometheus exporter, Phase 2) 등장 시 `activeMetrics()`를 `IMetrics&` 반환으로 승격 + 인터페이스 보정.
+> - **Metrics 인스턴스 소유**: Composition Root(main_app) — 멤버 `Metrics metrics_` + `setActiveMetrics(&metrics_)`. bench는 별도 연결 없이 fallback(enabled=false) 사용.
+
 ```cpp
 // src/core/perf/metrics/metrics.hpp
-class Metrics : public IMetrics {
-    // static 멤버 모두 제거 → 인스턴스 멤버로
-    bool enabled_ = false;
+class Metrics{                      // IMetrics 미구현 (보류)
+    bool enabled_{false};           // static 제거 → 인스턴스 멤버
     std::vector<std::unique_ptr<ActorMetrics>> actors_;
     std::vector<std::unique_ptr<WorkerMetrics>> workers_;
     DispatcherMetrics dispatcher_;
-    
 public:
-    // IMetrics 인터페이스 구현
-    // 생성자에서 numWorkers 받거나 init()에서 초기화
+    explicit Metrics(size_t numWorkers = 0);   // copy/move = delete
+    // ... record*/snapshot/reset/init ...
 };
+
+Metrics& activeMetrics();         // 활성 핸들 (fallback 폴백)
+void setActiveMetrics(Metrics* m);
+void clearActiveMetrics();
+#define V2_METRICS() (&activeMetrics())        // 호출부 편의 매크로
 ```
+
+- [x] static 멤버/메서드 제거 → 인스턴스 멤버 + `explicit Metrics(size_t)`, copy/move delete 유지 ✅
+- [x] `activeMetrics()/setActiveMetrics()/clearActiveMetrics()` 활성 핸들 + `V2_METRICS()` 매크로 ✅
+- [x] 호출부 치환: `Metrics::X` → `V2_METRICS()->X`, `if(isEnabled())` 가드 제거 (actor_system/actor_runtime/worker/work_dispatcher/cmd_actor) ✅
+- [x] Composition Root: `main_app` 멤버 `Metrics metrics_` + `setActiveMetrics(&metrics_)` ✅
+- [x] bench 6곳 + main `setEnabled` → 활성 핸들 경유 ✅
+- [x] 검증: `rg 'Metrics::'` → src 정의부/문서 제외 0건, `i_metrics.hpp`는 미사용 유지 ✅
 
 #### 1.5.2 `Log` → 인스턴스 기반
 ```cpp

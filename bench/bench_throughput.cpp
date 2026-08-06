@@ -34,11 +34,11 @@ ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
 }
 
 BenchmarkResult ThroughputBenchmark::run(const Args& args){
-    bool wasMetricsEnabled = Metrics::isEnabled();
+    bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     ThroughputParams p = ThroughputParams::parse(args);
     int perActor = p.iterations / p.actors;
 
-    Metrics::setEnabled(false);
+    V2_METRICS()->setEnabled(false);
 
     auto runOnce = [&](int iters) -> uint64_t{
         std::atomic<uint64_t> cnt{0};
@@ -78,7 +78,7 @@ BenchmarkResult ThroughputBenchmark::run(const Args& args){
         ? (static_cast<double>(p.iterations) * 1000000000.0 / static_cast<double>(totalNs))
         : 0.0;
 
-    Metrics::setEnabled(wasMetricsEnabled);
+    V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;
 }
 

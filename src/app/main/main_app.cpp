@@ -75,7 +75,8 @@ void MainApp::configureRuntime(){
     setLogFile("log/v2_main.log");
 
     // Set Metric
-    Metrics::setEnabled(cfg_.enableMetrics);
+    setActiveMetrics(&metrics_);
+    metrics_.setEnabled(cfg_.enableMetrics);
 
     // Set Signal
     SystemActor::onSignal(SIGINT, [this](int){ requestStop(); });
