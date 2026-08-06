@@ -1,6 +1,7 @@
 #include "main_app.hpp"
 #include <csignal>
 #include "core/common/log/log.hpp"
+#include "core/common/util/debug.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
 #include "core/common/timer/i_timer.hpp"
@@ -25,7 +26,6 @@
     #include "infra/platform/linux/event_loop_epoll.hpp"
     #include "infra/platform/linux/timer_linux.hpp"
 #endif
-
 
 MainApp::MainApp() = default;
 
@@ -70,9 +70,9 @@ void MainApp::requestStop(){
 
 void MainApp::configureRuntime(){
     // Set Log
-    setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
-    setLogAppName(std::move(name_));
-    setLogFile("log/v2_main.log");
+    setActiveLogger(&logger_);
+    logger_.setLevel(static_cast<LogLevel>(cfg_.logLevel));
+    logger_.setLogFile("log/v2_main.log");
 
     // Set Metric
     setActiveMetrics(&metrics_);

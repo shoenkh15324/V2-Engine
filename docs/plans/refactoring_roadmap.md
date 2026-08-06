@@ -89,11 +89,10 @@ src/core/                                  # 내부 원: 도메인 (Entities + U
 │   │   ├── chunk.hpp / free_list.hpp      # 유지 — 청크 / 자유 목록
 │   │   └── thread_local_cache.hpp         # 유지 — TLC 캐시
 │   ├── log/                               # 로깅 도메인
-│   │   ├── i_logger.hpp                   # NEW (Phase 1.2.3) — Port (ILogger)
-│   │   └── log.hpp/cpp                    # 유지 (fprintf/std — std-only 기본 구현)
+│   │   └── log.hpp/cpp                    # LOGGER (1.5.2) — 인스턴스 + activeLogger, LogLevel 소속 (i_logger.hpp 제거)
 │   └── util/                              # 공용 유틸 (std-only)
 │       ├── return.hpp                     # 유지 — Ok/Fail + Result<T>
-│       └── debug.hpp                      # 유지 — V2_ASSERT (iostream)
+│       └── debug.hpp                      # 유지 (1.5.2) — V2_ASSERT/V2_PANIC, 로그는 logBlock 경유
 └── perf/metrics/                          # [Entities] Metrics → 인스턴스 기반 (Phase 1.5)
 
 src/infra/                                 # 외부 원: Adapters — OS/외부 라이브러리 의존만
@@ -564,21 +563,47 @@ void clearActiveMetrics();
 - [x] bench 6곳 + main `setEnabled` → 활성 핸들 경유 ✅
 - [x] 검증: `rg 'Metrics::'` → src 정의부/문서 제외 0건, `i_metrics.hpp`는 미사용 유지 ✅
 
-#### 1.5.2 `Log` → 인스턴스 기반
+#### 1.5.2 `Log` → 인스턴스 기반 ✅
+> **접근: 상태 인스턴스화 + 활성 핸들 (cross-cutting, 1.5.1과 동일 패턴)**. Log는 관찰성(cross-cutting) 기능이므로 ctor 주입 대신, **상태는 `Logger` 인스턴스에, 접근은 전역 활성 핸들 `activeLogger()`** 로. 미설정 환경(테스트/벤치)은 내부 `fallbackLogger()`로 폴백 → null 안전.
+> - **`ILogger`(1.2.3)는 안 붙임(YAGNI)**: 구현체 1개뿐이고 시그니처가 실구현과 상이. 두 번째 구현체(Phase 2.4 로거 구현체) 등장 시 `activeLogger()`를 인터페이스 반환으로 승격.
+> - **LogLevel 6단계**: `Verbose=0, Debug, Info, Warn, Error, Fatal` (기존 4단계 확장). 색상: Verbose=흰색, Debug=회색, Info=시안, Warn=노랑, Error=빨강, Fatal=굵은 빨강.
+> - **`LogLevel` 소속을 `log.hpp`로 이관** → `i_logger.hpp` 삭제.
+> - 복사·이동 금지 유지 (단일 인스턴스 → 활성 핸들 무효화 방지).
+
 ```cpp
 // src/core/common/log/log.hpp
-class Logger : public ILogger {
-    std::atomic<LogLevel> level_{LogLevel::Info};
-    std::mutex fileMutex_;
+enum class LogLevel : uint8_t { Verbose=0, Debug, Info, Warn, Error, Fatal };
+class Logger{                         // ILogger 구현 보류
     FILE* logFile_ = nullptr;
-    std::string appName_;
-    thread_local static std::string threadBuffer_;  // 스레드 로컬 버퍼 유지
-    
+    std::mutex mutex_;
+    std::atomic<LogLevel> level_{LogLevel::Info};
 public:
-    // ILogger 인터페이스 구현
-    // thread_local 버퍼는 유지하되 flush 정책만 인스턴스 메서드로
+    Logger() = default;               // copy/move = delete
+    void log(LogLevel, file, line, func, msg);   // thread_local gBuf 누적, ≥512B 시 flush
+    void logBlock(std::string_view);             // 원본 그대로 stderr + logFile 즉시 write + flush (크래시/팬릭 박스)
+    void setLevel/getLevel/setLogFile/flushBuffer;
 };
+Logger& activeLogger();   void setActiveLogger(Logger*);   void clearActiveLogger();
+#define V2_LOGGER() (&activeLogger())                      // 접근자 편의 매크로
+#define V2_LOG_VERBOSE/DEBUG/INFO/WARN/ERROR(...) activeLogger().log(...)
+#define V2_LOG_FATAL(...) do{ log(Fatal, ...); flushBuffer(); }while(0)  // abort 전 버퍼 flush 보장
 ```
+
+- [x] `i_logger.hpp` 제거, `LogLevel` 소속 `log.hpp` 이관, copy/move delete ✅
+- [x] static 전역(`gLevel/gLogFile/gMutex`) → 인스턴스 멤버 + `activeLogger/setActiveLogger/clearActiveLogger` + fallback ✅
+- [x] Composition Root(main/cli/tui): 멤버 `Logger logger_` + `setActiveLogger(&logger_)` + `setLevel/setLogFile` ✅
+- [x] LogLevel 6단계 확장 + `V2_LOG_DEBUG`/`V2_LOG_VERBOSE` 신설 (기존 `V2_LOG_INFO/WARN/ERROR` 매크로 경유 — 호출부 무변경) ✅
+- [x] `debug.hpp` ↔ `log.hpp` include 역전: `log.hpp`의 `debug.hpp` include 제거 → `debug.hpp`가 `log.hpp` 포함. **debug가 fatal 로그를 담당**(사용자 원안), 매크로 순환 없음 ✅
+- [x] `V2_PANIC`/`V2_ASSERT` 박스(Message/Expression/File/Line/Function)를 `std::string`으로 조립해 `activeLogger().logBlock()` → **터미널 + `.log` 파일 동시 기록** ✅
+- [x] `V2_LOG_FATAL`에 `flushBuffer()` → abort 전 버퍼 확실 flush (fatal/panic 내용이 `.log`에 잔존) ✅
+- [x] `main_app.cpp`에 `#include "core/common/util/debug.hpp"` 추가 (include 역전으로 소실된 `V2_PANIC` 선언 복구) ✅
+- [x] 참고: `V2_ASSERT`가 Debug에서도 발동하지 않던 원인 = 빌드가 Release 폴백(`-DNDEBUG`) — `CMakeLists.txt` 폴백을 Debug로 변경 후에도 **캐시의 `CMAKE_BUILD_TYPE`이 우선**하므로 `cmake -B build -DCMAKE_BUILD_TYPE=Debug`로 재구성 필요 ✅
+
+> **검증 정책 (방향 3 확정) — 릴리즈에서 assert/panic 처리**
+> - `V2_ASSERT`는 **개발용 불변식** 전용, NDEBUG 시 제거 (C 관용 유지) — 릴리즈 hot path 성능 부담 없음.
+> - **런타임 필수 실패(외부 자원: epoll fd, eventfd 등)는 assert로 abort하지 않는다.** 리턴/전파로 복구하거나 graceful 종료 → **차기 에러 핸들링 리팩토링(Phase 4-1 supervision + 액터 에러 전파)의 몫**으로 연결.
+> - abort는 **정말 복구 불가 시에만** `V2_PANIC`(NDEBUG 무관 항상 on) + 로그로 원인 남기고 즉사.
+> - 지금 단계: `V2_ASSERT` 사용처(ring_buffer/event_loop)는 **유지하되 릴리즈 의존하지 말 것** — 디버그 가드일 뿐이라는 주석과 함께 이관 대상 목록으로 남김.
 
 #### 1.5.3 `Message` → `IMemoryAllocator` 주입
 ```cpp

@@ -69,9 +69,9 @@ int TuiApp::open(){
     V2_LOG_INFO("{} App Open", appName_.c_str());
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_tui.json");
     
-    setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
-    setLogAppName(std::move(appName_));
-    setLogFile("log/v2_tui.log");
+    setActiveLogger(&logger_);
+    logger_.setLevel(static_cast<LogLevel>(cfg_.logLevel));
+    logger_.setLogFile("log/v2_tui.log");
 
     SignalHandler::instance().init();
     SignalHandler::instance().install(SIGINT, [this](int){ requestStop(); });

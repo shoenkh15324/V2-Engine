@@ -84,7 +84,7 @@ TARGETS=("$@")
 # Build
 # ============================================
 build() {
-    local log_level="${LOG_LEVEL:-3}"
+    local log_level="${LOG_LEVEL:-4}"
     local build_type="${BUILD_TYPE:-Release}"
     local cc="/usr/bin/gcc-14"
     local cxx="/usr/bin/g++-14"

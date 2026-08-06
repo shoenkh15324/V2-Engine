@@ -5,7 +5,7 @@
 
 struct RuntimeConfig{
     // Engine
-    int logLevel = 3;
+    int logLevel = 4; // Error
     int workerCount = 1;
     int workerMaxBatch = 32;
     int mainLoopSleepMs = 1000;

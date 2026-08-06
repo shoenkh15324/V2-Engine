@@ -1,4 +1,11 @@
 #pragma once
+#include <mutex>
+#include <string>
+#include <atomic>
+#include <memory>
+#include <thread>
+#include <vector>
+#include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
 #include "core/common/config/runtime_config.h"
 #include "service/monitor/monitor_data.hpp"
@@ -10,12 +17,7 @@
 #include "widgets/system_panel.hpp"
 #include "widgets/pmu_panel.hpp"
 #include "widgets/actor_list/actor_list.hpp"
-#include <string>
-#include <atomic>
-#include <memory>
-#include <thread>
-#include <mutex>
-#include <vector>
+
 
 #if V2_PLATFORM_LINUX
     #include "infra/transport/uds/uds_client.hpp"
@@ -42,6 +44,7 @@ private:
     std::string sendIpcCommand(const std::string& cmd);
     void setToast(const std::string& msg, int durationSec);
 
+    Logger logger_;
     RuntimeConfig cfg_;
     MonitorSnapshot snapshot_;
     mutable std::mutex mutex_;

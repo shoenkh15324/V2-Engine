@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include "core/common/log/log.hpp"
 #include "core/common/config/platform_config.h"
 #include "core/common/config/runtime_config.h"
 
@@ -38,6 +39,7 @@ private:
     void sendToDaemon(const std::string& cmd);
     static int terminalWidth();
 
+    Logger logger_;
     RuntimeConfig cfg_;
     std::string appName_ = "Cli";
     std::vector<SubDef> subCmds_;

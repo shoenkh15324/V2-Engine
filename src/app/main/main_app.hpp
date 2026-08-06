@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <atomic>
+#include "core/common/log/log.hpp"
 #include "core/common/config/runtime_config.h"
 #include "core/common/di/service_container.hpp"
 #include "core/actor_system/actor_system.hpp"
@@ -29,6 +30,7 @@ private:
     void createActors();
 
 private:
+    Logger logger_;
     Metrics metrics_;
     RuntimeConfig cfg_;
     ServiceContainer di_;

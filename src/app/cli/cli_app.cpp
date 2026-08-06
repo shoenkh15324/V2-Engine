@@ -50,9 +50,9 @@ int CliApp::open(){
     V2_LOG_INFO("{} App Open", appName_.c_str());
     cfg_ = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_cli.json");
 
-    setLogLevel(static_cast<LogLevel>(cfg_.logLevel));
-    setLogAppName(std::move(appName_));
-    setLogFile("log/v2_cli.log");
+    setActiveLogger(&logger_);
+    logger_.setLevel(static_cast<LogLevel>(cfg_.logLevel));
+    logger_.setLogFile("log/v2_cli.log");
 
 #if V2_PLATFORM_LINUX
     if(client_.connect(cfg_.ipcSocketPath) != Ok){ V2_LOG_ERROR("{} App: failed to connect to main app", appName_.c_str());
