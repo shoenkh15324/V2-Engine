@@ -33,7 +33,7 @@
 > - **플랫폼 분기 금지**: service에서 `#if V2_PLATFORM_*`로 구현체 선택 금지 → 생성자 주입/팩토리로 위임 (하드웨어 결정은 배포 문제이지 비즈니스 로직 문제가 아님)
 > - **service는 core + 자체 포트만 의존**: infra 및 3rd-party(`nlohmann_json`, `sdbus` 등) 직접 참조 금지
 > - **서비스 간 결합은 메시지로**: 구체 액터 헤더 직접 include 대신 메시지/레지스트리 조회
-> - **빌드 시스템이 경계를 강제**: CMake 타깃 의존성으로 계층 위반을 컴파일/링크 단계에서 검출. 의존 방향은 **안쪽으로만**: `v2_app → v2_infra/v2_service → v2_core` (각 레이어는 자신보다 안쪽 레이어만 링크, **`v2_core`는 아무것도 링크하지 않음**). core를 독립 subproject로 분리해 단독 빌드/실행을 CI에서 증명 (1.1)
+> - **빌드 시스템이 경계를 강제**: CMake 타깃 의존성으로 계층 위반을 컴파일/링크 단계에서 검출. 의존 방향은 **안쪽으로만**: `v2_app → v2_infra/v2_service → v2_core` (각 레이어는 자신보다 안쪽 레이어만 링크, **`v2_core`는 아무것도 링크하지 않음**). 단, **service 소유 포트를 구현하는 infra는 해당 포트 헤더를 include** (header-only, 링크 아님 → infra→service 헤더 의존, 1.6). core를 독립 subproject로 분리해 단독 빌드/실행을 CI에서 증명 (1.1)
 
 ```
 src/core/                                  # 내부 원: 도메인 (Entities + Use Cases)
@@ -651,71 +651,111 @@ void sendMsg(const std::string& name, M&& msg){
 
 ### 1.6 서비스 계층 경계 복원 — 포트 소유권 정리 (P0-7)
 
-**문제**: `IPmu`/`ISys`/`II2c` 인터페이스가 `infra/hal/`에 있어 service가 infra에 의존. 또한 액터가 구현체를 `#if`로 직접 선택·생성해 하드웨어 결정이 비즈니스 로직에 침투.
+> **현재 상태 (2026-08 점검 기준)**: 생성자 주입·composition root 이관은 **이미 완료**. 잔여 작업은 **포트 파일 위치 정리**와 **service의 nlohmann(3rd-party) 의존 제거** 두 가지.
+> - ✅ `cmd_actor`(`IPmu*`), `monitor_actor`(`ISys*`+`IPmu*`)는 이미 생성자 주입형 — 하단 Before `#if` 예시는 현재 코드와 불일치하므로 삭제
+> - ✅ 플랫폼 분기 선택은 `main_app.cpp::registerServices()`에서 DI 컨테이너(`ServiceContainer::bind<IPmu, PmuRsp5/PmuMock>` 등)로 수행됨
+> - ⚠️ `IPmu`/`ISys`/`II2c` 인터페이스가 여전히 `infra/hal/{pmu,sys,i2c}/`에 있고, `service/ports/`는 **0-byte placeholder 3개**만 존재
+> - ⚠️ `monitor_data.hpp`가 `<nlohmann/json.hpp>` + `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE` 매크로 보유 — service가 3rd-party 직접 의존
+> - ⚠️ `monitor_actor`가 `UdsServer`(infra) 직접 사용 — **보류 결정** (아래 참조, 별도 종합 설계로 이관)
+
+**문제**: `IPmu`/`ISys`/`II2c` 인터페이스가 `infra/hal/`에 있어 service가 infra의 include 경로를 참조. `monitor_data.hpp`의 nlohmann include로 service가 3rd-party에 직접 의존.
 
 **파일** (인터페이스만 이동 — 구현체는 infra 유지):
 - `src/infra/hal/pmu/i_pmu.hpp` → `src/service/ports/i_pmu.hpp`
 - `src/infra/hal/sys/i_sys.hpp` → `src/service/ports/i_sys.hpp`
 - `src/infra/hal/i2c/i_i2c.hpp` → `src/service/ports/i_i2c.hpp`
 
-**리팩토링**:
-```cpp
-// Before: cmd_actor.cpp — 액터가 구현체를 직접 선택/생성
-#include "infra/hal/pmu/pmu_rsp5.hpp"
-pmu_ = [](){
-#if V2_PLATFORM_LINUX && defined(__aarch64__)
-    return std::make_unique<PmuRsp5>();
-#else
-    return std::make_unique<PmuMock>();
-#endif
-}();
+> **의존 방향 함의 (중요)**: 포트가 service 소유가 되면 구현체(infra)가 service 포트 헤더를 include = **infra→service 헤더 의존** 발생. 포트를 **header-only로 유지**하고 두 타깃(`infra.cmake`/`service.cmake`)이 모두 `src/`를 include 경로로 보유하므로 **CMake 링크 변경 불필요** (static 링크 사이클 없음). 반드시 포트에 `.cpp`를 만들지 말 것. 36행 다이어그램에 이 예외를 반영해 둠.
 
-// After: 생성자 주입 — 구현 선택은 composition root(app)에서
+**리팩토링** (구현 선택/주입은 이미 완료 — 참고용):
+```cpp
+// After (완료 상태): 액터는 인터페이스만 생성자 주입, 구현 선택은 composition root가 담당
 class CmdActor : public Actor {
 public:
     CmdActor(std::string name, uint64_t id, IPmu* pmu)
         : Actor(std::move(name), id), pmu_(pmu) {}
 private:
-    IPmu* pmu_;   // 소유하지 않음
+    IPmu* pmu_;   // 소유하지 않음 (수명 = main_app 멤버)
 };
 ```
 
-- [ ] 3개 HAL 포트 `service/ports/`로 이동 + 모든 include 경로 수정
-- [ ] `cmd_actor`, `monitor_actor`의 `#if` 구현 선택 제거 → 생성자 주입으로
-- [ ] 플랫폼 분기 로직은 app composition root로 이동 (`PmuRsp5`/`SysLinux`를 여기서 생성·주입)
-- [ ] `monitor_actor.cpp`의 `nlohmann_json` 직접 사용 제거 → 직렬화는 infra 어댑터로 위임
-- [ ] `monitor_actor`의 UDS 직접 사용 제거 → `IIpcServer` 포트로 교체 (구현: `uds_server`)
+- [x] `cmd_actor`/`monitor_actor` 생성자 주입 전환 (`IPmu*`/`ISys*`) ✅
+- [x] 플랫폼 분기 → `main_app.cpp::registerServices()` DI bind로 이동 ✅
+- [ ] **3개 HAL 포트 `service/ports/`로 이동** + include 경로 수정
+  - 구현체 include: `infra/hal/pmu/pmu_rsp5.hpp`·`pmu_mock.hpp`, `infra/hal/sys/sys_linux.hpp`·`sys_mock.hpp`, `infra/hal/i2c/i2c_linux.hpp` → `"service/ports/*.hpp"`
+  - 소비자 include: `service/cmd/cmd_actor.hpp`, `service/monitor/monitor_actor.hpp`, `app/main/main_app.hpp` → `"service/ports/*.hpp"`
+  - `main_app.cpp`의 구현체 include(`pmu_mock.hpp` 등)는 composition root이므로 유지
+  - `II2c`는 현재 소비자 없음(dead) — 로드맵대로 이동만 (`i_i2c.hpp`의 `transfer()` 비순수 가상은 스코프 밖)
+- [ ] **`monitor_data.hpp` nlohmann 제거** (순수 POCO) + infra JSON 코덱으로 직렬화 위임
+  - 신설 `infra/transport/monitor_json_serializer.hpp/.cpp` — `monitorJson::serialize(const MonitorSnapshot&)` / `deserialize(std::string_view)` (JSON 키 = 기존 필드명 유지 → TUI/CLI 호환). `infra.cmake` 소스 목록에 추가 (nlohmann은 이미 PUBLIC 링크)
+  - `MonitorActor` 생성자에 `std::function<std::string(const MonitorSnapshot&)> serializer` 주입 (새 인터페이스 파일 없이 가장 가벼움 — 1.5 YAGNI 기조와 일치). empty 시 broadcast skip + 경고 로그
+  - `main_app.cpp`에서 람다로 배선, `tui_app.cpp` 파싱(`nlohmann::json::parse`)을 코덱 경유로 전환
+- [ ] **보류 (별도 종합 설계로 분리)**: `monitor_actor`의 `UdsServer` 직접 사용 제거 → `IIpcServer` 포트
+  - 사유: raw `::recv`/`::close`/`::chmod` 잔존으로 OS 결합이 반만 제거됨 + 동일 패턴의 `ipc_server_actor`/`system_actor`(signal_handler)까지 포함한 **"service↔infra 직접 include 0개"(M5b) 목표의 일부**로 통합 검토가 올바름. 1.6에서 부분 진행하지 않음
+
+**검증**: `rg 'infra/hal/pmu|infra/hal/sys|infra/hal/i2c' src/service` → 0, `rg 'nlohmann' src/service` → 0
 
 ### 1.7 서비스 전용 메시지 이관 (P0-8)
 
-**문제**: `core/actor_system/messages/`에 서비스 전용 계약이 있어 core 엔진이 비즈니스 도메인(db/wifi/cmd/...)을 앎.
+> **현재 상태 (2026-08 점검 기준)**: 메시지 파일 이관은 **완료**. `core/actor_system/messages/`에는 `message.hpp`/`message_traits.hpp`/`system_messages.hpp` 3개만 남음. 잔여 과제는 **`MessageId` enum에 남은 서비스 ID**(Phase 3.4에서 해소)와 CI 스캔뿐.
 
 **원칙**: 메시지도 Port처럼 **소유 도메인(서비스) 폴더에 co-location**. core는 엔진 범용 타입만 유지.
 
-**이관 대상**:
-- `core/actor_system/messages/cmd_messages.hpp` → `service/cmd/cmd_messages.hpp`
-- `.../ipc_messages.hpp` → `service/ipc/ipc_messages.hpp`
-- `.../dbus_messages.hpp` → `service/dbus/dbus_messages.hpp`
-- `.../monitor_messages.hpp` → `service/monitor/monitor_messages.hpp`
-- `.../tick_messages.hpp` → `service/tick/tick_messages.hpp`
-- `.../device_manager_messages.hpp` → `service/device_manager/device_manager_messages.hpp`
-- `.../network_manager/network_manager_messages.hpp`, `.../network_manager/wifi_messages.hpp` → `service/network_manager/`
+**이관 완료 확인**:
+- ✅ `cmd_messages.hpp` → `service/cmd/cmd_messages.hpp`
+- ✅ `ipc_messages.hpp` → `service/ipc/ipc_messages.hpp`
+- ✅ `dbus_messages.hpp` → `service/dbus/dbus_messages.hpp`
+- ✅ `monitor_messages.hpp` → `service/monitor/monitor_messages.hpp`
+- ✅ `tick_messages.hpp` → `service/tick/tick_messages.hpp`
+- ✅ `device_manager_messages.hpp` → `service/device_manager/device_manager_messages.hpp`
+- ✅ `network_manager_messages.hpp`, `wifi_messages.hpp` → `service/network_manager/`
 
-**core에 유지**: `message.hpp`(envelope), `message_traits.hpp`, `system_messages.hpp`(엔진 수명주기 — ActorEnable/Disable/Restart)
+**core 유지 확인**:
+- ✅ `message.hpp`(envelope) — 서비스 타입 미참조 (`DT::kId` 트레이트 + 인라인/풀 스토리지만 사용)
+- ✅ `system_messages.hpp`(엔진 수명주기 — ActorEnable/Disable/Restart)
+- ⚠️ `message_traits.hpp` — **`MessageId` enum에 서비스 ID 잔존**: `Tick`, `Ipc*`, `Monitor*`, `Dbus*`, `Device*`, `Cmd*`, `Nm*`, `Wifi*`
 
-**참고**: Phase 3.4의 `V2_MESSAGE_TRAITS` 매크로로 **어떤 타입이든 메시지로 등록**되므로 core는 서비스 타입을 몰라도 됨. 서비스 간 공유 메시지는 "소유 서비스가 원천"이고 소비자는 해당 헤더만 include (데이터 계약이라 허용).
+> **잔여 결합**: 각 서비스 메시지가 `static constexpr MessageId kId`로 enum 값을 참조하므로 `MessageId` enum은 이동이 불가능한 상태. 완전 해소는 **Phase 3.4**(타입 안전 `MessageId` + `MessageId::user<V>()` 템플릿 + `V2_MESSAGE_TRAITS` 매크로로 서비스가 자체 ID 정의)의 몫 — 1.7에서 무리하게 진행하지 않음. 이 시점의 "core가 서비스 도메인을 앎"은 파일 단위가 아니라 **enum 값 단위**로 축소됨.
 
-- [ ] 각 서비스 메시지 파일 이관 + 모든 `#include` 경로 수정
-- [ ] 이관 후 `core/actor_system/messages/`에 서비스 타입이 안 남는지 검증 (CI 스캔)
+**참고**: 서비스 간 공유 메시지는 "소유 서비스가 원천"이고 소비자는 해당 헤더만 include (데이터 계약이라 허용) — 예: `network_manager_actor.cpp`의 `tick/tick_messages.hpp`, `cmd_actor.hpp`의 `wifi_messages.hpp`, `ipc_server_actor.cpp`의 `cmd/cmd_messages.hpp`.
+
+- [x] 각 서비스 메시지 파일 이관 + 모든 `#include` 경로 수정 ✅
+- [x] 이관 후 `core/actor_system/messages/`에 서비스 **메시지 파일**이 안 남는지 검증 (grep 확인 — 파일 3개뿐) ✅ / `MessageId` enum의 서비스 ID는 3.4에서 해소
+- [ ] (선택) CI 스캔: `core/actor_system/messages/`에 서비스 도메인 파일 추가 시 실패하는 grep 스크립트 등록 (1.8 스캔과 함께 구성)
 
 ### 1.8 서비스 간 결합 완화 (P0-9)
 
-**문제**: `network_manager_actor.cpp`가 `service/dbus/dbus_actor.hpp`를 직접 include (구체 액터 타입 결합).
+> **현재 상태 (2026-08 점검 기준)**: 서비스 간 include는 **데이터 계약 위반 0건, 구체 액터 타입 결합 1건**만 존재.
+> - 허용 (데이터 계약): `network_manager_actor.cpp`→`tick/tick_messages.hpp`, `cmd_actor.hpp`→`wifi_messages.hpp`, `ipc_server_actor.cpp`→`cmd/cmd_messages.hpp`, `cmd_actor.cpp`→`monitor/monitor_data.hpp`
+> - **위반 1건**: `network_manager_actor.cpp:10` `#include "service/dbus/dbus_actor.hpp"` + `dynamic_cast<DbusActor*>` + `dbus->connection()` 직접 호출 (sdbus 연결 객체 요구)
+
+**문제**: `network_manager_actor.cpp`가 `service/dbus/dbus_actor.hpp`를 직접 include (구체 액터 타입 결합). `findByName()`+`dynamic_cast`로 dbus 액터를 찾아 `sdbus::IConnection&`를 탈취.
 
 **원칙**: 서비스 간 통신은 메시지/레지스트리 조회로. 구체 액터 헤더 include 금지.
+**중요**: **"메시지 기반 통신으로 전환"은 이 사례에 부적합** — 네트워크 매니저가 필요로 하는 건 `sdbus::IConnection&`(3rd-party 연결 객체)인데, 이는 메시지 payload로 전달할 수 없음. 올바른 해법은 **소비자 소유 포트의 생성자 주입** (1.6 포트 소유권과 동일 원칙).
 
-- [ ] `network_manager → dbus_actor` 직접 참조 제거 → 메시지 기반 통신으로 전환
-- [ ] 서비스 디렉토리 간 `#include` 현황을 CI에서 스캔 (위반 시 실패)
+**리팩토링** (포트 주입으로 교정):
+```cpp
+// Before: network_manager_actor.cpp — 구체 액터 조회 + dynamic_cast + 연결 탈취
+auto dbusHandle = runtime()->actorRegistry()->findByName("dbus_actor");
+auto* dbus = dynamic_cast<DbusActor*>(dbusHandle.get());
+if(!dbus || dbus->getState() != Opened){ return Fail; }
+connection_ = &dbus->connection();                     // sdbus::IConnection& 직접 노출
+
+// After: service/dbus 소유 포트 — 구현 어댑터가 DbusActor의 connection을 감쌈
+class IDbusConnection {                                // service/dbus/i_dbus_connection.hpp (co-location)
+public:
+    virtual ~IDbusConnection() = default;
+    virtual bool ready() const = 0;                    // = dbus_actor Opened 여부
+    virtual sdbus::IConnection& connection() = 0;      // sdbus 타입 노출은 수용 (service는 sdbus 링크 중)
+};
+NetworkManagerActor(std::string name, uint64_t id, IDbusConnection* dbus);
+```
+
+- [ ] `service/dbus/i_dbus_connection.hpp` 포트 신설 (Phase 2의 `i_dbus_handler.hpp` 계획과 통합 검토)
+- [ ] `network_manager_actor` → `IDbusConnection*` 생성자 주입으로 전환, `findByName`+`dynamic_cast`+`dbus->connection()` 제거 (registry 조회는 신원 조회 목적으로만 유지)
+- [ ] composition root(`main_app.cpp`)에서 dbus 어댑터 생성·주입 (라이프사이클: dbus 액터 open 순서와 ready()로 정합)
+- [ ] 서비스 디렉토리 간 `#include` 스캔: **데이터 계약(메시지/POCO)은 허용**, **구체 액터 헤더는 위반** — CI 스크립트로 검출 (위반 시 실패). 1.7의 core 메시지 잔여 스캔과 함께 구성
 
 ---
 
@@ -1355,7 +1395,7 @@ class RingBuffer : public IByteBuffer { /* 기존 구현 */ };
 | **M3: ActorRuntime 분해** | Week 3 말 | `ActorRuntime` < 100줄, 책임 분리 확인 |
 | **M4: 전역 상태 제거** | Week 4 말 | `Metrics`, `Log`, `MemoryPool` static 멤버 0개 |
 | **M5: 인프라 이관 완료** | Week 6 말 | `core/`에 OS 의존 코드 0개, `infra/` 빌드 성공 |
-| **M5b: 서비스 계층 경계 복원** | Week 6 말 | `service/ports/` 포트 이관, 서비스 전용 메시지 이관, service↔infra 직접 include 0개 |
+| **M5b: 서비스 계층 경계 복원** | Week 6 말 | `service/ports/` 포트 이관 + service nlohmann 0건 (1.6), 서비스 메시지 이관 완료 (1.7), dbus 결합 포트 주입으로 해소 (1.8). "service↔infra 직접 include 0개"는 보류된 UDS/signal_handler 종합 설계 후 달성 |
 | **M6: 성능 병목 해소** | Week 7 말 | Scheduler O(1), Registry 락 분할, 벤치마크 개선 |
 | **M7: 도메인 모델 개선** | Week 8 말 | Actor Anemic Model 해소, 설정 타입 안전화 |
 | **M8: 최종 릴리스** | Week 9-10 | 전체 테스트 통과, 문서화 완료, 성능 회귀 없음 |
