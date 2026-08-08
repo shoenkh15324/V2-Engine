@@ -16,6 +16,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Project Metrics](#project-metrics)
 - [Architecture](#architecture)
   - [System Layers](#system-layers)
   - [Actor Communication](#actor-communication)
@@ -45,6 +46,30 @@ V² Engine is a C++20 actor-model runtime designed for long-running system daemo
 - Lock-free data structures throughout the hot path — no mutex contention in message delivery
 - Single-threaded event loop with thread-safe cross-thread operations via lock-free queues
 - Cooperative scheduling with batch processing to amortize dispatch overhead
+
+---
+
+## Project Metrics
+
+| Metric | Value |
+|--------|-------|
+| Development period | 2026-05-25 → 2026-08-08 (75 days, ~2.5 months) |
+| Commits | 307 (across 46 active days) |
+| Total LOC | ~12,334 (184 files) |
+| Source LOC | ~8,791 (src/) |
+| Core LOC | ~3,662 (src/core/) |
+| Service LOC | ~2,382 (src/service/) |
+| Infra LOC | ~1,263 (src/infra/) |
+| App LOC | ~1,484 (src/app/) |
+| Bench LOC | ~1,328 (bench/) |
+| Test LOC | ~2,215 (test/) |
+| Executables | 4 (`v2_main`, `v2_cli`, `v2_tui`, `v2_bench_cli`) |
+| Test suite | 133 tests (`ctest`) |
+
+```bash
+# Reproduce LOC counts
+find src bench test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" -o -name "*.c" \) | xargs wc -l | tail -1
+```
 
 ---
 
