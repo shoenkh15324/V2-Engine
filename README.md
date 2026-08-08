@@ -7,8 +7,8 @@
 
 <h1 align="center">V<sup>2</sup> Engine</h1>
 <p align="center">
-  <b>Actor-model runtime framework for Linux</b><br>
-  Lock-free message passing · epoll event loop · MemoryPool · C++20
+  <b> Visionary Vision Engine</b><br>
+  Actor-model runtime framework
 </p>
 
 ---
@@ -37,7 +37,7 @@
 
 ## Overview
 
-V² Engine is a C++20 actor-model runtime designed for long-running system daemons on Linux. It implements an efficient actor system with lock-free message passing, a semaphore-scheduled worker pool, an epoll-based event loop, and a TCMalloc-inspired memory allocator. The system includes service-layer actors for CLI IPC, system monitoring, D-Bus integration, Wi-Fi management, and hardware device management, delivering three executables: a daemon (`v2_main`), a CLI client (`v2_cli`), and a TUI monitor (`v2_tui`).
+V² Engine is a C++20 actor-model runtime designed for long-running system daemons on Linux. It implements an efficient actor system with lock-free message passing, a semaphore-scheduled worker pool, an epoll-based event loop, and a TCMalloc-inspired memory allocator. The system includes service-layer actors for CLI IPC, system monitoring, D-Bus integration, Wi-Fi management, and hardware device management, delivering four executables: a daemon (`v2_main`), a CLI client (`v2_cli`), a TUI monitor (`v2_tui`), and a standalone benchmark CLI (`v2_bench_cli`). The core (`v2_core`) is a dependency-free C++20 subproject buildable and runnable on its own.
 
 **Core design principles:**
 
@@ -111,7 +111,9 @@ All inter-actor communication is **asynchronous and non-blocking** for the sende
 |--------|-------|------|
 | Event Loop | 1 | `epoll_wait`, I/O dispatch, timerfd management |
 | Worker | N (configurable) | `semaphore::acquire` → actor `run(batch)` loop |
-| Timer (non-Linux) | 0–1 | `timerfd` fallback via `condition_variable` |
+| Timer | 0–1 | Portable core `Timer` (thread + semaphore); infra `LinuxTimer` (timerfd) overrides on Linux |
+
+On Linux the composition root injects `EventLoopEpoll` + `LinuxTimer` together ("epoll injection = Linux detection"). Core defaults — a blocking mock loop and the portable thread-based `Timer` — keep `v2_core` standalone-buildable with messaging and timers working.
 
 The main thread runs the event loop. Workers block on `std::counting_semaphore` and process messages in batches. All cross-thread operations (e.g., worker subscribing an FD) use lock-free MPSC queues — **no mutex contention on hot paths**.
 
@@ -136,11 +138,14 @@ Actors are identified by name (string) and ID (uint64\_t). References use `Actor
 **Communication API:**
 
 ```cpp
-sendMsg("target", Message::make(CmdRequest{conn, command}));       // immediate
-sendMsgAfter("target", Message::make(CmdRequest{conn, cmd}), 100);  // delayed
-receiveMsg(Message::make(CmdRequest{conn, cmd}));                   // self-enqueue
-startTimer(Message::make(Tick{}), 1000, true);                      // repeating timer
+sendMsg("target", CmdRequest{conn, command});               // payload → Message auto-wrapped
+sendMsg("target", Message::make(CmdRequest{conn, cmd}));    // explicit Message (equivalent)
+sendMsgAfter("target", CmdRequest{conn, cmd}, 100);          // delayed
+receiveMsg(CmdRequest{conn, cmd});                           // self-enqueue
+startTimer(Tick{}, 1000, true);                              // repeating timer
 ```
+
+Payload-typed overloads (via `static constexpr MessageId kId` on each message type) hide `Message::make` — the message id and allocator decision happen inside. `Message`-typed arguments still select the non-template overload for full compatibility.
 
 Under the hood, `sendMsg` resolves the target via `ActorRegistry`, acquires the `ActorHandle`, enqueues into the target's mailbox, and notifies the work dispatcher.
 
@@ -153,6 +158,7 @@ Message {
     MessageId          id_;        // concrete type identifier
     StorageMode        mode_;      // Inline | Pool | Empty
     const MessageOps*  ops_;       // vtable: destroy / move / clone
+    IMemoryAllocator*  allocator_; // pool used for Pool-stored payloads
     union {                        // 64-byte inline or heap pointer
         std::byte      inline_[64];
         void*          ptr_;
@@ -175,12 +181,12 @@ void handle(const Message& msg) override {
 
 **Storage strategy:**
 - `sizeof(T) ≤ 64` and `alignof(T) ≤ alignof(max_align_t)` → stored **inline** (zero heap)
-- Otherwise → `MemoryPool` allocation
-- ~34 `MessageId` values across 10 categories (lifecycle, tick, IPC, monitor, D-Bus, device, command, Wi-Fi)
+- Otherwise → allocator allocation via `defaultMemoryPool()` (or injected `IMemoryAllocator*`)
+- 34 `MessageId` values across 10 categories (system, lifecycle, tick, IPC, monitor, D-Bus, device, command, network, Wi-Fi)
 
 ### Memory Model
 
-The `MemoryPool` is a TCMalloc-inspired tiered allocator optimized for objects ≤ 2048 B:
+The `MemoryPool` is a TCMalloc-inspired tiered allocator optimized for objects ≤ 2048 B. It implements the `IMemoryAllocator` port and is **instance-based** — a process-lifetime default instance is provided by `defaultMemoryPool()`, and the port contract allows tests/subsystems to swap in their own allocator.
 
 ```mermaid
 flowchart TB
@@ -215,6 +221,8 @@ flowchart TB
 4. ≥ 2048 B → `::operator new`
 
 Deallocation reverses the path. Excess blocks return to the central Slab when the thread-local cache exceeds the batch size. **No lock contention on the common path.**
+
+> **Message allocation**: `Message::make<T>` uses the `defaultMemoryPool()` fallback (or the `IMemoryAllocator*` carried by the message) for payloads exceeding the 64-byte inline buffer.
 
 ### Scheduling & Worker Pool
 
@@ -285,15 +293,15 @@ flowchart TB
     EP -->|signal| Sys[SystemActor: dispatch SignalNotify]
 ```
 
-**Thread-safe subscription:** If called from the event-loop thread, `epoll_ctl` runs immediately. Otherwise, the operation is enqueued to the lock-free `Pending Ops Queue` and the event loop is woken via `eventfd`.
+**Thread-safe subscription:** If called from the event-loop thread, `epoll_ctl` runs immediately. Otherwise, the operation is enqueued to the lock-free `Pending Ops Queue` and the event loop is woken via `eventfd`. `EventLoopEpoll`, `LinuxTimer`, and the self-pipe `SignalHandler` live in `infra/platform/linux/` and are injected into the core via the `IEventLoop` port.
 
-**Timer system** uses `timerfd_create(CLOCK_MONOTONIC)` — no polling, no extra threads on Linux. Internally: min-heap of pool-allocated `TimerNode` (free-list for slot reuse). Expired callbacks execute outside the lock to prevent reentrancy deadlocks. On non-Linux, a dedicated `v2-timer` thread provides the timerfd abstraction.
+**Timer system** is exposed through the `ITimer` port. Core provides a portable `Timer` (thread + semaphore, std-only) as the default implementation; on Linux the composition root injects `LinuxTimer`, a `TimerBase`-derived override using `timerfd_create(CLOCK_MONOTONIC)` — no polling, no extra threads. Internally: min-heap of pool-allocated `TimerNode` (free-list for slot reuse). Expired callbacks execute outside the lock to prevent reentrancy deadlocks.
 
 ---
 
 ## Performance
 
-Benchmark suite: `v2_cli benchmark <name>`
+Benchmark suite: `v2_bench_cli <name>` (standalone benchmark CLI)
 
 ```
 Throughput : 7.1M msgs/sec   (workers=2, LockFreeMailbox)
@@ -317,12 +325,14 @@ Timer Dispatch: 15.3M/s       (256-batch dispatch)
 
 ```bash
 # Run individual benchmarks
-v2_cli benchmark throughput --workers 4 --actors 1
-v2_cli benchmark latency --iterations 50000
-v2_cli benchmark contention --producers 8
-v2_cli benchmark scaling
-v2_cli benchmark backpressure
-v2_cli benchmark scheduler --interval 50 --duration 5000
+v2_bench_cli throughput --workers 4 --actors 1
+v2_bench_cli latency --iterations 50000
+v2_bench_cli contention --producers 8
+v2_bench_cli scaling
+v2_bench_cli backpressure
+v2_bench_cli scheduler --interval 50 --duration 5000
+v2_bench_cli list      # list available benchmarks
+v2_bench_cli all       # run all benchmarks
 ```
 
 All benchmarks disable the metrics subsystem during execution to eliminate measurement perturbation.
@@ -460,13 +470,13 @@ cmake --build build
 
 # Run (manual)
 ./build/v2_main              # start daemon
-./build/v2_cli info          # query system info
-./build/v2_cli actor -l      # list actors
+./build/v2_cli actor list    # list actors
+./build/v2_cli pmu status    # query PMU data
 ./build/v2_cli -m            # TUI monitor
 
 # Install (systemd service + D-Bus policy + symlinks)
 ./install.sh
-v2 info
+v2 actor list
 ```
 
 ### CLI Commands
@@ -475,7 +485,6 @@ v2 info
 Usage: v2 <command>
 
 Commands:
-  info                          System information
   actor list                    List all actors (ID, name, state, essential)
   actor enable  <name>          Enable a disabled actor
   actor disable <name>          Disable a non-essential actor
@@ -487,8 +496,6 @@ Commands:
   wifi status                   Current Wi-Fi state
   wifi autoconnect <on|off>     Toggle auto-reconnect
   metrics enable|disable|snapshot|reset
-  benchmark <name> [--key val]  Run benchmark (throughput, latency, contention,
-                                scaling, backpressure, scheduler, list, all)
   status / -s                   Check daemon status
   monitor / -m                  Launch TUI monitor
   version / -v                  Print version
@@ -500,41 +507,59 @@ Commands:
 
 ```
 src/
-├── app/                       # Executables
-│   ├── main/                  #   v2_main — daemon
-│   ├── cli/                   #   v2_cli — command-line client
-│   └── tui/                   #   v2_tui — FTXUI-based monitor
-│       └── widgets/           #     Header, Footer, SystemPanel, ActorList, PmuPanel
-├── service/                   # Business actors
-│   ├── cmd/                   #   Command routing (CmdActor)
-│   ├── dbus/                  #   D-Bus gateway (DbusActor + handlers)
-│   ├── device_manager/        #   Device registry (DeviceManagerActor)
-│   ├── ipc/                   #   UDS IPC server (IpcServerActor)
-│   ├── monitor/               #   System monitoring (MonitorActor)
-│   ├── network_manager/       #   Wi-Fi management (NetworkManagerActor + WifiHandler)
-│   ├── system/                #   Signal handling (SystemActor)
-│   └── tick/                  #   Tick generator (TickActor)
-├── core/                      # Actor runtime & shared utilities
-│   ├── actor_system/          #   Core actor framework
-│   │   ├── actor/             #     Actor base, ActorHandle (generation-based)
-│   │   ├── runtime/           #     ActorRuntime, Scheduler, Dispatcher, EventLoop
-│   │   └── messages/          #     Message definitions (34 message types)
-│   ├── common/                #   Utilities
-│   │   ├── container/         #     LockFreeMpscQueue, RingBuffer
-│   │   ├── memory/            #     MemoryPool, SizeClass, Slab, Chunk, ThreadLocalCache
-│   │   ├── log/               #     Logging
-│   │   ├── os/                #     Epoll wrapper, SignalHandler (self-pipe)
-│   │   ├── time/              #     Timer (timerfd + min-heap), Time, Sleep
-│   │   └── util/              #     Debug, Return, Metrics helpers
-│   └── perf/                  #   Performance measurement
-│       ├── benchmark/         #     Benchmark framework + 6 benchmarks
-│       └── metrics/           #     Per-actor/worker/dispatcher metrics
-└── infra/                     # Transport & hardware abstraction
-    ├── transport/             #   UDS Server/Client
-    └── hal/                   #   I2C, PMU (RPi), ISys (procfs), Dummy
+├── core/                       # Standalone subproject (v2_core) — C++20, std-only, no external links
+│   ├── CMakeLists.txt          #   independent buildable; messaging + portable timer work standalone
+│   ├── actor_system/           #   Core actor framework
+│   │   ├── actor/              #     Actor base, ActorHandle (generation-based), ActorRegistry
+│   │   ├── messages/           #     Message, MessageTraits, SystemMessages (engine-only types)
+│   │   ├── runtime/            #     ActorRuntime, Scheduler, WorkDispatcher, Worker, Supervisor,
+│   │   │                       #     Mailbox adapter + IMailbox port
+│   │   └── actor_system.hpp    #     ActorSystem + createDefaultActorSystem factory
+│   ├── common/                 #   Pure std-only domain utilities
+│   │   ├── container/          #     LockFreeMpscQueue, RingBuffer, CacheLine
+│   │   ├── di/                 #     ServiceContainer (lightweight DI)
+│   │   ├── memory/             #     IMemoryAllocator port, MemoryPool, SizeClass, Slab, Chunk,
+│   │   │                       #     FreeList, ThreadLocalCache
+│   │   ├── log/                #     Logger (instance + activeLogger handle)
+│   │   ├── timer/              #     ITimer port, TimerBase, portable Timer (thread + semaphore)
+│   │   ├── time/               #     Time, Sleep
+│   │   └── util/               #     Debug (V2_ASSERT/V2_PANIC), Return
+│   └── perf/metrics/           #   Metrics (instance + activeMetrics handle)
+├── service/                    # Business actors (use cases — core + own ports only)
+│   ├── cmd/                    #   Command routing (CmdActor) + cmd_messages
+│   ├── dbus/                   #   D-Bus gateway (DbusActor + handlers) + dbus_messages
+│   ├── device_manager/         #   Device registry (DeviceManagerActor) + device_manager_messages
+│   ├── ipc/                    #   UDS IPC server (IpcServerActor) + ipc_messages
+│   ├── monitor/                #   System monitoring (MonitorActor) + monitor_messages
+│   ├── network_manager/        #   Wi-Fi management (NetworkManagerActor + WifiHandler)
+│   ├── system/                 #   Signal handling (SystemActor)
+│   ├── tick/                   #   Tick generator (TickActor) + tick_messages
+│   └── ports/                  #   Service-owned ports: IPmu, ISys, II2c (consumer-owned)
+├── infra/                      # Adapters — OS / 3rd-party implementations only
+│   ├── platform/linux/         #   EventLoopEpoll (IEventLoop), LinuxTimer (timerfd), SignalHandler, Epoll
+│   ├── threading/              #   PosixThread (worker naming)
+│   ├── memory/                 #   MemoryPoolAllocator (IMemoryAllocator adapter)
+│   ├── config/                 #   JsonConfigLoader (nlohmann parsing)
+│   ├── ui/                     #   FtxuiRenderer
+│   ├── transport/uds/          #   UdsServer / UdsClient
+│   ├── hal/                    #   I2C, PMU (RPi vcgencmd), ISys (procfs), Dummy
+│   └── mock/                   #   MockAllocator, MockTimeSource, TestRegistry
+└── app/                        # Executables — Composition Root
+    ├── main/                   #   v2_main — daemon
+    ├── cli/                    #   v2_cli — command-line client
+    └── tui/                    #   v2_tui — FTXUI-based monitor
 
-Dependency direction: infra ← core ← service ← app
+bench/                          # Standalone benchmark CLI (v2_bench_cli) + 6 benchmarks
+test/                           # GoogleTest suite
+├── unit/                       #   Pure core unit tests (no infra links)
+├── integration/                #   Infra-dependent integration tests
+└── standalone/                 #   v2_core_smoke — links v2_core only, proves std-only boundary
+
+Dependency direction (inward, enforced by CMake targets):
+  app → service → core ← infra;  infra implements core + service-owned ports
 ```
+
+> **v2_core standalone**: `cmake -S src/core -B <dir>` builds the core layer alone. The boundary is enforced at link time by `test/standalone` (`v2_core_smoke`, linked against `v2_core` only) plus the compile-flag checks in the refactoring roadmap.
 
 ---
 
@@ -559,9 +584,11 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 # Release — LTO/IPO optimized
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-# Custom logging level (0=TRACE .. 4=FATAL)
-cmake -B build -G Ninja -DV2_DEFAULT_LOG_LEVEL=3
+# Tests (on by default; disable for a lean build)
+cmake -B build -G Ninja -DBUILD_TESTING=OFF
 ```
+
+> Log level (0=Verbose .. 5=Fatal) and other runtime settings are configured per-app via JSON files in `config/` (e.g. `config/v2_main.json` → `log_level`), not via CMake flags.
 
 ### Dependencies (FetchContent)
 
@@ -593,5 +620,7 @@ cmake -B build -G Ninja -DV2_DEFAULT_LOG_LEVEL=3
 ## Related Documentation
 
 - [Roadmap](docs/plans/roadmap.md) — development roadmap and phase status
+- [Refactoring roadmap](docs/plans/refactoring_roadmap.md) — clean-architecture refactor of core/service/infra (phases, decisions, status)
 - [Benchmark details](docs/benchmark/) — per-benchmark methodology and results
+- [Mailbox comparison](docs/architecture/mailbox_comparison.md) — lock-free vs mutex mailbox analysis
 - [Configuration](config/) — per-app JSON configuration files under `config/`
