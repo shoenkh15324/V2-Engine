@@ -24,6 +24,5 @@ private:
     IWorkDispatcher* workDispatcher_;
     std::thread thread_;
     std::atomic<bool> running_{false};
-    std::string threadName_;
     int id_, maxBatch_;
 };

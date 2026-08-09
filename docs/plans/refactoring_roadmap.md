@@ -21,7 +21,6 @@
 
 **남은 작업 (실제 진행할 것)**
 - Phase 1.6: HAL 포트 3개 `service/ports/` 이동 + `monitor_data`의 nlohmann 제거
-- Phase 2.2: `worker.cpp`의 `pthread_setname_np` → `infra/threading/posix_thread.hpp` 분리
 - Phase 3.1~3.3: Scheduler O(N) 정리(벤치 확인 후), Registry 락 분할, 전역 `thread_local` 정리
 - Phase 4.1: `runtime_config.h` 필드 일반화(`epoll*` → `eventLoop*`)
 
@@ -71,7 +70,6 @@ src/core/                              # C++20, std-only, 단독 빌드/실행
 
 src/infra/                             # OS/외부 라이브러리 의존만
 ├── platform/linux/                    # event_loop_epoll, timer_linux, signal_handler, epoll
-├── threading/posix_thread.hpp/cpp     # worker의 pthread_setname_np 분리 (2.2)
 ├── config/json_config_loader.hpp/cpp  # nlohmann_json 의존
 ├── transport/uds/uds_server.hpp/cpp   # IPC 서버 구현
 ├── hal/{pmu,sys,i2c}/                 # IPmu/ISys/II2c 구현체 (포트는 service/ports/)
@@ -154,7 +152,7 @@ app/                                   # CLI/TUI/main — Composition Root
 
 ---
 
-## Phase 2: 인프라 구현체 이관 (완료 + 잔여 1건) — **P1 High**
+## Phase 2: 인프라 구현체 이관 (완료) — **P1 High**
 
 ### 2.1 플랫폼별 구현체 이관 ✅
 - `EventLoopEpoll` → `infra/platform/linux/event_loop_epoll.hpp/cpp` (1.1에서 완료)
@@ -162,22 +160,20 @@ app/                                   # CLI/TUI/main — Composition Root
 - `signal_handler`/`epoll` → `infra/platform/linux/` (이관 완료)
 - 메모리: 기본 portable 풀(`MemoryPoolT`)은 core 유지, infra에는 특수/외부 할당자만 — 현재 추가할 특수 전략 없음 (YAGNI)
 
-### 2.2 `worker.cpp`의 pthread 분리 🔶 (남은 작업)
+### 2.2 `worker.cpp`의 pthread 분리 ✅ (네이밍 제거로 해결)
 
-**파일**: `src/infra/threading/posix_thread.hpp/cpp` (현재 0-byte placeholder) + `src/core/actor_system/runtime/dispatcher/worker.cpp`
+core의 유일한 POSIX 호출(`worker.cpp`의 `pthread_setname_np`)을 제거한다.
 
-core의 유일한 POSIX 호출(`#include <pthread.h>` + `pthread_setname_np` 2곳)을 제거한다.
+**결정**: 스레드 이름을 주입(composition root)하는 대신 **워커 네이밍 자체를 제거**했다.
 
-```cpp
-// infra/threading/posix_thread.hpp — 신규 포트 없이 자유 함수로 충분 (IThread 인터페이스는 과설계)
-namespace v2::thread {
-void setName(const char* name);   // V2_PLATFORM_* 분기 + pthread_setname_np
-}
-```
+- 스레드 이름은 코드가 소비하지 않는 순수 디버깅(외부 도구)용이며, 워커는 동질(`runLoop`)이라 구분 가치가 낮음
+- `std::thread`에는 이름 설정 API가 없어(OS 전용 `pthread_setname_np`/`SetThreadDescription`) std-only로는 불가 → "이름 유지 + 주입"이 6개 파일 설계인 데 비해, 제거는 5줄로 M5 목표 달성
+- `v2-main`(event loop) 이름은 infra `event_loop_epoll.cpp`가 소유 — 그대로 유지되어 스레드 구분이 완전히 사라지지 않음
+- `infra/threading/posix_thread.hpp/cpp` placeholder는 미사용 → 폐기
 
-- [ ] `posix_thread.hpp/cpp` 구현 + `infra.cmake` 소스 목록 추가
-- [ ] `worker.cpp` runLoop()의 `V2_PLATFORM_LINUX/MACOS` 분기를 `v2::thread::setName` 호출로 대체
-- [ ] **검증**: `rg 'pthread' src/core` → 0
+- [x] `worker.cpp`에서 `#include <pthread.h>` + `pthread_setname_np`(Linux/macOS 분기) 제거
+- [x] `worker.hpp`에서 `threadName_` 멤버 제거
+- [x] **검증**: `rg 'pthread|setname|threadName' src/core` → 0, 빌드 + `ctest` 132/132 통과
 
 ---
 
@@ -264,7 +260,7 @@ mutable std::shared_mutex mutex_;
 | **M2: DI + ActorSystem 주입** | ✅ | `ActorSystem` 생성자 주입 동작, 기존 테스트 통과 (1.3) |
 | **M3: ActorRuntime 분해** | ✅ | `run()` = `processBatch` + 계측/재디스패치 래퍼, `IMailbox` 주입 (1.4) |
 | **M4: 전역 상태 제거** | ✅ | `Metrics`/`Log`/`MemoryPool` static/전역 싱글톤 제거 (1.5, `tlCache_`는 3.3) |
-| **M5: 인프라 이관 완료** | 🔶 | core에 OS 의존 0건 — `worker.cpp`의 `pthread_setname_np` 1건 잔존 (2.2) |
+| **M5: 인프라 이관 완료** | ✅ | core에 OS 의존 0건 — worker 스레드 네이밍 제거로 해결 (2.2) |
 | **M5b: 서비스 계층 경계 복원** | 🔶 | 포트 이관 + nlohmann 제거 (1.6). 메시지 이관은 완료 (1.7) |
 | **M6: 성능 병목 해소** | ⏳ | Scheduler 정리(벤치 확인 후), Registry 락 분할 (3.1~3.2) |
 | **M7: 도메인 모델 정리** | ⏳ | 설정 필드 일반화 (4.1) |
