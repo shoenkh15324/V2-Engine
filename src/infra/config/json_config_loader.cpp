@@ -1,7 +1,7 @@
-#include "core/common/config/runtime_config.h"
-#include "core/common/config/platform_config.h"
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include "core/common/config/runtime_config.h"
+#include "core/common/config/platform_config.h"
 
 RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
     RuntimeConfig cfg;
@@ -29,6 +29,9 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("monitor_poll_interval_ms")) cfg.monitorPollIntervalMs = j["monitor_poll_interval_ms"];
         if(j.contains("monitor_recv_buffer_size")) cfg.monitorRecvBufferSize = j["monitor_recv_buffer_size"];
         if(j.contains("monitor_backlog")) cfg.monitorBacklog = j["monitor_backlog"];
+
+        // Device Manager
+        if(j.contains("enable_device_manager")) cfg.enableDeviceManager = j["enable_device_manager"];
 
         // Metrics
         if(j.contains("enable_metrics")) cfg.enableMetrics = j["enable_metrics"];

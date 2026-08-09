@@ -17,11 +17,10 @@
 - ActorRuntime 분해(`processBatch` + 계측 래퍼), 전역 싱글톤 제거(Metrics/Log/MemoryPool)
 - 서비스 전용 메시지 전부 `core/messages/` → 소유 서비스 폴더로 이관
 - OS 의존 구현체 이관: epoll, signal_handler, LinuxTimer(timerfd) → `infra/platform/linux/`
-- 테스트 **133/133 통과**
+- 테스트 **132/132 통과**
 
 **남은 작업 (실제 진행할 것)**
 - Phase 1.6: HAL 포트 3개 `service/ports/` 이동 + `monitor_data`의 nlohmann 제거
-- Phase 1.8: `network_manager`의 dbus 액터 결합 제거 (composition root 주입)
 - Phase 2.2: `worker.cpp`의 `pthread_setname_np` → `infra/threading/posix_thread.hpp` 분리
 - Phase 3.1~3.3: Scheduler O(N) 정리(벤치 확인 후), Registry 락 분할, 전역 `thread_local` 정리
 - Phase 4.1: `runtime_config.h` 필드 일반화(`epoll*` → `eventLoop*`)
@@ -31,7 +30,7 @@
 ## Phase 0: 준비 및 인프라 (완료)
 
 ### 0.1 브랜치/CI/메트릭 ✅
-- `refactor/core-architecture` 브랜치, 클린 빌드 + `ctest`(133/133) 검증
+- `refactor/core-architecture` 브랜치, 클린 빌드 + `ctest`(132/132) 검증
 - `compile_commands.json` 생성 설정, 베이스라인 메트릭 수집
 
 ### 0.2 아키텍처 원칙
@@ -43,7 +42,7 @@
 > - **Port/메시지는 각 도메인 폴더에 co-location**: 별도 `common/interfaces/` 없음. 서비스 전용 메시지는 소유 서비스 폴더, core `messages/`는 엔진 범용 타입만
 > - **신규 인터페이스는 실수요가 있을 때만 추가 (YAGNI)**: 추가된 것 — `ITimer`, `IMemoryAllocator`, `IMailbox`. 폐기/미적용 — `ITimeSource`, `ILogger`, `IMetrics` (구현체 1개뿐)
 > - **Composition Root는 app**: 구체 타입 생성/주입은 app에서만. service의 플랫폼 분기(`#if V2_PLATFORM_*`) 금지 → 생성자 주입으로 위임
-> - **service는 core + 자체 포트만 의존**: infra/3rd-party 직접 참조 금지. **예외: `service/dbus`는 sdbus에 합법적으로 의존** (1.8)
+> - **service는 core + 자체 포트만 의존**: infra/3rd-party 직접 참조 금지. **예외: `service/dbus`는 sdbus에 합법적으로 의존**
 > - **서비스 간 결합은 메시지/레지스트리 조회로**: 구체 액터 헤더 include 금지
 > - **CMake 타깃 의존성으로 경계 강제**: 계층 위반을 링크 단계에서 검출. 단, service 소유 포트를 구현하는 infra는 해당 포트 헤더를 include (header-only, 링크 아님)
 
@@ -102,7 +101,7 @@ app/                                   # CLI/TUI/main — Composition Root
 - `test/standalone/main.cpp` (`v2_core_smoke`) — v2_core만 링크해 외부 심볼 무참조 증명, core portable `Timer` + mock event loop로 메시징/타이머 실제 실행
 - nlohmann 파싱 → `infra/config/json_config_loader.cpp` 이관, `runtime_config.cpp` 삭제
 - 타이머: portable `Timer`(스레드+세마포어) core `common/timer` 유지, infra `LinuxTimer`(timerfd)가 Linux에서 대체. 선택은 Composition Root
-- **검증**: `rg 'infra/|nlohmann/|ftxui/' src/core` → 0, standalone 빌드 성공, 전체 `ctest` 133/133 통과
+- **검증**: `rg 'infra/|nlohmann/|ftxui/' src/core` → 0, standalone 빌드 성공, 전체 `ctest` 132/132 통과
 
 ### 1.2 핵심 인터페이스 정의 ✅
 - 추가: `core/common/timer/i_timer.hpp`(ITimer), `core/common/memory/i_memory_allocator.hpp`(IMemoryAllocator), `core/actor_system/runtime/mailbox/i_mailbox.hpp`(IMailbox)
@@ -152,16 +151,6 @@ app/                                   # CLI/TUI/main — Composition Root
 - `cmd/ipc/dbus/monitor/tick/device_manager/network_manager` 메시지 → 각 소유 서비스 폴더로 이관 완료
 - core `messages/`에 `message.hpp`/`message_traits.hpp`/`system_messages.hpp` 3개만 남음
 - 참고: `MessageId` enum(서비스 ID 포함)은 core `message_traits.hpp`에 유지. 서비스 메시지 추가 시 core enum 수정이 필요하지만, ID 정의 이동은 과설계 판단으로 하지 않음
-
-### 1.8 서비스 간 결합 완화 🔶 (남은 작업)
-
-**위반 1건**: `network_manager_actor.cpp:10`가 `service/dbus/dbus_actor.hpp`를 직접 include, `findByName()`+`dynamic_cast`로 `sdbus::IConnection&`를 탈취.
-
-> 메시지 payload로는 `sdbus::IConnection&`를 전달할 수 없고, `IDbusConnection` 포트 신설은 과설계. 올바른 해법은 **Composition Root에서 `sdbus::IConnection*`을 생성자 주입**.
-
-- [ ] `NetworkManagerActor` 생성자에 `sdbus::IConnection*` 추가, `findByName`+`dynamic_cast`+`dbus->connection()` 제거
-- [ ] `main_app.cpp`에서 dbus 액터 `open()` 후 `dbusActor.connection()` 주소를 주입 (연결 실패 시 기존 `Fail` 경로 유지)
-- [ ] CI 스캔: 서비스 디렉토리 간 include 스캔 — 데이터 계약(메시지/POCO)은 허용, 구체 액터 헤더는 위반 (1.7의 core 메시지 잔여 스캔과 함께 구성)
 
 ---
 
@@ -276,7 +265,7 @@ mutable std::shared_mutex mutex_;
 | **M3: ActorRuntime 분해** | ✅ | `run()` = `processBatch` + 계측/재디스패치 래퍼, `IMailbox` 주입 (1.4) |
 | **M4: 전역 상태 제거** | ✅ | `Metrics`/`Log`/`MemoryPool` static/전역 싱글톤 제거 (1.5, `tlCache_`는 3.3) |
 | **M5: 인프라 이관 완료** | 🔶 | core에 OS 의존 0건 — `worker.cpp`의 `pthread_setname_np` 1건 잔존 (2.2) |
-| **M5b: 서비스 계층 경계 복원** | 🔶 | 포트 이관 + nlohmann 제거 (1.6) + dbus composition root 주입 (1.8). 메시지 이관은 완료 (1.7) |
+| **M5b: 서비스 계층 경계 복원** | 🔶 | 포트 이관 + nlohmann 제거 (1.6). 메시지 이관은 완료 (1.7) |
 | **M6: 성능 병목 해소** | ⏳ | Scheduler 정리(벤치 확인 후), Registry 락 분할 (3.1~3.2) |
 | **M7: 도메인 모델 정리** | ⏳ | 설정 필드 일반화 (4.1) |
 | **M8: 최종 릴리스** | ⏳ | 전체 테스트 통과, 문서화 완료, 성능 회귀 없음 |

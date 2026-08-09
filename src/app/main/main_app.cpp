@@ -109,7 +109,7 @@ void MainApp::createActors(){
     actorSystem_ = createDefaultActorSystem({cfg_.workerCount, cfg_.workerMaxBatch, static_cast<size_t>(cfg_.mailboxSize)}, std::move(eventLoop_), std::move(timer_));
     actorSystem_->createActor<SystemActor>("system_actor", cfg_.mailboxSize)->setEssential(true);
     actorSystem_->createActor<CmdActor>("cmd_actor", cfg_.mailboxSize, pmu_.get())->setEssential(true);
-    actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);
+    if(cfg_.enableDeviceManager) actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs)->setEssential(false);
     if(cfg_.enableMonitor) actorSystem_->createActor<MonitorActor>("monitor", cfg_.mailboxSize, MonitorConfig{cfg_.monitorSocketPath, cfg_.monitorBacklog, cfg_.monitorPollIntervalMs}, sys_.get(), pmu_.get())->setEssential(true);
 #if V2_PLATFORM_LINUX

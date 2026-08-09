@@ -22,6 +22,9 @@ struct RuntimeConfig{
     int monitorRecvBufferSize = 4096;
     int monitorBacklog = 5;
 
+    // Device Manager
+    bool enableDeviceManager = false;
+
     // Metrics
     bool enableMetrics = false;
 

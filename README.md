@@ -38,7 +38,7 @@
 
 ## Overview
 
-V² Engine is a C++20 actor-model runtime designed for long-running system daemons on Linux. It implements an efficient actor system with lock-free message passing, a semaphore-scheduled worker pool, an epoll-based event loop, and a TCMalloc-inspired memory allocator. The system includes service-layer actors for CLI IPC, system monitoring, D-Bus integration, Wi-Fi management, and hardware device management, delivering four executables: a daemon (`v2_main`), a CLI client (`v2_cli`), a TUI monitor (`v2_tui`), and a standalone benchmark CLI (`v2_bench_cli`). The core (`v2_core`) is a dependency-free C++20 subproject buildable and runnable on its own.
+V² Engine is a C++20 actor-model runtime designed for long-running system daemons on Linux. It implements an efficient actor system with lock-free message passing, a semaphore-scheduled worker pool, an epoll-based event loop, and a TCMalloc-inspired memory allocator. The system includes service-layer actors for CLI IPC, system monitoring, D-Bus integration, Wi-Fi management, and hardware device management, delivering four executables: a daemon (`v2_main`), a CLI client (`v2_cli`), a TUI monitor (`v2_tui`), and a standalone benchmark CLI (`v2_bench_cli`). D-Bus, Wi-Fi, and device management are compiled but **disabled by default** — re-enable via `config/v2_main.json`. The core (`v2_core`) is a dependency-free C++20 subproject buildable and runnable on its own.
 
 **Core design principles:**
 
@@ -64,7 +64,7 @@ V² Engine is a C++20 actor-model runtime designed for long-running system daemo
 | Bench LOC | ~1,328 (bench/) |
 | Test LOC | ~2,215 (test/) |
 | Executables | 4 (`v2_main`, `v2_cli`, `v2_tui`, `v2_bench_cli`) |
-| Test suite | 133 tests (`ctest`) |
+| Test suite | 132 tests (`ctest`) |
 
 ```bash
 # Reproduce LOC counts
@@ -377,6 +377,8 @@ All benchmarks disable the metrics subsystem during execution to eliminate measu
 | **NetworkManagerActor** | Wi-Fi management via NetworkManager D-Bus API | `Tick`, `WifiScan/Connect/Disconnect/AutoReconnectRequest`, `NmStatusRequest` | `WifiScan/Status/Connect/DisconnectResult` |
 | **SystemActor** | OS signal handling via self-pipe trick, actor state notifications | `SignalNotify` | — |
 
+> **Disabled by default**: `DbusActor`, `NetworkManagerActor`, and `DeviceManagerActor` are compiled but not spawned. Re-enable via `config/v2_main.json` (`enable_dbus`, `enable_network_manager`, `enable_device_manager`). While disabled, `v2_cli` `wifi *` commands are silently dropped.
+
 ### Message Flow
 
 ```mermaid
@@ -482,7 +484,7 @@ A separate **monitor channel** uses **JSON Lines** (`\n`-delimited JSON objects)
 | **ISys HAL** | `sys_linux` — procfs parsing, per-process CPU via sliding window | `/proc/self/status`, `/proc/stat`, `/proc/loadavg`, `/proc/meminfo` |
 | **ISys Mock** | `sys_mock` — hardcoded values | — |
 
-The `DbusActor` uses `sdbus-c++` for D-Bus integration. The `NetworkManagerActor` borrows the `DbusActor`'s connection to create its own proxy to `org.freedesktop.NetworkManager`, avoiding a second system bus connection.
+The `DbusActor` uses `sdbus-c++` for D-Bus integration. The `NetworkManagerActor` borrows the `DbusActor`'s connection to create its own proxy to `org.freedesktop.NetworkManager`, avoiding a second system bus connection. Both actors are currently disabled by default.
 
 ---
 
@@ -520,6 +522,7 @@ Commands:
   wifi disconnect               Disconnect current Wi-Fi
   wifi status                   Current Wi-Fi state
   wifi autoconnect <on|off>     Toggle auto-reconnect
+                                (wifi commands require network_manager enabled)
   metrics enable|disable|snapshot|reset
   status / -s                   Check daemon status
   monitor / -m                  Launch TUI monitor
