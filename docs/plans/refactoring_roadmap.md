@@ -21,6 +21,7 @@
 
 **남은 작업 (실제 진행할 것)**
 - Phase 1.6: HAL 포트 3개 `service/ports/` 이동 + `monitor_data`의 nlohmann 제거
+- **Phase 2.5: 데이터 소유자 액터 + 구독(발행/구독) 정책** (2026-08-09 설계 확정 — 아래 섹션)
 - Phase 3.1~3.3: Scheduler O(N) 정리(벤치 확인 후), Registry 락 분할, 전역 `thread_local` 정리
 - Phase 4.1: `runtime_config.h` 필드 일반화(`epoll*` → `eventLoop*`)
 
@@ -177,6 +178,81 @@ core의 유일한 POSIX 호출(`worker.cpp`의 `pthread_setname_np`)을 제거�
 
 ---
 
+## Phase 2.5: 데이터 소유자 액터 + 구독(발행/구독) 정책 — **P0 (2026-08-09 설계 확정)**
+
+> **목표**: ISys/IPmu 데이터 수집을 소유 액터로 이동하고, 소비자가 발행-구독으로 데이터를 받도록 재구성.
+>
+> **동기**: 현재 `MonitorActor`가 ISys/IPmu/UdsServer/직렬화를 모두 소유해 수신자와 무관하게 500ms마다 수집·직렬화(PMU vcgencmd 비용)하고, `CmdActor`가 IPmu를 직접 소유해 service가 infra에 직접 의존한다.
+>
+> **결정**: 요청/응답 correlation(replyTo) 도입 없이 **구독 정책만**으로 1:1/1:N/N:N을 모두 처리한다. 구독 시 최신 캐시를 즉시 발행(retained-latest)하여 on-demand 조회도 커버한다. 구독자가 없으면 수집 자체가 중단되는 **수요 기반 캐스케이드** 구조로 절약한다.
+
+### 데이터 흐름 (확정)
+
+```
+[발행 500ms] SystemActor           — 구독자 있으면 ISys.collect() → SysDataUpdate{SystemResources}
+[발행 500ms] DeviceManagerActor    — 구독자 있으면 IPmu.readPmuData() → PmuDataUpdate{PmuData}
+                                    (PMU 소유자로 재정의 — devices_ 레지스트리 폐기)
+
+MonitorActor (순수 집계자 — ISys/IPmu/UdsServer/직렬화 전부 제거)
+  · 구독자 0→1: SysDataSubscribe + PmuDataSubscribe 전송 (수요 캐스케이드)
+  · 구독자 1→0: 구독 해제 + 캐시 클리어
+  · Sys/PmuDataUpdate 도착 시 캐시 갱신 → 구독자 있으면 스냅샷 조립+발행 (actor info는 조립 시점 수집)
+  · event-driven — 자체 발행 타이머 없음
+
+MonitorBridgeActor (신규 — UdsServer + serializer 소유)
+  · 첫 소켓 연결: MonitorSubscribe{"monitor_bridge"} / 마지막 해제: MonitorUnsubscribe
+  · MonitorSnapshotUpdate 수신 → clientCount 재기입 → serializer → 소켓 전송
+
+CmdActor (IPmu 제거)
+  · pmu status: PmuDataSubscribe → "Reading..." 즉시 응답 → 첫 PmuDataUpdate → CmdResponse → 구독 해제
+```
+
+**핵심 규칙**: (1) 발행은 구독자가 있을 때만 수집 — TUI/CLI가 없으면 sys/pmu 수집이 멈춤. (2) 구독 시 최신 캐시 즉시 발행 — on-demand 즉답. (3) 발행자별 `subscribers_` 집합 하나로 1:1/1:N/N:N 커버.
+
+### 작업 목록
+
+**메시지**
+- [ ] `message_traits.hpp`: `DeviceRegister/Unregister/Enumerate/DeviceList` 제거, 구독·업데이트 9개 추가 (`SysData*` 3, `PmuData*` 3, `Monitor*` 3)
+- [ ] `service/system/system_messages.hpp` 신규: `SysDataSubscribe{subscriber}`, `SysDataUnsubscribe{subscriber}`, `SysDataUpdate{SystemResources}`
+- [ ] `service/device_manager/device_manager_messages.hpp` 재작성: `HalType`/`Device*` 제거, `PmuDataSubscribe/Unsubscribe/Update{PmuData}`
+- [ ] `service/monitor/monitor_messages.hpp`: `MonitorSubscribe/Unsubscribe/MonitorSnapshotUpdate{MonitorSnapshot}` 추가 (NewConnection/Disconnected는 브리지가 사용)
+
+**데이터 타입 소유권 분리 (POCO)**
+- [ ] `service/system/system_data.hpp` 신규: `SystemResources` (nlohmann 없음)
+- [ ] `service/device_manager/pmu_data.hpp` 신규: `PmuData` (nlohmann 없음)
+- [ ] `service/monitor/monitor_data.hpp`: `ActorInfo`+`MonitorSnapshot`만 유지, 위 두 타입 include, `<nlohmann/json.hpp>` 제거
+
+**액터**
+- [ ] `SystemActor`: 생성자 `(name, id, ISys*, int pollIntervalMs)`, `SysDataTick` 타이머 + `subscribers_` + `latestSys_` 캐시, 구독 시 즉시 수집+발행 (시그널 처리 유지)
+- [ ] `DeviceManagerActor`: 생성자 `(name, id, IPmu*, int pollIntervalMs)`, `devices_`/`DeviceEntry` 제거, `PmuDataTick` — SystemActor와 동일 패턴
+- [ ] `MonitorActor`: 생성자 `(name, id)`로 축소, ISys/IPmu/UdsServer/직렬화 제거, 캐시 기반 event-driven 집계·재발행
+- [ ] `MonitorBridgeActor` 신설: `ipc_server_actor`의 UdsServer/이벤트루프 패턴, serializer를 `std::function<std::string(const MonitorSnapshot&)>`로 주입, `#if V2_PLATFORM_LINUX` 가드
+- [ ] `CmdActor`: `IPmu*` 제거, `dispatch()`에 `conn` 전달, `pmu status` 비동기(구독→응답→해제, `pendingPmuConn_`/`awaitingPmuStatus_`)
+
+**포트/직렬화 (Phase 1.6 흡수)**
+- [ ] 포트 3개 이동: `infra/hal/{pmu,sys,i2c}/i_*.hpp` → `service/ports/` (include 경로 갱신: `pmu_rsp5`, `sys_linux`, `i2c_linux`, `main_app`) — 1.6 목록 참조
+- [ ] `infra/transport/monitor_json_serializer.hpp/.cpp` 신설 (JSON 키 기존 필드명 유지 → TUI/CLI 호환), 브리지에 주입
+- [ ] `config/v2_main.json`: `enable_device_manager` `false → true`; `monitorPollIntervalMs`를 sys/pmu 발행 주기로 재사용 (신규 필드 없음)
+- [ ] `main_app.cpp` 배선: `SystemActor`/`DeviceManagerActor`/`MonitorActor`/`MonitorBridgeActor`/`CmdActor` 생성자 갱신
+
+**검증**
+- [ ] `ctest` 전체(132) 통과
+- [ ] `rg 'infra/hal/pmu|infra/hal/sys' src/service` → 0, `rg 'nlohmann' src/service` → 0
+- [ ] 수동: `v2-main` + `v2 pmu status`(비동기 응답) + `v2 -m` TUI — 연결 시 수집 시작 / 해제 시 수집 중단 로그 확인
+
+### 이 결정으로 해소되는 보류 항목
+
+- 1.6의 **"보류: `monitor_actor`의 `UdsServer` 직접 사용"** → `MonitorBridgeActor` 분리로 해결 (service↔infra 직접 include 0개 달성)
+
+### 트레이드오프 (기록)
+
+- 모니터 event-driven 재발행 → 소켓 트래픽 최대 2× (sys+pmu 동시 발행 시)
+- `pmu status` **last-wins**: 복수 CLI 동시 요청 시 마지막 conn으로 응답 (기존 wifi 패턴과 동일 한계)
+- 스냅샷 내 sys/pmu 데이터 skew 최대 1 발행주기(500ms)
+- `clientCount`: 브리지가 수신 스냅샷에 재기입 (모니터가 소켓을 모르므로)
+
+---
+
 ## Phase 3: 성능 병목 해소 및 품질 향상 (2주) — **P1-P2**
 
 ### 3.1 Scheduler O(N) 정리 (벤치 확인 후 진행)
@@ -262,6 +338,7 @@ mutable std::shared_mutex mutex_;
 | **M4: 전역 상태 제거** | ✅ | `Metrics`/`Log`/`MemoryPool` static/전역 싱글톤 제거 (1.5, `tlCache_`는 3.3) |
 | **M5: 인프라 이관 완료** | ✅ | core에 OS 의존 0건 — worker 스레드 네이밍 제거로 해결 (2.2) |
 | **M5b: 서비스 계층 경계 복원** | 🔶 | 포트 이관 + nlohmann 제거 (1.6). 메시지 이관은 완료 (1.7) |
+| **M5c: 데이터 소유자 + 구독 정책** | 🔶 | sys/pmu 소유 액터, MonitorBridgeActor, 구독 기반 데이터 흐름 (2.5). 1.6 보류(UdsServer) 해소 |
 | **M6: 성능 병목 해소** | ⏳ | Scheduler 정리(벤치 확인 후), Registry 락 분할 (3.1~3.2) |
 | **M7: 도메인 모델 정리** | ⏳ | 설정 필드 일반화 (4.1) |
 | **M8: 최종 릴리스** | ⏳ | 전체 테스트 통과, 문서화 완료, 성능 회귀 없음 |
