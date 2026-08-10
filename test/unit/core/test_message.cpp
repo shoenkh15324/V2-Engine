@@ -21,7 +21,7 @@ struct InlineNonCopyable{
 };
 
 struct PoolCopyable{
-    static constexpr MessageId kId = MessageId::MonitorPoll;
+    static constexpr MessageId kId = MessageId::SysDataUpdate;
     int values[32];
 };
 
@@ -68,12 +68,12 @@ TEST(Message, ClonePoolCopyable){
     for(int i = 0; i < 32; ++i) payload.values[i] = i * 3;
     auto msg = Message::make(payload);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg.id(), MessageId::MonitorPoll);
+    EXPECT_EQ(msg.id(), MessageId::SysDataUpdate);
     EXPECT_EQ(msg.as<PoolCopyable>().values[5], 15);
 
     auto copy = msg.clone();
     ASSERT_TRUE(copy);
-    EXPECT_EQ(copy.id(), MessageId::MonitorPoll);
+    EXPECT_EQ(copy.id(), MessageId::SysDataUpdate);
     for(int i = 0; i < 32; ++i) EXPECT_EQ(copy.as<PoolCopyable>().values[i], i * 3);
     EXPECT_EQ(msg.as<PoolCopyable>().values[5], 15); // 원본 불변
 }

@@ -1,12 +1,13 @@
 #include "tui_app.hpp"
+#include <csignal>
+#include <nlohmann/json.hpp>
+#include <ftxui/dom/elements.hpp>
 #include "core/common/config/platform_config.h"
 #include "core/common/log/log.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
 #include "infra/platform/linux/signal_handler.hpp"
 #include "app/tui/render_util.hpp"
-#include <csignal>
-#include <ftxui/dom/elements.hpp>
 
 #if V2_PLATFORM_LINUX
     #include <unistd.h>
@@ -159,12 +160,12 @@ ftxui::Element TuiApp::render(){
         snap = snapshot_;
     }
 
-    auto& r = snap.resources;
+    auto& r = snap.sysResources;
     float memPct = (r.memoryTotalKb > 0) ? ((float)r.memoryRssKb / (float)r.memoryTotalKb * 100.0f) : 0.0f;
 
     actorListWidget_->setActors(snap.actors);
     systemPanelWidget_->setResources(r);
-    pmuPanelWidget_->setPmuData(snap.pmu);
+    pmuPanelWidget_->setPmuData(snap.pmuData);
 
     headerWidget_->setConnected(client_.fd() >= 0);
     headerWidget_->setActorCount(snap.actors.size());

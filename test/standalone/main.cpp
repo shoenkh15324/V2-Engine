@@ -8,7 +8,7 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/actor_system/messages/message.hpp"
-#include "core/actor_system/messages/system_messages.hpp"
+#include "core/actor_system/messages/core_messages.hpp"
 
 class SmokeActor : public Actor {
 public:

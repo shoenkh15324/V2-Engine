@@ -1,5 +1,5 @@
 #pragma once
-#include "service/monitor/monitor_data.hpp"
+#include "system_data.hpp"
 
 class ISys{
 public:

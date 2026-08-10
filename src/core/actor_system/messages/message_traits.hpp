@@ -2,17 +2,26 @@
 #include <cstdint>
 
 enum class MessageId : uint32_t {
-// System
+    // core
     SignalNotify = 1,
+    // Actor
+    ActorEnableRequest,
+    ActorDisableRequest,
+    ActorRestartRequest,
     // Tick
     Tick,
+    // Cmd
+    CmdRequest,
+    CmdResponse,
     // Ipc
     IpcNewConnection,
     IpcDataReceived,
     // Monitor
-    MonitorPoll,
     MonitorNewConnection,
     MonitorClientDisconnected,
+    MonitorSubscribe,
+    MonitorUnsubscribe,
+    MonitorSnapshotUpdate,
     // Dbus
     DbusRegisterMethod,
     DbusUnregisterMethod,
@@ -24,17 +33,6 @@ enum class MessageId : uint32_t {
     DbusSubscribeSignal,
     DbusSignalEvent,
     // Device Manager
-    DeviceRegister,
-    DeviceUnregister,
-    DeviceEnumerate,
-    DeviceList,
-    // Cmd
-    CmdRequest,
-    CmdResponse,
-    // Lifecycle
-    ActorEnableRequest,
-    ActorDisableRequest,
-    ActorRestartRequest,
     // Network Manager
     NmStatusRequest,
     // Wifi
@@ -45,5 +43,15 @@ enum class MessageId : uint32_t {
     WifiDisconnectRequest,
     WifiDisconnectResult,
     WifiStatusResult,
-    WifiAutoReconnectRequest
+    WifiAutoReconnectRequest,
+    // Pmu
+    PmuDataTick,
+    PmuDataSubscribe,
+    PmuDataUnsubscribe,
+    PmuDataUpdate,
+    // System
+    SysDataTick,
+    SysDataSubscribe,
+    SysDataUnsubscribe,
+    SysDataUpdate,
 };

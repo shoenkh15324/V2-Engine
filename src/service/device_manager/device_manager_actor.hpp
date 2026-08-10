@@ -1,10 +1,11 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
+#include "infra/hal/pmu/i_pmu.hpp"
 #include "service/device_manager/device_manager_messages.hpp"
 
 class DeviceManagerActor : public Actor{
 public:
-    DeviceManagerActor(std::string name, uint64_t id);
+    DeviceManagerActor(std::string name, uint64_t id, IPmu* pmu, int pollIntervalMs);
     ~DeviceManagerActor() override;
 
     DeviceManagerActor(const DeviceManagerActor&) = delete;
@@ -17,11 +18,10 @@ public:
     void handle(const Message& msg) override;
 
 private:
-    struct DeviceEntry{
-        std::string name;
-        HalType type;
-        int bus;
-    };
+    void pumpIfNeeded();
 
-    std::vector<DeviceEntry> devices_;
+    IPmu* pmu_ = nullptr;
+    PmuData latestPmuData_;
+    int pollIntervalMs_ = 500;
+    std::unordered_set<std::string> subscribers_;
 };

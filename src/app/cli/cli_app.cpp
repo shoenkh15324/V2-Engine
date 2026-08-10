@@ -270,13 +270,15 @@ void CliApp::sendToDaemon(const std::string& cmd){
         return;
     }
     V2_LOG_INFO("{} App: sending command [{}]", appName_.c_str(), cmd.c_str());
+    std::string resp;
     std::vector<char> buf(cfg_.ipcRecvBufferSize);
-    int n = client_.recv(buf.data(), buf.size());
-    if(n > 0){
-        std::string resp(buf.data(), n);
-        std::cout << resp << std::flush;
-        V2_LOG_INFO("{} App: received response [{}]", appName_.c_str(), resp.c_str());
+    while(true){
+        int n = client_.recv(buf.data(), buf.size());
+        if(n <= 0) break;
+        resp.append(buf.data(), n);
     }
+    std::cout << resp << std::flush;
+    V2_LOG_INFO("{} App: received response [{}]", appName_.c_str(), resp.c_str());
 #else
     (void)cmd;
 #endif

@@ -1,5 +1,5 @@
 #pragma once
-#include "service/monitor/monitor_data.hpp"
+#include "pmu_data.hpp"
 
 class IPmu{
 public:

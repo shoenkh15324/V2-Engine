@@ -51,20 +51,20 @@ V² Engine is a C++20 actor-model runtime designed for long-running system daemo
 
 ## Project Metrics
 
-| Metric | Value |
-|--------|-------|
-| Development period | 2026-05-25 → 2026-08-08 (75 days, ~2.5 months) |
-| Commits | 307 (across 46 active days) |
-| Total LOC | ~12,334 (184 files) |
-| Source LOC | ~8,791 (src/) |
-| Core LOC | ~3,662 (src/core/) |
-| Service LOC | ~2,382 (src/service/) |
-| Infra LOC | ~1,263 (src/infra/) |
-| App LOC | ~1,484 (src/app/) |
-| Bench LOC | ~1,328 (bench/) |
-| Test LOC | ~2,215 (test/) |
-| Executables | 4 (`v2_main`, `v2_cli`, `v2_tui`, `v2_bench_cli`) |
-| Test suite | 132 tests (`ctest`) |
+| Metric             | Value                                             |
+| ------------------ | ------------------------------------------------- |
+| Development period | 2026-05-25 → 2026-08-08 (75 days, ~2.5 months)    |
+| Commits            | 307 (across 46 active days)                       |
+| Total LOC          | ~12,334 (184 files)                               |
+| Source LOC         | ~8,791 (src/)                                     |
+| Core LOC           | ~3,662 (src/core/)                                |
+| Service LOC        | ~2,382 (src/service/)                             |
+| Infra LOC          | ~1,263 (src/infra/)                               |
+| App LOC            | ~1,484 (src/app/)                                 |
+| Bench LOC          | ~1,328 (bench/)                                   |
+| Test LOC           | ~2,215 (test/)                                    |
+| Executables        | 4 (`v2_main`, `v2_cli`, `v2_tui`, `v2_bench_cli`) |
+| Test suite         | 132 tests (`ctest`)                               |
 
 ```bash
 # Reproduce LOC counts
@@ -132,11 +132,11 @@ All inter-actor communication is **asynchronous and non-blocking** for the sende
 
 ### Threading Model
 
-| Thread | Count | Role |
-|--------|-------|------|
-| Event Loop | 1 | `epoll_wait`, I/O dispatch, timerfd management |
-| Worker | N (configurable) | `semaphore::acquire` → actor `run(batch)` loop |
-| Timer | 0–1 | Portable core `Timer` (thread + semaphore); infra `LinuxTimer` (timerfd) overrides on Linux |
+| Thread     | Count            | Role                                                                                        |
+| ---------- | ---------------- | ------------------------------------------------------------------------------------------- |
+| Event Loop | 1                | `epoll_wait`, I/O dispatch, timerfd management                                              |
+| Worker     | N (configurable) | `semaphore::acquire` → actor `run(batch)` loop                                              |
+| Timer      | 0–1              | Portable core `Timer` (thread + semaphore); infra `LinuxTimer` (timerfd) overrides on Linux |
 
 On Linux the composition root injects `EventLoopEpoll` + `LinuxTimer` together ("epoll injection = Linux detection"). Core defaults — a blocking mock loop and the portable thread-based `Timer` — keep `v2_core` standalone-buildable with messaging and timers working.
 
@@ -150,15 +150,15 @@ The main thread runs the event loop. Workers block on `std::counting_semaphore` 
 
 Every actor derives from `Actor` and implements three hooks:
 
-| Method | Description |
-|--------|-------------|
-| `int open()` | Lifecycle start |
-| `int close()` | Lifecycle stop |
+| Method                        | Description             |
+| ----------------------------- | ----------------------- |
+| `int open()`                  | Lifecycle start         |
+| `int close()`                 | Lifecycle stop          |
 | `void handle(const Message&)` | Inbound message handler |
 
 **Lifecycle:** `Closed → Opening → Opened → Closing → Closed`
 
-Actors are identified by name (string) and ID (uint64\_t). References use `ActorHandle` — a weak reference `{id, generation, registry*}` where generation counters prevent use-after-free on recycled IDs.
+Actors are identified by name (string) and ID (uint64_t). References use `ActorHandle` — a weak reference `{id, generation, registry*}` where generation counters prevent use-after-free on recycled IDs.
 
 **Communication API:**
 
@@ -205,6 +205,7 @@ void handle(const Message& msg) override {
 ```
 
 **Storage strategy:**
+
 - `sizeof(T) ≤ 64` and `alignof(T) ≤ alignof(max_align_t)` → stored **inline** (zero heap)
 - Otherwise → allocator allocation via `defaultMemoryPool()` (or injected `IMemoryAllocator*`)
 - 34 `MessageId` values across 10 categories (system, lifecycle, tick, IPC, monitor, D-Bus, device, command, network, Wi-Fi)
@@ -228,18 +229,19 @@ flowchart TB
 **9 size classes:**
 
 | Index | Block Size | Batch | Chunk Utilization |
-|-------|-----------|-------|-------------------|
-| 0     | 8 B       | 64    | 512 B             |
-| 1     | 16 B      | 64    | 1 KB              |
-| 2     | 32 B      | 32    | 1 KB              |
-| 3     | 64 B      | 32    | 2 KB              |
-| 4     | 128 B     | 16    | 2 KB              |
-| 5     | 256 B     | 16    | 4 KB              |
-| 6     | 512 B     | 8     | 4 KB              |
-| 7     | 1024 B    | 4     | 4 KB              |
-| 8     | 2048 B    | 2     | 4 KB              |
+| ----- | ---------- | ----- | ----------------- |
+| 0     | 8 B        | 64    | 512 B             |
+| 1     | 16 B       | 64    | 1 KB              |
+| 2     | 32 B       | 32    | 1 KB              |
+| 3     | 64 B       | 32    | 2 KB              |
+| 4     | 128 B      | 16    | 2 KB              |
+| 5     | 256 B      | 16    | 4 KB              |
+| 6     | 512 B      | 8     | 4 KB              |
+| 7     | 1024 B     | 4     | 4 KB              |
+| 8     | 2048 B     | 2     | 4 KB              |
 
 **Allocation path:**
+
 1. Thread-local cache hit → O(1), no atomics
 2. Cache miss → fetch batch from central Slab (mutex), keep N-1 locally
 3. Slab miss → allocate new 4 KB Chunk, divide into blocks
@@ -289,6 +291,7 @@ worker(id):
 ```
 
 Key design decisions:
+
 - **Cooperative scheduling** — actors yield after their batch, no preemption
 - **Batch processing** — maxBatch=32 amortizes semaphore overhead
 - **Continuation dispatch** — non-empty mailboxes are immediately re-dispatched
@@ -315,7 +318,7 @@ flowchart TB
     PF --> EP
     EP -->|timer expired| Timer[deliver to scheduler]
     EP -->|data ready| Ipc[IpcServerActor: read command]
-    EP -->|signal| Sys[SystemActor: dispatch SignalNotify]
+    EP -->|signal| Sys[SystemManagerActor: dispatch SignalNotify]
 ```
 
 **Thread-safe subscription:** If called from the event-loop thread, `epoll_ctl` runs immediately. Otherwise, the operation is enqueued to the lock-free `Pending Ops Queue` and the event loop is woken via `eventfd`. `EventLoopEpoll`, `LinuxTimer`, and the self-pipe `SignalHandler` live in `infra/platform/linux/` and are injected into the core via the `IEventLoop` port.
@@ -339,14 +342,14 @@ Timer Batch: 20.6M/s          (256-batch insertion)
 Timer Dispatch: 15.3M/s       (256-batch dispatch)
 ```
 
-| Benchmark | Objective | Methodology | Result |
-|-----------|-----------|-------------|--------|
-| [throughput](docs/benchmark/throughput.md) | End-to-end message throughput | N actors sending `Tick` round-robin, measure completion time | 7.1M msg/s |
-| [latency](docs/benchmark/latency.md) | Single-message tail latency | Ping-pong with timestamp, sort 100k samples | P50=378ns, P99=641ns |
-| [contention](docs/benchmark/contention.md) | Multi-producer concurrent push | N threads flooding single actor mailbox | 7.97M push/s |
-| [scaling](docs/benchmark/scaling.md) | Worker/actor scaling efficiency | Throughput sweep, worker count 1→64 | Single-worker optimal (lock-free contention tradeoff) |
-| [backpressure](docs/benchmark/backpressure.md) | Mailbox overflow behavior | Flood beyond capacity at various `maxBatch` | 0% drop at maxBatch ≥ 32 |
-| [scheduler](docs/benchmark/scheduler.md) | Timer scheduling precision | Repeating timer (100ms), measure inter-fire intervals | 100% accuracy |
+| Benchmark                                      | Objective                       | Methodology                                                  | Result                                                |
+| ---------------------------------------------- | ------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- |
+| [throughput](docs/benchmark/throughput.md)     | End-to-end message throughput   | N actors sending `Tick` round-robin, measure completion time | 7.1M msg/s                                            |
+| [latency](docs/benchmark/latency.md)           | Single-message tail latency     | Ping-pong with timestamp, sort 100k samples                  | P50=378ns, P99=641ns                                  |
+| [contention](docs/benchmark/contention.md)     | Multi-producer concurrent push  | N threads flooding single actor mailbox                      | 7.97M push/s                                          |
+| [scaling](docs/benchmark/scaling.md)           | Worker/actor scaling efficiency | Throughput sweep, worker count 1→64                          | Single-worker optimal (lock-free contention tradeoff) |
+| [backpressure](docs/benchmark/backpressure.md) | Mailbox overflow behavior       | Flood beyond capacity at various `maxBatch`                  | 0% drop at maxBatch ≥ 32                              |
+| [scheduler](docs/benchmark/scheduler.md)       | Timer scheduling precision      | Repeating timer (100ms), measure inter-fire intervals        | 100% accuracy                                         |
 
 ```bash
 # Run individual benchmarks
@@ -366,16 +369,16 @@ All benchmarks disable the metrics subsystem during execution to eliminate measu
 
 ## Service Actors
 
-| Actor | Role | Handles | Sends |
-|-------|------|---------|-------|
-| **CmdActor** | CLI command parser and dispatcher | `CmdRequest`, `WifiScanResult`, `WifiStatusResult`, `WifiConnectResult`, `WifiDisconnectResult` | `CmdResponse`, `ActorEnable/DisableRequest`, `Wifi{Scan,Connect,Disconnect,AutoReconnect}Request` |
-| **IpcServerActor** | UDS IPC server — receives CLI commands, returns responses | `IpcNewConnection`, `IpcDataReceived`, `CmdResponse` | `CmdRequest` |
-| **MonitorActor** | Periodic system resource + PMU data collection, JSON broadcast | `MonitorPoll`, `MonitorNewConnection`, `MonitorClientDisconnected` | — (writes directly to UDS clients) |
-| **TickActor** | Periodic heartbeat generator | `Tick` | — |
-| **DbusActor** | D-Bus gateway — exposes methods, calls external services, subscribes signals | `DbusRegister/UnregisterMethod`, `DbusIncomingMethodCall`, `DbusMethodCallResult`, `DbusProxyCallRequest`, `DbusSubscribeSignal` | `DbusRegisterResult`, `DbusIncomingMethodCall`, `DbusProxyCallResult`, `DbusSignalEvent` |
-| **DeviceManagerActor** | In-memory HAL device registry | `DeviceRegister`, `DeviceUnregister`, `DeviceEnumerate` | `DeviceList` |
-| **NetworkManagerActor** | Wi-Fi management via NetworkManager D-Bus API | `Tick`, `WifiScan/Connect/Disconnect/AutoReconnectRequest`, `NmStatusRequest` | `WifiScan/Status/Connect/DisconnectResult` |
-| **SystemActor** | OS signal handling via self-pipe trick, actor state notifications | `SignalNotify` | — |
+| Actor                   | Role                                                                         | Handles                                                                                                                          | Sends                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **CmdActor**            | CLI command parser and dispatcher                                            | `CmdRequest`, `WifiScanResult`, `WifiStatusResult`, `WifiConnectResult`, `WifiDisconnectResult`                                  | `CmdResponse`, `ActorEnable/DisableRequest`, `Wifi{Scan,Connect,Disconnect,AutoReconnect}Request` |
+| **IpcServerActor**      | UDS IPC server — receives CLI commands, returns responses                    | `IpcNewConnection`, `IpcDataReceived`, `CmdResponse`                                                                             | `CmdRequest`                                                                                      |
+| **MonitorActor**        | Periodic system resource + PMU data collection, JSON broadcast               | `MonitorPoll`, `MonitorNewConnection`, `MonitorClientDisconnected`                                                               | — (writes directly to UDS clients)                                                                |
+| **TickActor**           | Periodic heartbeat generator                                                 | `Tick`                                                                                                                           | —                                                                                                 |
+| **DbusActor**           | D-Bus gateway — exposes methods, calls external services, subscribes signals | `DbusRegister/UnregisterMethod`, `DbusIncomingMethodCall`, `DbusMethodCallResult`, `DbusProxyCallRequest`, `DbusSubscribeSignal` | `DbusRegisterResult`, `DbusIncomingMethodCall`, `DbusProxyCallResult`, `DbusSignalEvent`          |
+| **DeviceManagerActor**  | In-memory HAL device registry                                                | `DeviceRegister`, `DeviceUnregister`, `DeviceEnumerate`                                                                          | `DeviceList`                                                                                      |
+| **NetworkManagerActor** | Wi-Fi management via NetworkManager D-Bus API                                | `Tick`, `WifiScan/Connect/Disconnect/AutoReconnectRequest`, `NmStatusRequest`                                                    | `WifiScan/Status/Connect/DisconnectResult`                                                        |
+| **SystemManagerActor**  | OS signal handling via self-pipe trick, actor state notifications            | `SignalNotify`                                                                                                                   | —                                                                                                 |
 
 > **Disabled by default**: `DbusActor`, `NetworkManagerActor`, and `DeviceManagerActor` are compiled but not spawned. Re-enable via `config/v2_main.json` (`enable_dbus`, `enable_network_manager`, `enable_device_manager`). While disabled, `v2_cli` `wifi *` commands are silently dropped.
 
@@ -392,7 +395,7 @@ sequenceDiagram
     Note over CLI,NM: CLI Command Flow
     CLI->>+IPC: connect / "command\n"
     IPC->>CMD: CmdRequest
-    
+
     alt actor enable/disable
         CMD->>TGT: ActorEnableRequest
         TGT-->>CMD: (state change notification)
@@ -400,7 +403,7 @@ sequenceDiagram
         CMD->>NM: WifiScanRequest
         NM-->>CMD: WifiScanResult
     end
-    
+
     CMD-->>IPC: CmdResponse
     IPC-->>-CLI: result text / close
 ```
@@ -458,7 +461,7 @@ sequenceDiagram
     participant Cmd as CmdActor
 
     Client->>+Server: connect
-    
+
     Client->>Server: send("command\n")
     Server->>Cmd: CmdRequest{conn, "command"}
     Cmd->>Cmd: process
@@ -474,15 +477,15 @@ A separate **monitor channel** uses **JSON Lines** (`\n`-delimited JSON objects)
 
 ## Transport & HAL Layer
 
-| Module | Implementation | Backend |
-|--------|---------------|---------|
-| **UDS Server** | `UdsServer` — stream-oriented, accept/subscribe pattern | `AF_UNIX`/`SOCK_STREAM`, epoll-integrated |
-| **UDS Client** | `UdsClient` — connect/send/recv | `AF_UNIX`/`SOCK_STREAM` |
-| **I2C HAL** | `i2c_linux` — combined write+read transactions | Linux `/dev/i2c-N`, `ioctl(I2C_RDWR)` |
-| **PMU HAL** | `pmu_rsp5` — vcgencmd subprocess, 9 calls per read | RPi `vcgencmd` CLI |
-| **PMU Mock** | `pmu_mock` — hardcoded values | — |
-| **ISys HAL** | `sys_linux` — procfs parsing, per-process CPU via sliding window | `/proc/self/status`, `/proc/stat`, `/proc/loadavg`, `/proc/meminfo` |
-| **ISys Mock** | `sys_mock` — hardcoded values | — |
+| Module         | Implementation                                                   | Backend                                                             |
+| -------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **UDS Server** | `UdsServer` — stream-oriented, accept/subscribe pattern          | `AF_UNIX`/`SOCK_STREAM`, epoll-integrated                           |
+| **UDS Client** | `UdsClient` — connect/send/recv                                  | `AF_UNIX`/`SOCK_STREAM`                                             |
+| **I2C HAL**    | `i2c_linux` — combined write+read transactions                   | Linux `/dev/i2c-N`, `ioctl(I2C_RDWR)`                               |
+| **PMU HAL**    | `pmu_rsp5` — vcgencmd subprocess, 9 calls per read               | RPi `vcgencmd` CLI                                                  |
+| **PMU Mock**   | `pmu_mock` — hardcoded values                                    | —                                                                   |
+| **ISys HAL**   | `sys_linux` — procfs parsing, per-process CPU via sliding window | `/proc/self/status`, `/proc/stat`, `/proc/loadavg`, `/proc/meminfo` |
+| **ISys Mock**  | `sys_mock` — hardcoded values                                    | —                                                                   |
 
 The `DbusActor` uses `sdbus-c++` for D-Bus integration. The `NetworkManagerActor` borrows the `DbusActor`'s connection to create its own proxy to `org.freedesktop.NetworkManager`, avoiding a second system bus connection. Both actors are currently disabled by default.
 
@@ -560,7 +563,7 @@ src/
 │   ├── ipc/                    #   UDS IPC server (IpcServerActor) + ipc_messages
 │   ├── monitor/                #   System monitoring (MonitorActor) + monitor_messages
 │   ├── network_manager/        #   Wi-Fi management (NetworkManagerActor + WifiHandler)
-│   ├── system/                 #   Signal handling (SystemActor)
+│   ├── system/                 #   Signal handling (SystemManagerActor)
 │   ├── tick/                   #   Tick generator (TickActor) + tick_messages
 │   └── ports/                  #   Service-owned ports: IPmu, ISys, II2c (consumer-owned)
 ├── infra/                      # Adapters — OS / 3rd-party implementations only
@@ -595,13 +598,13 @@ Dependency direction (inward, enforced by CMake targets):
 
 ### Requirements
 
-| Tool | Version |
-|------|---------|
+| Tool           | Version                                                            |
+| -------------- | ------------------------------------------------------------------ |
 | C++20 compiler | GCC 14+ (std::format; Ubuntu 22.04: `ubuntu-toolchain-r/test` PPA) |
-| CMake | 3.14+ |
-| Ninja | — |
-| gold linker | `binutils-gold` |
-| libsystemd-dev | sdbus-c++ system dependency |
+| CMake          | 3.14+                                                              |
+| Ninja          | —                                                                  |
+| gold linker    | `binutils-gold`                                                    |
+| libsystemd-dev | sdbus-c++ system dependency                                        |
 
 ### Build Options
 
@@ -620,20 +623,20 @@ cmake -B build -G Ninja -DBUILD_TESTING=OFF
 
 ### Dependencies (FetchContent)
 
-| Library | Version | Use |
-|---------|---------|-----|
-| [FTXUI](https://github.com/ArthurSonzogni/FTXUI) | v7.0.0 | Terminal UI framework |
-| [nlohmann/json](https://github.com/nlohmann/json) | v3.12.0 | JSON parsing/serialization |
-| [sdbus-c++](https://github.com/Kistler-Group/sdbus-cpp) | v2.3.1 | D-Bus C++ binding |
-| GoogleTest | v1.17.0 | Unit testing (optional) |
+| Library                                                 | Version | Use                        |
+| ------------------------------------------------------- | ------- | -------------------------- |
+| [FTXUI](https://github.com/ArthurSonzogni/FTXUI)        | v7.0.0  | Terminal UI framework      |
+| [nlohmann/json](https://github.com/nlohmann/json)       | v3.12.0 | JSON parsing/serialization |
+| [sdbus-c++](https://github.com/Kistler-Group/sdbus-cpp) | v2.3.1  | D-Bus C++ binding          |
+| GoogleTest                                              | v1.17.0 | Unit testing (optional)    |
 
 ### Platform Support
 
-| Platform | Status |
-|----------|--------|
-| Linux | ✅ Full support (epoll, D-Bus, I2C, UDS, timerfd) |
-| macOS | ⚠️ Build only (limited functionality) |
-| Windows | ❌ Not supported |
+| Platform | Status                                            |
+| -------- | ------------------------------------------------- |
+| Linux    | ✅ Full support (epoll, D-Bus, I2C, UDS, timerfd) |
+| macOS    | ⚠️ Build only (limited functionality)             |
+| Windows  | ❌ Not supported                                  |
 
 ---
 

@@ -3,8 +3,9 @@
 message(STATUS "Configuring Service Layer")
 
 add_library(v2_service STATIC
-    ${CMAKE_CURRENT_LIST_DIR}/system/system_actor.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/monitor/monitor_actor.cpp    
+    ${CMAKE_CURRENT_LIST_DIR}/system_manager/system_manager_actor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/monitor/monitor_actor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/monitor/monitor_bridge_actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/tick/tick_actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device_manager/device_manager_actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/cmd/cmd_actor.cpp

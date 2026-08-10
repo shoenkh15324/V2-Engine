@@ -9,7 +9,7 @@
 #include "core/actor_system/runtime/supervisor/dead_letter_queue.hpp"
 #include "core/actor_system/runtime/dispatcher/work_dispatcher.hpp"
 #include "core/actor_system/actor/actor_registry.hpp"
-#include "core/actor_system/messages/system_messages.hpp"
+#include "core/actor_system/messages/core_messages.hpp"
 #include "core/actor_system/runtime/mailbox/mailbox.hpp"
 #include "core/common/timer/i_timer.hpp"
 #include "core/perf/metrics/metrics.hpp"

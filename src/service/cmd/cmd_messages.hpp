@@ -13,4 +13,5 @@ struct CmdResponse{
     static constexpr MessageId kId = MessageId::CmdResponse;
     ConnHandle conn;
     std::string result;
+    bool closeOnSend = true;
 };

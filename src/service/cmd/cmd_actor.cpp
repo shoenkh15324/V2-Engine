@@ -2,20 +2,18 @@
 #include <sstream>
 #include <iomanip>
 #include "core/common/log/log.hpp"
-#include "core/common/config/platform_config.h"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
-#include "core/actor_system/messages/system_messages.hpp"
+#include "core/actor_system/messages/core_messages.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "service/cmd/cmd_messages.hpp"
 #include "service/monitor/monitor_data.hpp"
+#include "service/device_manager/device_manager_messages.hpp"
 
 
-CmdActor::CmdActor(std::string name, uint64_t id, IPmu* pmu) : Actor(std::move(name), id), pmu_(pmu){
-    //
-}
+CmdActor::CmdActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
 
 CmdActor::~CmdActor(){
     close();
@@ -39,7 +37,10 @@ int CmdActor::close(){
     if(state_ == Closed) return 0;
     state_ = Closing;
     //
-    pmu_ = nullptr;
+    if(pmuStatusPending_){
+        sendMsg("device_manager", PmuDataUnsubscribe{name()});
+        pmuStatusPending_ = false;
+    }
     //
     state_ = Closed;
     V2_LOG_INFO("Cmd Actor closed");
@@ -49,30 +50,38 @@ int CmdActor::close(){
 void CmdActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
     switch(msg.id()){
-    case MessageId::CmdRequest:{
-        const auto& m = msg.as<CmdRequest>();
-        auto response = dispatch(m.cmd);
-        sendMsg("ipc_server", CmdResponse{m.conn, std::move(response)});
-        break;
-    }
-    case MessageId::WifiScanResult:
-        lastScan_ = msg.as<WifiScanResult>();
-        break;
-    case MessageId::WifiStatusResult:
-        lastStatus_ = msg.as<WifiStatusResult>();
-        break;
-    case MessageId::WifiConnectResult:{
-        const auto& m = msg.as<WifiConnectResult>();
-        lastConnectResult_ = m.result ? "Connected successfully" : "Failed" + m.errorMsg;
-        break;
-    }
-    case MessageId::WifiDisconnectResult:{
-        const auto& m = msg.as<WifiDisconnectResult>();
-        lastDisconnectResult_ = m.result ? "Disconnected successfully" : "Failed to disconnect";
-        break;
-    }
-    default:
-        break;
+        case MessageId::CmdRequest:{
+            const auto& m = msg.as<CmdRequest>();
+            auto response = dispatch(m.cmd);
+            if(pmuStatusPending_) pendingConn_ = m.conn;
+            sendMsg("ipc_server", CmdResponse{m.conn, std::move(response), !pmuStatusPending_});
+            break;
+        }
+        case MessageId::PmuDataUpdate:{
+            if(!pmuStatusPending_) break;
+            auto body = formatPmuStatus(msg.as<PmuDataUpdate>().data);
+            pmuStatusPending_ = false;
+            sendMsg("device_manager", PmuDataUnsubscribe{name()});
+            sendMsg("ipc_server", CmdResponse{pendingConn_, std::move(body), true});
+            break;
+        }
+        case MessageId::WifiScanResult:
+            lastScan_ = msg.as<WifiScanResult>();
+            break;
+        case MessageId::WifiStatusResult:
+            lastStatus_ = msg.as<WifiStatusResult>();
+            break;
+        case MessageId::WifiConnectResult:{
+            const auto& m = msg.as<WifiConnectResult>();
+            lastConnectResult_ = m.result ? "Connected successfully" : "Failed" + m.errorMsg;
+            break;
+        }
+        case MessageId::WifiDisconnectResult:{
+            const auto& m = msg.as<WifiDisconnectResult>();
+            lastDisconnectResult_ = m.result ? "Disconnected successfully" : "Failed to disconnect";
+            break;
+        }
+        default: break;
     }
 }
 
@@ -159,22 +168,26 @@ std::string CmdActor::handlePmu(const std::vector<std::string>& args){
     if(args.empty()) return "error: missing subcommand\n";
     auto& cmd = args[0];
     if(cmd == "status"){
-        PmuData d;
-        pmu_->readPmuData(d);
-        std::ostringstream oss;
-        oss << "ARM   : " << (d.clockArmHz / 1000000)          << " MHz\n"
-            << "Core  : " << (d.clockCoreHz / 1000000)         << " MHz\n"
-            << "V3D   : " << (d.clockV3dHz / 1000000)          << " MHz\n"
-            << "Temp  : " << d.tempCelsius                     << " °C\n"
-            << "Vcore : " << d.voltCore                        << " V\n"
-            << "Icore : " << d.currentVddCoreA                 << " A\n"
-            << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
-            << (d.throttled ? "THROTTLED" : "Throttle")
-            << ": 0x" << std::hex << d.throttled << std::dec
-            << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
-        return oss.str();
+        sendMsg("device_manager", PmuDataSubscribe{name()});
+        pmuStatusPending_ = true;
+        return "Reading...\n";
     }
     return "error: unknown pmu subcommand '" + cmd + "'\n";
+}
+
+std::string CmdActor::formatPmuStatus(const PmuData& d){
+    std::ostringstream oss;
+    oss << "ARM   : " << (d.clockArmHz / 1000000)          << " MHz\n"
+        << "Core  : " << (d.clockCoreHz / 1000000)         << " MHz\n"
+        << "V3D   : " << (d.clockV3dHz / 1000000)          << " MHz\n"
+        << "Temp  : " << d.tempCelsius                     << " °C\n"
+        << "Vcore : " << d.voltCore                        << " V\n"
+        << "Icore : " << d.currentVddCoreA                 << " A\n"
+        << "Mem   : ARM=" << d.memArmMb << "M  GPU=" << d.memGpuMb << "M\n"
+        << (d.throttled ? "THROTTLED" : "Throttle")
+        << ": 0x" << std::hex << d.throttled << std::dec
+        << (d.throttled ? " (THROTTLED!)\n" : " (OK)\n");
+    return oss.str();
 }
 
 std::string CmdActor::handleWifi(const std::vector<std::string>& args){

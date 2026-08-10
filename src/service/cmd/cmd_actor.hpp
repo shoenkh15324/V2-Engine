@@ -1,16 +1,17 @@
 #pragma once
-#include "core/actor_system/actor/actor.hpp"
-#include "infra/hal/pmu/i_pmu.hpp"
-#include "service/network_manager/wifi_messages.hpp"
 #include <string>
 #include <vector>
-#include <functional>
 #include <memory>
+#include <functional>
 #include <unordered_map>
+#include "core/actor_system/actor/actor.hpp"
+#include "core/common/config/platform_config.h"
+#include "infra/hal/pmu/pmu_data.hpp"
+#include "service/network_manager/wifi_messages.hpp"
 
 class CmdActor : public Actor{
 public:
-    CmdActor(std::string name, uint64_t id, IPmu* pmu);
+    CmdActor(std::string name, uint64_t id);
     ~CmdActor() override;
 
     CmdActor(const CmdActor&) = delete;
@@ -35,6 +36,8 @@ private:
     std::string doActorList();
     std::string doActorToggle(bool enable, const std::string& name);
 
+    std::string formatPmuStatus(const PmuData& d);
+
     // Wifi helpers
     std::string formatApList();
     std::string formatStatus();
@@ -42,9 +45,10 @@ private:
     // Metrics helpers
     std::string formatMetricsSnapshot();
 
-    IPmu* pmu_ = nullptr;
     WifiScanResult lastScan_;
     WifiStatusResult lastStatus_;
+    ConnHandle pendingConn_ = 0;
+    bool pmuStatusPending_ = false;
     std::string lastConnectResult_;
     std::string lastDisconnectResult_;
     std::unordered_map<std::string, Handler> handlers_;

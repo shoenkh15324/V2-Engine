@@ -1,36 +1,23 @@
 #pragma once
-#include <cstdint>
 #include <string>
-#include <vector>
 #include "core/actor_system/messages/message_traits.hpp"
+#include "infra/hal/pmu/pmu_data.hpp"
 
-enum class HalType : uint8_t {
-    I2c = 0,
-    Spi,
-    Gpio,
-    Uart,
+struct PmuDataTick{
+    static constexpr MessageId kId = MessageId::PmuDataTick;
 };
 
-struct DeviceRegister{
-    static constexpr MessageId kId = MessageId::DeviceRegister;
-    std::string name;
-    HalType type;
-    int bus;
+struct PmuDataSubscribe{
+    static constexpr MessageId kId = MessageId::PmuDataSubscribe;
+    std::string subscriber;
 };
 
-struct DeviceUnregister{
-    static constexpr MessageId kId = MessageId::DeviceUnregister;
-    std::string name;
+struct PmuDataUnsubscribe{
+    static constexpr MessageId kId = MessageId::PmuDataUnsubscribe;
+    std::string subscriber;
 };
 
-struct DeviceEnumerate{
-    static constexpr MessageId kId = MessageId::DeviceEnumerate;
-    std::string requesterName;
-};
-
-struct DeviceList{
-    static constexpr MessageId kId = MessageId::DeviceList;
-    std::vector<std::string> names;
-    std::vector<uint8_t> types;
-    std::vector<int> buses;
+struct PmuDataUpdate{
+    static constexpr MessageId kId = MessageId::PmuDataUpdate;
+    PmuData data;
 };

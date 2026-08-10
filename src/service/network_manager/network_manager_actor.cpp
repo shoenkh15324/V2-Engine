@@ -23,7 +23,7 @@ int NetworkManagerActor::open(){
     if(state_ != Closed) close();
     state_ = Opening;
     //
-    auto dbusHandle = runtime()->actorRegistry()->findByName("dbus_actor");
+    auto dbusHandle = runtime()->actorRegistry()->findByName("dbus");
     auto* dbus = dynamic_cast<DbusActor*>(dbusHandle.get());
     if(!dbus || dbus->getState() != Opened){ V2_LOG_ERROR("D-Bus actor is not found");
         connection_ = nullptr;
@@ -71,7 +71,7 @@ void NetworkManagerActor::handle(const Message& msg){
         wifi_.syncDeviceState();
         if(wifi_.consumeScanRefreshPending()){
             wifi_.refreshAps();
-            sendMsg("cmd_actor", WifiScanResult{wifi_.lastScanResults()});
+            sendMsg("cmd", WifiScanResult{wifi_.lastScanResults()});
         }
         wifi_.autoReconnect();
         reportStatus();
@@ -82,12 +82,12 @@ void NetworkManagerActor::handle(const Message& msg){
     case MessageId::WifiConnectRequest:{
         const auto& m = msg.as<WifiConnectRequest>();
         bool ok = wifi_.addAndActivateConnection(m.ssid, m.password);
-        sendMsg("cmd_actor", WifiConnectResult{ok, ok ? "" : "Invalid state or device"});
+        sendMsg("cmd", WifiConnectResult{ok, ok ? "" : "Invalid state or device"});
         break;
     }
     case MessageId::WifiDisconnectRequest:{
         bool ok = wifi_.disconnectDevice();
-        sendMsg("cmd_actor", WifiDisconnectResult{ok});
+        sendMsg("cmd", WifiDisconnectResult{ok});
         break;
     }
     case MessageId::WifiAutoReconnectRequest:
@@ -118,7 +118,7 @@ void NetworkManagerActor::reportStatus(){
             r.ipAddress = wifi_.readIp4Address();
         }
     }
-    sendMsg("cmd_actor", std::move(r));
+    sendMsg("cmd", std::move(r));
 }
 
 #endif // V2_PLATFORM_LINUX

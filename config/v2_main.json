@@ -5,8 +5,8 @@
   "enable_ipc_server": true,
   "enable_monitor": true,
   "enable_dbus": false,
-  "enable_pmu": false,
+  "enable_device_manager": true,
+  "enable_pmu": true,
   "enable_network_manager": false,
-  "enable_device_manager": false,
   "enable_metrics": true
 }

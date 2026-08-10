@@ -58,7 +58,7 @@ void IpcServerActor::unsubscribeAll(){
 
 int IpcServerActor::handleCommand(ConnHandle conn, const std::string& cmd){
     V2_LOG_INFO("IpcServerActor: command received (conn={}) [{}]", conn, cmd.c_str());
-    sendMsg("cmd_actor", CmdRequest{conn, cmd});
+    sendMsg("cmd", CmdRequest{conn, cmd});
     return Ok;
 }
 
@@ -94,45 +94,46 @@ int IpcServerActor::close(){
 void IpcServerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
     switch(msg.id()){
-    case MessageId::IpcNewConnection:{
-        const auto& m = msg.as<IpcNewConnection>();
-        V2_LOG_INFO("IpcServerActor: client connected (conn={})", m.conn);
-        subscribeClient(m.conn);
-        break;
-    }
-    case MessageId::IpcDataReceived:{
-        const auto& m = msg.as<IpcDataReceived>();
-        std::vector<uint8_t> buf(recvBufferSize_);
-        ssize_t n = ::recv(m.conn, buf.data(), buf.size(), MSG_DONTWAIT);
-        if(n > 0){
-            V2_LOG_INFO("IpcServerActor: received {} bytes from conn={}", n, m.conn);
-            std::string cmd(reinterpret_cast<char*>(buf.data()), n);
-            if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
-            handleCommand(m.conn, cmd);
-            runtime()->eventLoop()->unsubscribe(m.conn);
-        }else if(n == 0){
-            V2_LOG_INFO("IpcServerActor: client disconnected (conn={})", m.conn);
-            runtime()->eventLoop()->unsubscribe(m.conn);
-            server_.closeClient(m.conn);
-            connections_.erase(m.conn);
-        }else if(errno == EAGAIN && errno == EWOULDBLOCK){
-            // Not an error — no more data, ignore
-        }else{
-            //V2_LOG_ERROR("IpcServerActor: recv error (conn={}) errno={}", m.conn, errno);
+        case MessageId::IpcNewConnection:{
+            const auto& m = msg.as<IpcNewConnection>();
+            V2_LOG_INFO("IpcServerActor: client connected (conn={})", m.conn);
+            subscribeClient(m.conn);
+            break;
         }
-        break;
-    }
-    case MessageId::CmdResponse:{
-        const auto& m = msg.as<CmdResponse>();
-        V2_LOG_INFO("IpcServerActor: response received for conn={}", m.conn);
-        server_.send(m.conn, m.result.data(), m.result.size());
-        runtime()->eventLoop()->unsubscribe(m.conn);
-        connections_.erase(m.conn);
-        server_.closeClient(m.conn);
-        break;
-    }
-    default:
-        break;
+        case MessageId::IpcDataReceived:{
+            const auto& m = msg.as<IpcDataReceived>();
+            std::vector<uint8_t> buf(recvBufferSize_);
+            ssize_t n = ::recv(m.conn, buf.data(), buf.size(), MSG_DONTWAIT);
+            if(n > 0){
+                V2_LOG_INFO("IpcServerActor: received {} bytes from conn={}", n, m.conn);
+                std::string cmd(reinterpret_cast<char*>(buf.data()), n);
+                if(!cmd.empty() && cmd.back() == '\n') cmd.pop_back();
+                handleCommand(m.conn, cmd);
+                runtime()->eventLoop()->unsubscribe(m.conn);
+            }else if(n == 0){
+                V2_LOG_INFO("IpcServerActor: client disconnected (conn={})", m.conn);
+                runtime()->eventLoop()->unsubscribe(m.conn);
+                server_.closeClient(m.conn);
+                connections_.erase(m.conn);
+            }else if(errno == EAGAIN && errno == EWOULDBLOCK){
+                // Not an error — no more data, ignore
+            }else{
+                //V2_LOG_ERROR("IpcServerActor: recv error (conn={}) errno={}", m.conn, errno);
+            }
+            break;
+        }
+        case MessageId::CmdResponse:{
+            const auto& m = msg.as<CmdResponse>();
+            V2_LOG_INFO("IpcServerActor: response received for conn={}", m.conn);
+            server_.send(m.conn, m.result.data(), m.result.size());
+            if(m.closeOnSend){
+                runtime()->eventLoop()->unsubscribe(m.conn);
+                connections_.erase(m.conn);
+                server_.closeClient(m.conn);
+            }
+            break;
+        }
+        default: break;
     }
 }
 

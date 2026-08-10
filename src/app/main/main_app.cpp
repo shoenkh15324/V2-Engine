@@ -13,10 +13,11 @@
 #include "infra/hal/sys/sys_mock.hpp"
 #include "infra/hal/sys/sys_linux.hpp"
 #include "infra/platform/linux/signal_handler.hpp"
-#include "service/system/system_actor.hpp"
+#include "service/system_manager/system_manager_actor.hpp"
 #include "service/ipc/ipc_server_actor.hpp"
 #include "service/tick/tick_actor.hpp"
 #include "service/monitor/monitor_actor.hpp"
+#include "service/monitor/monitor_bridge_actor.hpp"
 #include "service/dbus/dbus_actor.hpp"
 #include "service/device_manager/device_manager_actor.hpp"
 #include "service/network_manager/network_manager_actor.hpp"
@@ -79,8 +80,8 @@ void MainApp::configureRuntime(){
     metrics_.setEnabled(cfg_.enableMetrics);
 
     // Set Signal
-    SystemActor::onSignal(SIGINT, [this](int){ requestStop(); });
-    SystemActor::onSignal(SIGTERM, [this](int){ requestStop(); });
+    SystemManagerActor::onSignal(SIGINT, [this](int){ requestStop(); });
+    SystemManagerActor::onSignal(SIGTERM, [this](int){ requestStop(); });
 
 #if V2_PLATFORM_LINUX
     eventLoop_ = std::make_unique<EventLoopEpoll>(cfg_.epollMaxEvents, cfg_.epollWaitTimeoutMs);
@@ -107,14 +108,19 @@ void MainApp::registerServices(){
 
 void MainApp::createActors(){
     actorSystem_ = createDefaultActorSystem({cfg_.workerCount, cfg_.workerMaxBatch, static_cast<size_t>(cfg_.mailboxSize)}, std::move(eventLoop_), std::move(timer_));
-    actorSystem_->createActor<SystemActor>("system_actor", cfg_.mailboxSize)->setEssential(true);
-    actorSystem_->createActor<CmdActor>("cmd_actor", cfg_.mailboxSize, pmu_.get())->setEssential(true);
-    if(cfg_.enableDeviceManager) actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize)->setEssential(true);
+    actorSystem_->createActor<SystemManagerActor>("system_manager", cfg_.mailboxSize, sys_.get(), cfg_.monitorPollIntervalMs)->setEssential(true);
+    actorSystem_->createActor<CmdActor>("cmd", cfg_.mailboxSize)->setEssential(true);
+    if(cfg_.enableDeviceManager) actorSystem_->createActor<DeviceManagerActor>("device_manager", cfg_.mailboxSize, pmu_.get(), cfg_.monitorPollIntervalMs)->setEssential(true);
     if(cfg_.enableTick) actorSystem_->createActor<TickActor>("tick", cfg_.mailboxSize, cfg_.tickIntervalMs)->setEssential(false);
-    if(cfg_.enableMonitor) actorSystem_->createActor<MonitorActor>("monitor", cfg_.mailboxSize, MonitorConfig{cfg_.monitorSocketPath, cfg_.monitorBacklog, cfg_.monitorPollIntervalMs}, sys_.get(), pmu_.get())->setEssential(true);
+    if(cfg_.enableMonitor){
+        actorSystem_->createActor<MonitorActor>("monitor", cfg_.mailboxSize)->setEssential(true);
+#if V2_PLATFORM_LINUX
+        actorSystem_->createActor<MonitorBridgeActor>("monitor_bridge", cfg_.mailboxSize, cfg_.monitorSocketPath, cfg_.monitorBacklog)->setEssential(true);
+#endif
+    }
 #if V2_PLATFORM_LINUX
     if(cfg_.enableIpcServer) actorSystem_->createActor<IpcServerActor>("ipc_server", cfg_.mailboxSize, cfg_.ipcSocketPath, cfg_.udsBacklog, cfg_.ipcRecvBufferSize)->setEssential(true);
-    if(cfg_.enableDbus) actorSystem_->createActor<DbusActor>("dbus_actor", cfg_.mailboxSize, cfg_.dbusBusName, cfg_.dbusObjectPath, cfg_.dbusInterfaceName)->setEssential(true);
+    if(cfg_.enableDbus) actorSystem_->createActor<DbusActor>("dbus", cfg_.mailboxSize, cfg_.dbusBusName, cfg_.dbusObjectPath, cfg_.dbusInterfaceName)->setEssential(true);
     if(cfg_.enableDbus && cfg_.enableNetworkManager) actorSystem_->createActor<NetworkManagerActor>("network_manager", cfg_.mailboxSize)->setEssential(false);
 #endif
 }
