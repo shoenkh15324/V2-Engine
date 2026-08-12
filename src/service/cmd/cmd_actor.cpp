@@ -150,16 +150,13 @@ std::string CmdActor::doActorList(){
 std::string CmdActor::doActorToggle(bool enable, const std::string& name){
     auto* reg = runtime()->actorRegistry();
     if(!reg) return "error: actor registry unavailable\n";
-    ActorHandle h = reg->findByName(name);
-    if(!h.valid()) return "error: not found '" + name + "'\n";
-    Actor* a = h.get();
+    Actor* a = reg->findActorByName(name);
     if(!a) return "error: not found '" + name + "'\n";
-    if(enable && a->isEssential()) return "error: '" + name + "' is essential\n";
+    if(a->isEssential()) return "error: '" + name + "' is essential\n";
     if(enable){
-        h.send(ActorEnableRequest{});
+        a->receiveMsg(Message::make(ActorEnableRequest{}));
     }else{
-        if(a->isEssential()) return "error: '" + name + "' is essential\n";
-        h.send(ActorDisableRequest{});
+        a->receiveMsg(Message::make(ActorDisableRequest{}));
     }
     return "ok: '" + name + "' " + (enable ? "enabled" : "disabled") + "\n";
 }
@@ -290,8 +287,7 @@ std::string CmdActor::handleMetrics(const std::vector<std::string>& args){
 std::string CmdActor::formatMetricsSnapshot(){
     auto snap = V2_METRICS()->snapshot();
     for(auto& a : snap.actors){
-        ActorHandle h = runtime()->actorRegistry()->findById(a.id);
-        Actor* actor = h.get();
+        Actor* actor = runtime()->actorRegistry()->findActorById(a.id);
         a.name = actor ? actor->name() : "unknown";
     }
     std::ostringstream oss;

@@ -10,8 +10,10 @@ class IActorRegistry{
 public:
     virtual ~IActorRegistry() = default;
 
-    virtual ActorHandle findByName(const std::string& name) = 0;
-    virtual ActorHandle findById(uint64_t id) = 0;
+    virtual ActorHandle findHandleByName(const std::string& name) = 0;
+    virtual ActorHandle findHandleById(uint64_t id) = 0;
+    virtual Actor* findActorByName(const std::string& name) = 0;
+    virtual Actor* findActorById(uint64_t id) = 0;
     virtual Actor* resolve(const ActorHandle& handle) const = 0;
 
     virtual void forEachActor(const std::function<void(ActorHandle)>& callback) const = 0;

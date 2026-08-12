@@ -35,22 +35,24 @@ TEST(ActorRegistry, AddAndFindByName){
     ActorRegistry reg;
     TestActor actor("sensor", 1);
     reg.add(&actor);
-    EXPECT_TRUE(reg.findByName("sensor").valid());
-    EXPECT_EQ(reg.findByName("sensor").get(), &actor);
+    EXPECT_TRUE(reg.findHandleByName("sensor").valid());
+    EXPECT_EQ(reg.findActorByName("sensor"), &actor);
 }
 
 TEST(ActorRegistry, AddAndFindById){
     ActorRegistry reg;
     TestActor actor("sensor", 42);
     reg.add(&actor);
-    EXPECT_TRUE(reg.findById(42).valid());
-    EXPECT_EQ(reg.findById(42).get(), &actor);
+    EXPECT_TRUE(reg.findHandleById(42).valid());
+    EXPECT_EQ(reg.findActorById(42), &actor);
 }
 
 TEST(ActorRegistry, FindNonExistent){
     ActorRegistry reg;
-    EXPECT_FALSE(reg.findByName("nope").valid());
-    EXPECT_FALSE(reg.findById(999).valid());
+    EXPECT_FALSE(reg.findHandleByName("nope").valid());
+    EXPECT_FALSE(reg.findHandleById(999).valid());
+    EXPECT_EQ(reg.findActorByName("nope"), nullptr);
+    EXPECT_EQ(reg.findActorById(999), nullptr);
 }
 
 TEST(ActorRegistry, Remove){
@@ -58,8 +60,10 @@ TEST(ActorRegistry, Remove){
     TestActor actor("sensor", 1);
     reg.add(&actor);
     reg.remove(&actor);
-    EXPECT_FALSE(reg.findByName("sensor").valid());
-    EXPECT_FALSE(reg.findById(1).valid());
+    EXPECT_FALSE(reg.findHandleByName("sensor").valid());
+    EXPECT_FALSE(reg.findHandleById(1).valid());
+    EXPECT_EQ(reg.findActorByName("sensor"), nullptr);
+    EXPECT_EQ(reg.findActorById(1), nullptr);
 }
 
 TEST(ActorRegistry, MultipleActors){
@@ -72,12 +76,12 @@ TEST(ActorRegistry, MultipleActors){
     reg.add(&a2);
     reg.add(&a3);
 
-    EXPECT_EQ(reg.findByName("sensor").get(), &a1);
-    EXPECT_EQ(reg.findByName("actuator").get(), &a2);
-    EXPECT_EQ(reg.findByName("controller").get(), &a3);
-    EXPECT_EQ(reg.findById(1).get(), &a1);
-    EXPECT_EQ(reg.findById(2).get(), &a2);
-    EXPECT_EQ(reg.findById(3).get(), &a3);
+    EXPECT_EQ(reg.findActorByName("sensor"), &a1);
+    EXPECT_EQ(reg.findActorByName("actuator"), &a2);
+    EXPECT_EQ(reg.findActorByName("controller"), &a3);
+    EXPECT_EQ(reg.findActorById(1), &a1);
+    EXPECT_EQ(reg.findActorById(2), &a2);
+    EXPECT_EQ(reg.findActorById(3), &a3);
 }
 
 TEST(ActorRegistry, Clear){
@@ -89,8 +93,10 @@ TEST(ActorRegistry, Clear){
     reg.add(&a2);
     reg.clear();
 
-    EXPECT_FALSE(reg.findByName("sensor").valid());
-    EXPECT_FALSE(reg.findById(2).valid());
+    EXPECT_FALSE(reg.findHandleByName("sensor").valid());
+    EXPECT_FALSE(reg.findHandleById(2).valid());
+    EXPECT_EQ(reg.findActorByName("sensor"), nullptr);
+    EXPECT_EQ(reg.findActorById(2), nullptr);
 }
 
 TEST(ActorRegistry, ForEachActor){

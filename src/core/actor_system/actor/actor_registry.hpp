@@ -1,7 +1,7 @@
 #pragma once
-#include <mutex>
 #include <string>
 #include <cstdint>
+#include <shared_mutex>
 #include <unordered_map>
 #include "core/actor_system/actor/i_actor_registry.hpp"
 
@@ -17,8 +17,10 @@ public:
     ActorRegistry(ActorRegistry&&) = delete;
     ActorRegistry& operator=(ActorRegistry&&) = delete;
 
-    ActorHandle findByName(const std::string& name) override;
-    ActorHandle findById(uint64_t id) override;
+    ActorHandle findHandleByName(const std::string& name) override;
+    ActorHandle findHandleById(uint64_t id) override;
+    Actor* findActorByName(const std::string& name) override;
+    Actor* findActorById(uint64_t id) override;
     Actor* resolve(const ActorHandle& handle) const override;
 
     void forEachActor(const std::function<void(ActorHandle)>& callback) const override;
@@ -33,7 +35,7 @@ private:
         uint64_t generation;
     };
 
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, ActorEntry> byName_;
     std::unordered_map<uint64_t, ActorEntry> byId_;
     std::unordered_map<uint64_t, uint64_t> generations_;

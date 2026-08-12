@@ -1,7 +1,6 @@
 #include "actor.hpp"
 #include "core/common/util/return.hpp"
 #include "core/common/log/log.hpp"
-#include "core/actor_system/actor/actor_handle.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
 #include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
@@ -11,33 +10,31 @@ Actor::Actor(std::string name, uint64_t id) : name_(std::move(name)), id_(id){}
 Actor::~Actor(){}
 
 void Actor::sendMsg(const std::string& targetName, Message msg){
-    ActorHandle target = runtime_->actorRegistry()->findByName(targetName);
-    if(target.valid()){
-        target.send(std::move(msg));
+    if(Actor* a = runtime_->actorRegistry()->findActorByName(targetName)){
+        a->receiveMsg(std::move(msg));
     }
 }
 
 void Actor::sendMsg(uint64_t targetId, Message msg){
-    ActorHandle target = runtime_->actorRegistry()->findById(targetId);
-    if(target.valid()){
-        target.send(std::move(msg));
+    if(Actor* a = runtime_->actorRegistry()->findActorById(targetId)){
+        a->receiveMsg(std::move(msg));
     }
 }
 
 int Actor::sendMsgAfter(const std::string& targetName, Message msg, uint64_t delayMs){
-    ActorHandle target = runtime_->actorRegistry()->findByName(targetName);
-    if(!target.valid()){
+    Actor* a = runtime_->actorRegistry()->findActorByName(targetName);
+    if(!a){
         return Fail;
     }
-    return runtime_->addTimer(target.get(), std::move(msg), delayMs, false);
+    return runtime_->addTimer(a, std::move(msg), delayMs, false);
 }
 
 int Actor::sendMsgAfter(uint64_t targetId, Message msg, uint64_t delayMs){
-    ActorHandle target = runtime_->actorRegistry()->findById(targetId);
-    if(!target.valid()){
+    Actor* a = runtime_->actorRegistry()->findActorById(targetId);
+    if(!a){
         return Fail;
     }
-    return runtime_->addTimer(target.get(), std::move(msg), delayMs, false);
+    return runtime_->addTimer(a, std::move(msg), delayMs, false);
 }
 
 void Actor::receiveMsg(Message msg){

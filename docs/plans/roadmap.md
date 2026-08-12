@@ -8,8 +8,8 @@
 Phase 1: 성능 병목 제거 ✅ 완료
 Phase 2: actor_system 리팩토링 ✅ 완료
 Phase 3: 메모리/전송 최적화 ✅ 완료
-Phase 4: 아키텍처 고도화 🔄 진행 중 (4-1 완료, 4-2 완료)
-Phase 5: 벤치마크 인프라 + 보고서 ⬜ 대기 (Phase 4 완료 후)
+Phase 4: 아키텍처 고도화 🔄 진행 중 
+Phase 5: 벤치마크 인프라 + 보고서 ⬜ 대기 
 ```
 
 ---
@@ -140,10 +140,12 @@ ActorSystem
 **해결**: Lookup 전용으로 축소, enableActor/disableActor는 IActorRuntime으로 이동
 
 ```cpp
-// IActorRegistry — 순수 lookup
+// IActorRegistry — 순수 lookup (반환 타입별 네이밍)
 class IActorRegistry {
-    virtual ActorHandle findByName(const std::string& name) = 0;
-    virtual ActorHandle findById(uint64_t id) = 0;
+    virtual ActorHandle findHandleByName(const std::string& name) = 0;
+    virtual ActorHandle findHandleById(uint64_t id) = 0;
+    virtual Actor* findActorByName(const std::string& name) = 0;
+    virtual Actor* findActorById(uint64_t id) = 0;
     virtual Actor* resolve(const ActorHandle& handle) const = 0;
     virtual void add(Actor* actor) = 0;
     virtual void remove(Actor* actor) = 0;
@@ -299,6 +301,14 @@ MemoryPool (Singleton)
 | 지연 `count()` ✅ | `Metrics::recordDispatch/recordEnqueue` 내부에서만 `count()` 호출하도록 변경 |
 | 메트릭 비활성화 시 zero-overhead ✅ | `isEnabled()` 체크를 호출 전으로 이동, 비활성화 시 atomic 로드 0회 |
 
+### ActorRegistry 락 분할 ✅
+
+> 단일 `std::mutex`로 모든 연산 직렬화 → 읽기/쓰기 분리 (C++17 `std::shared_mutex`, 외부 의존 없음)
+
+- ✅ `std::shared_mutex` 전환 + read/write 락 배분 (`findHandle*`/`findActor*`/`forEachActor` → shared, `add`/`remove` → unique)
+- ✅ `findActorByName`/`findActorById` 추가 + `Actor::sendMsg`/`sendMsgAfter`의 `valid()` 중복 검증 제거 (조회 3회 → 1회)
+- ✅ `forEachActor`는 락 해제 후 콜백 실행 (스냅샷 후 콜백 — 콜백 내 registry 수정 방지)
+
 ---
 
 ## Phase 4: 아키텍처 고도화 🔄
@@ -393,3 +403,5 @@ MemoryPool (Singleton)
 | 반복 측정 | 10회+ 반복, 평균 ± 표준편차, 95% 신뢰구간 |
 | 영어 보고서 | Abstract ~ Conclusion, 학술 수준 |
 | GitHub 정리 | README, 토픽, 데모 자료 (GIF/스크린샷) |
+
+---

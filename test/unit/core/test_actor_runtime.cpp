@@ -43,8 +43,8 @@ TEST(ActorRuntime, CreateWithRegistry){
     auto* a = actor.get();
     ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, &reg);
     reg.add(a);
-    EXPECT_EQ(reg.findByName("a").get(), a);
-    EXPECT_EQ(reg.findById(1).get(), a);
+    EXPECT_EQ(reg.findActorByName("a"), a);
+    EXPECT_EQ(reg.findActorById(1), a);
 }
 
 // Enqueue
@@ -124,7 +124,7 @@ TEST(ActorRuntime, DestructorRemovesFromRegistry){
     {
         ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, &reg);
         reg.add(ctx.actor());
-        EXPECT_TRUE(reg.findByName("a").valid());
+        EXPECT_TRUE(reg.findHandleByName("a").valid());
     }
-    EXPECT_FALSE(reg.findByName("a").valid());
+    EXPECT_FALSE(reg.findHandleByName("a").valid());
 }
