@@ -12,6 +12,8 @@
 #include "service/monitor/monitor_data.hpp"
 #include "service/device_manager/device_manager_messages.hpp"
 
+using CmdActorMessages = std::tuple<CmdRequest, PmuDataUpdate, WifiScanResult, WifiStatusResult, WifiConnectResult, WifiDisconnectResult>;
+
 
 CmdActor::CmdActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
 
@@ -49,40 +51,37 @@ int CmdActor::close(){
 
 void CmdActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    switch(msg.id()){
-        case MessageId::CmdRequest:{
-            const auto& m = msg.as<CmdRequest>();
-            auto response = dispatch(m.cmd);
-            if(pmuStatusPending_) pendingConn_ = m.conn;
-            sendMsg("ipc_server", CmdResponse{m.conn, std::move(response), !pmuStatusPending_});
-            break;
-        }
-        case MessageId::PmuDataUpdate:{
-            if(!pmuStatusPending_) break;
-            auto body = formatPmuStatus(msg.as<PmuDataUpdate>().data);
-            pmuStatusPending_ = false;
-            sendMsg("device_manager", PmuDataUnsubscribe{name()});
-            sendMsg("ipc_server", CmdResponse{pendingConn_, std::move(body), true});
-            break;
-        }
-        case MessageId::WifiScanResult:
-            lastScan_ = msg.as<WifiScanResult>();
-            break;
-        case MessageId::WifiStatusResult:
-            lastStatus_ = msg.as<WifiStatusResult>();
-            break;
-        case MessageId::WifiConnectResult:{
-            const auto& m = msg.as<WifiConnectResult>();
-            lastConnectResult_ = m.result ? "Connected successfully" : "Failed" + m.errorMsg;
-            break;
-        }
-        case MessageId::WifiDisconnectResult:{
-            const auto& m = msg.as<WifiDisconnectResult>();
-            lastDisconnectResult_ = m.result ? "Disconnected successfully" : "Failed to disconnect";
-            break;
-        }
-        default: break;
-    }
+    Actor::dispatch(*this, msg, CmdActorMessages{}); // CmdActor::dispatch(std::string) 이름 숨김 때문에 정규화
+}
+
+void CmdActor::handle(const CmdRequest& m){
+    auto response = dispatch(m.cmd);
+    if(pmuStatusPending_) pendingConn_ = m.conn;
+    sendMsg("ipc_server", CmdResponse{m.conn, std::move(response), !pmuStatusPending_});
+}
+
+void CmdActor::handle(const PmuDataUpdate& m){
+    if(!pmuStatusPending_) return;
+    auto body = formatPmuStatus(m.data);
+    pmuStatusPending_ = false;
+    sendMsg("device_manager", PmuDataUnsubscribe{name()});
+    sendMsg("ipc_server", CmdResponse{pendingConn_, std::move(body), true});
+}
+
+void CmdActor::handle(const WifiScanResult& m){
+    lastScan_ = m;
+}
+
+void CmdActor::handle(const WifiStatusResult& m){
+    lastStatus_ = m;
+}
+
+void CmdActor::handle(const WifiConnectResult& m){
+    lastConnectResult_ = m.result ? "Connected successfully" : "Failed" + m.errorMsg;
+}
+
+void CmdActor::handle(const WifiDisconnectResult& m){
+    lastDisconnectResult_ = m.result ? "Disconnected successfully" : "Failed to disconnect";
 }
 
 std::string CmdActor::dispatch(const std::string& cmd){

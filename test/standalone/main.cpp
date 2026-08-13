@@ -16,8 +16,9 @@ public:
     int open() override { return Ok; }
     int close() override { return Ok; }
     void handle(const Message& msg) override {
-        if(msg.id() == MessageId::SignalNotify) handled_.fetch_add(1, std::memory_order_relaxed);
+        dispatch(*this, msg, std::tuple<SignalNotify>{});
     }
+    void handle(const SignalNotify&){ handled_.fetch_add(1, std::memory_order_relaxed); }
     std::atomic<int> handled_{0};
 };
 

@@ -8,6 +8,8 @@
 #include "service/system_manager/system_manager_messages.hpp"
 #include "service/device_manager/device_manager_messages.hpp"
 
+using MonitorActorMessages = std::tuple<MonitorSubscribe, MonitorUnsubscribe, SysDataUpdate, PmuDataUpdate>;
+
 MonitorActor::MonitorActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
 
 int MonitorActor::open(){
@@ -36,28 +38,27 @@ int MonitorActor::close(){
 
 void MonitorActor::handle(const Message& msg){
     if(state_ < Opened) return;
-    switch(msg.id()){
-        case MessageId::MonitorSubscribe:{
-            const auto& m = msg.as<MonitorSubscribe>();
-            subscribers_.insert(m.subscriber);
-            if(!dataSubscribed_) subscribeToData(); // 첫 구독자 -> sys/pmu 구독 시작
-            break;
-        }
-        case MessageId::MonitorUnsubscribe:{
-            subscribers_.erase(msg.as<MonitorUnsubscribe>().subscriber);
-            if(subscribers_.empty() && dataSubscribed_) unsubscribeFromData(); // 마지막 -> 해제
-            break;
-        }
-        case MessageId::SysDataUpdate:
-            sysResCache_ = msg.as<SysDataUpdate>().data;
-            tryPublish();
-            break;
-        case MessageId::PmuDataUpdate:
-            pmuDataCache_ = msg.as<PmuDataUpdate>().data;
-            tryPublish();
-            break;
-        default: break;
-    }
+    dispatch(*this, msg, MonitorActorMessages{});
+}
+
+void MonitorActor::handle(const MonitorSubscribe& m){
+    subscribers_.insert(m.subscriber);
+    if(!dataSubscribed_) subscribeToData(); // 첫 구독자 -> sys/pmu 구독 시작
+}
+
+void MonitorActor::handle(const MonitorUnsubscribe& m){
+    subscribers_.erase(m.subscriber);
+    if(subscribers_.empty() && dataSubscribed_) unsubscribeFromData(); // 마지막 -> 해제
+}
+
+void MonitorActor::handle(const SysDataUpdate& m){
+    sysResCache_ = m.data;
+    tryPublish();
+}
+
+void MonitorActor::handle(const PmuDataUpdate& m){
+    pmuDataCache_ = m.data;
+    tryPublish();
 }
 
 void MonitorActor::collectActorInfo(std::vector<ActorInfo>& actors){

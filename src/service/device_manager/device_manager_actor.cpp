@@ -2,6 +2,8 @@
 #include "core/common/log/log.hpp"
 #include "core/common/util/return.hpp"
 
+using DeviceManagerActorMessages = std::tuple<PmuDataSubscribe, PmuDataUnsubscribe, PmuDataTick>;
+
 DeviceManagerActor::DeviceManagerActor(std::string name, uint64_t id, IPmu* pmu, int pollIntervalMs)
     : Actor(std::move(name), id), pmu_(pmu), pollIntervalMs_(pollIntervalMs){}
 
@@ -33,24 +35,21 @@ int DeviceManagerActor::close(){
 
 void DeviceManagerActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Device Manager is not opened"); return; }
-    switch(msg.id()){
-        case MessageId::PmuDataSubscribe:{
-            const auto& m = msg.as<PmuDataSubscribe>();
-            subscribers_.insert(m.subscriber);
-            pumpIfNeeded(); // 구독 즉시 최신 캐시 1회 발행
-            break;
-        }
-        case MessageId::PmuDataUnsubscribe:{
-            subscribers_.erase(msg.as<PmuDataUnsubscribe>().subscriber);
-            if(subscribers_.empty()) latestPmuData_ = {}; // stale 캐시 폐기
-            break;
-        }
-        case MessageId::PmuDataTick:
-            if(!subscribers_.empty()) pumpIfNeeded(); // 수요 없으면 vcgencmd 아예 안 돎
-            break;
-        default:
-            break;
-    }
+    dispatch(*this, msg, DeviceManagerActorMessages{});
+}
+
+void DeviceManagerActor::handle(const PmuDataSubscribe& m){
+    subscribers_.insert(m.subscriber);
+    pumpIfNeeded(); // 구독 즉시 최신 캐시 1회 발행
+}
+
+void DeviceManagerActor::handle(const PmuDataUnsubscribe& m){
+    subscribers_.erase(m.subscriber);
+    if(subscribers_.empty()) latestPmuData_ = {}; // stale 캐시 폐기
+}
+
+void DeviceManagerActor::handle(const PmuDataTick&){
+    if(!subscribers_.empty()) pumpIfNeeded(); // 수요 없으면 vcgencmd 아예 안 돎
 }
 
 void DeviceManagerActor::pumpIfNeeded(){

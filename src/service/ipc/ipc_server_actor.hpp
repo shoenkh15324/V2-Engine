@@ -2,6 +2,8 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
 #include "infra/transport/uds/uds_server.hpp"
+#include "service/ipc/ipc_messages.hpp"
+#include "service/cmd/cmd_messages.hpp"
 #include <unordered_set>
 
 #if V2_PLATFORM_LINUX
@@ -19,6 +21,9 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const IpcNewConnection& m);
+    void handle(const IpcDataReceived& m);
+    void handle(const CmdResponse& m);
 
 private:
     void subscribeListener();

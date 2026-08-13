@@ -85,6 +85,12 @@ void Metrics::recordAcquire(){
     dispatcher_.acquireCount.fetch_add(1, std::memory_order_relaxed);
 }
 
+void Metrics::recordDeadLetter(uint64_t actorId){
+    if(!enabled_) return;
+    if(actorId >= actors_.size()) return;
+    actors_[actorId]->deadLetters.fetch_add(1, std::memory_order_relaxed);
+}
+
 Metrics::Snapshot Metrics::snapshot(){
     Snapshot snap;
     snap.actors.reserve(actors_.size());

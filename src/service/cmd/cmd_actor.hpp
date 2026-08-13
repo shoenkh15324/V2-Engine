@@ -7,7 +7,9 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
 #include "infra/hal/pmu/pmu_data.hpp"
+#include "service/cmd/cmd_messages.hpp"
 #include "service/network_manager/wifi_messages.hpp"
+#include "service/device_manager/device_manager_messages.hpp"
 
 class CmdActor : public Actor{
 public:
@@ -22,6 +24,12 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const CmdRequest& m);
+    void handle(const PmuDataUpdate& m);
+    void handle(const WifiScanResult& m);
+    void handle(const WifiStatusResult& m);
+    void handle(const WifiConnectResult& m);
+    void handle(const WifiDisconnectResult& m);
 
 private:
     using Handler = std::function<std::string(const std::vector<std::string>&)>;

@@ -1,7 +1,8 @@
 #pragma once
+#include <string>
 #include <atomic>
 #include <cstdint>
-#include <string>
+#include <type_traits>
 #include <unordered_set>
 #include "core/actor_system/messages/message.hpp"
 
@@ -31,6 +32,20 @@ public:
     virtual int open() = 0;
     virtual int close() = 0;
     virtual void handle(const Message& msg) = 0;
+
+    template<class ActorT, typename Tuple>
+    void dispatch(ActorT& self, const Message& msg, Tuple){
+        constexpr bool hasAllHandlers = []<std::size_t... I>(std::index_sequence<I...>){
+            return (requires(ActorT& a, const std::tuple_element_t<I, Tuple>& m){
+                a.handle(m);
+            } && ...);
+        }(std::make_index_sequence<std::tuple_size_v<Tuple>>{});
+        static_assert(hasAllHandlers, "dispatch tuple: handle(T) no overload");
+        bool matched = msg.visit<Tuple>([&](const auto& m){
+            self.handle(m);
+        });
+        if(!matched) self.handleUnknown(msg);
+    }
     
     void sendMsg(const std::string& name, Message msg);
     void sendMsg(uint64_t id, Message msg);
@@ -75,7 +90,10 @@ public:
     IActorRuntime* runtime() const { return runtime_; }
 
 protected:
+    virtual void handleUnknown(const Message& msg);
+
     void setRuntime(IActorRuntime* r) { runtime_ = r; }
+
     std::atomic<ActorState> state_{Closed};
 
 private:

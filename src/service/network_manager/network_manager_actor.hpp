@@ -1,6 +1,9 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "wifi_handler.hpp"
+#include "service/tick/tick_messages.hpp"
+#include "service/network_manager/network_manager_messages.hpp"
+#include "service/network_manager/wifi_messages.hpp"
 #include <string>
 
 #if V2_PLATFORM_LINUX
@@ -19,6 +22,12 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const Tick& m);
+    void handle(const WifiScanRequest& m);
+    void handle(const WifiConnectRequest& m);
+    void handle(const WifiDisconnectRequest& m);
+    void handle(const WifiAutoReconnectRequest& m);
+    void handle(const NmStatusRequest& m);
 
 private:
     void reportStatus();

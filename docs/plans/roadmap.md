@@ -343,15 +343,18 @@ MemoryPool (Singleton)
 | 그레이셔널 드레인 ✅ | `ActorSystem::stop()` 시 미처리 메시지 처리 완료 후 중지 → 드레인 단계 추가 |
 | `Worker::stop()` 데드락 ✅ | 세마포어 해제 없이 `join()` 호출 시 데드락 가능성 점검 |
 
-### 4-3. 타입별 메시지 디스패치 🔜
+### 4-3. 타입별 메시지 디스패치 ✅
 
-> **문제**: `Message`가 단일 타입 — 모든 액터가 모든 메시지 타입을 받음, 런타임 `switch`로 식별
+> **문제**: `switch(msg.id())` + `msg.as<T>()`(무검증 `static_cast`)는 id와 저장 타입이 어긋나면 UB. 수신 계약이 없어 못 받는 타입이 액터별 `default` 분기에서 조용히 유실
+>
+> **방향**: type-erased 저장(64B SBO/MemoryPool)은 유지하고 `std::visit` 시맨틱만 재구현. **전역 카탈로그 대신 액터별 수신 튜플** 채택 — 수신 계약이 `dispatch` 호출 지점에 명시되고 `static_assert`가 튜플 ⊆ 핸들러를 컴파일 타임에 강제 (전역 카탈로그는 nlohmann/json 등 전체 메시지 헤더를 모든 액터 TU로 전파해 컴파일 타임 증가)
 
 | 작업 | 상세 |
 |------|------|
-| `typed_channel.hpp` | 액터별 수신 가능 타입을 컴파일 타임에 제한하는 타입 안전 채널 |
-| `handle()` 분리 | 기존 `handle(const Message&)` → `handle(const SpecificMsg&)` 오버로드로 변경 |
-| 데드 메시지 처리 | 미처리 타입 로깅 + 메트릭 (`dead_letter` 카운터), 미사용 타입 정리 |
+| `Message::visit<Tuple>` ✅ | tuple fold short-circuit으로 id 일치 시에만 `as<T>` → UB 구조적 제거 |
+| `Actor::dispatch` + `handleUnknown` ✅ | 수신 튜플 주입 + static_assert(튜플 ⊆ 핸들러, 핸들러 public 필수) + 데드 레터 기본 경로(로그 + `dead_letter` 카운터) |
+| 액터 순차 전환 ✅ | 9개 서비스 액터 + integration/standalone 테스트 액터 3개: `handle(const Message&)` 1줄 + `handle(const SpecificMsg&)` 오버로드. CmdActor는 `Actor::dispatch` 정규화 호출(이름 숨김), 기존 `default: break;`(조용한 유실) → 데드 레터 메트릭으로 개선 |
+| 유닛 테스트 ✅ | `test_message_typed_dispatch.cpp` — 타입 라우팅 / 튜플 밖 id → 데드 레터 / 핸들러 없는 타입 static_assert 거부 |
 
 ### 4-4. Work Stealing 🔜
 

@@ -28,8 +28,9 @@ public:
     }
 
     void handle(const Message& msg) override{
-        if(msg.id() == MessageId::Tick) tickCount++;
+        dispatch(*this, msg, std::tuple<Tick>{});
     }
+    void handle(const Tick&){ tickCount++; }
 
     int openCount = 0;
     int closeCount = 0;

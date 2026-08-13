@@ -8,6 +8,9 @@
 #include "core/common/config/platform_config.h"
 #include "infra/transport/uds/uds_server.hpp"
 #include "service/monitor/monitor_data.hpp"
+#include "service/monitor/monitor_messages.hpp"
+#include "service/system_manager/system_manager_messages.hpp"
+#include "service/device_manager/device_manager_messages.hpp"
 
 class MonitorActor : public Actor{
 public:
@@ -22,6 +25,10 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const MonitorSubscribe& m);
+    void handle(const MonitorUnsubscribe& m);
+    void handle(const SysDataUpdate& m);
+    void handle(const PmuDataUpdate& m);
 
 private:
     void collectActorInfo(std::vector<ActorInfo>& actors);

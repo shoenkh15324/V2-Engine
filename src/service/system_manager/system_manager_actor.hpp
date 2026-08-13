@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include "core/common/time/time.hpp"
 #include "core/actor_system/actor/actor.hpp"
+#include "core/actor_system/messages/core_messages.hpp"
 #include "infra/hal/sys/i_sys.hpp"
 #include "service/system_manager/system_manager_messages.hpp"
 
@@ -22,6 +23,10 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const SignalNotify& m);
+    void handle(const SysDataTick& m);
+    void handle(const SysDataSubscribe& m);
+    void handle(const SysDataUnsubscribe& m);
     static void onSignal(int signum, Callback cb);
 
 private:

@@ -21,6 +21,9 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const MonitorNewConnection& m);
+    void handle(const MonitorClientDisconnected& m);
+    void handle(const MonitorSnapshotUpdate& m);
 
 private:
     void subscribeListener();

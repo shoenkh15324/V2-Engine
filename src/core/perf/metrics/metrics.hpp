@@ -12,6 +12,7 @@ struct ActorMetrics{
     alignas(kCacheLine) std::atomic<uint64_t> dropped{0}; // Mailbox pool drop
     alignas(kCacheLine) std::atomic<uint64_t> handleTimeNs{0}; // Handle() accumulated time
     alignas(kCacheLine) std::atomic<uint64_t> batches{0}; // Num of run() calls
+    alignas(kCacheLine) std::atomic<uint64_t> deadLetters{0}; // Num of deadletters 
     alignas(kCacheLine) std::atomic<size_t> peakDepth{0}; // Max depth of mailbox
 
     struct Snapshot{
@@ -20,6 +21,7 @@ struct ActorMetrics{
         uint64_t dropped;
         uint64_t handleTimeNs;
         uint64_t batches;
+        uint64_t deadLetters;
         size_t peakDepth;
     };
 
@@ -30,6 +32,7 @@ struct ActorMetrics{
             dropped.load(std::memory_order_relaxed),
             handleTimeNs.load(std::memory_order_relaxed),
             batches.load(std::memory_order_relaxed),
+            deadLetters.load(std::memory_order_relaxed),
             peakDepth.load(std::memory_order_relaxed)
         };
     }
@@ -40,6 +43,7 @@ struct ActorMetrics{
         dropped.store(0, std::memory_order_relaxed);
         handleTimeNs.store(0, std::memory_order_relaxed);
         batches.store(0, std::memory_order_relaxed);
+        deadLetters.store(0, std::memory_order_relaxed);
         peakDepth.store(0, std::memory_order_relaxed);
     }
 };
@@ -125,6 +129,7 @@ public:
     void recordBatch(int workerId, size_t msgCount, uint64_t busyNs, uint64_t idleNs);
     void recordDispatch(bool deduped, size_t queueDepth);
     void recordAcquire();
+    void recordDeadLetter(uint64_t actorId);
 
     struct Snapshot{
         struct ActorSnap{

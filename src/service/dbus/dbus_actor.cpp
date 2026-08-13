@@ -6,6 +6,8 @@
 
 #if V2_PLATFORM_LINUX
 
+using DbusActorMessages = std::tuple<DbusRegisterMethod, DbusUnregisterMethod, DbusMethodCallResult, DbusProxyCallRequest, DbusSubscribeSignal>;
+
 DbusActor::DbusActor(std::string name, uint64_t id, std::string dbusName, std::string dbusObjectPath, std::string dbusInterfaceName)
     : Actor(std::move(name), id), busName_(std::move(dbusName)), objectPath_(std::move(dbusObjectPath)), interfaceName_(std::move(dbusInterfaceName)){
 }
@@ -57,25 +59,27 @@ int DbusActor::close(){
 
 void DbusActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    switch(msg.id()){
-    case MessageId::DbusRegisterMethod:
-        serverHandler_->handleRegisterMethod(msg.as<DbusRegisterMethod>());
-        break;
-    case MessageId::DbusUnregisterMethod:
-        serverHandler_->handleUnregisterMethod(msg.as<DbusUnregisterMethod>());
-        break;
-    case MessageId::DbusMethodCallResult:
-        serverHandler_->handleMethodCallResult(msg.as<DbusMethodCallResult>());
-        break;
-    case MessageId::DbusProxyCallRequest:
-        clientHandler_->handleProxyCallRequest(msg.as<DbusProxyCallRequest>());
-        break;
-    case MessageId::DbusSubscribeSignal:
-        clientHandler_->handleSubscribeSignal(msg.as<DbusSubscribeSignal>());
-        break;
-    default:
-        break;
-    }
+    dispatch(*this, msg, DbusActorMessages{});
+}
+
+void DbusActor::handle(const DbusRegisterMethod& m){
+    serverHandler_->handleRegisterMethod(m);
+}
+
+void DbusActor::handle(const DbusUnregisterMethod& m){
+    serverHandler_->handleUnregisterMethod(m);
+}
+
+void DbusActor::handle(const DbusMethodCallResult& m){
+    serverHandler_->handleMethodCallResult(m);
+}
+
+void DbusActor::handle(const DbusProxyCallRequest& m){
+    clientHandler_->handleProxyCallRequest(m);
+}
+
+void DbusActor::handle(const DbusSubscribeSignal& m){
+    clientHandler_->handleSubscribeSignal(m);
 }
 
 #endif // V2_PLATFORM_LINUX

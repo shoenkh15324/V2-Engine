@@ -7,6 +7,7 @@
 #include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
 #include "infra/platform/linux/signal_handler.hpp"
 
+using SystemManagerActorMessages = std::tuple<SignalNotify, SysDataTick, SysDataSubscribe, SysDataUnsubscribe>;
 
 SystemManagerActor::SystemManagerActor(std::string name, uint64_t id, ISys* sys, int pollIntervalMs) 
     : Actor(std::move(name), id), sys_(sys), pollIntervalMs_(pollIntervalMs){}
@@ -52,26 +53,25 @@ int SystemManagerActor::close(){
 
 void SystemManagerActor::handle(const Message& msg){
     if(state_ < Opened) return;
-    switch(msg.id()){
-        case MessageId::SignalNotify:
-            SignalHandler::instance().dispatch(msg.as<SignalNotify>().signum);
-            break;
-        case MessageId::SysDataTick:
-            if(!subscribers_.empty()) pumpIfNeeded(); // 수요 없으면 수집 자체 중단
-            break;
-        case MessageId::SysDataSubscribe:{
-            subscribers_.insert(msg.as<SysDataSubscribe>().subscriber);
-            pumpIfNeeded(); // 구독 즉시 1회 발행 (retained-latest)
-            break;
-        }
-        case MessageId::SysDataUnsubscribe:{
-            subscribers_.erase(msg.as<SysDataUnsubscribe>().subscriber);
-            if(subscribers_.empty()) latestSysRes_ = {};
-            break;
-        }
-        default:
-            break;
-    }
+    dispatch(*this, msg, SystemManagerActorMessages{});
+}
+
+void SystemManagerActor::handle(const SignalNotify& m){
+    SignalHandler::instance().dispatch(m.signum);
+}
+
+void SystemManagerActor::handle(const SysDataTick&){
+    if(!subscribers_.empty()) pumpIfNeeded(); // 수요 없으면 수집 자체 중단
+}
+
+void SystemManagerActor::handle(const SysDataSubscribe& m){
+    subscribers_.insert(m.subscriber);
+    pumpIfNeeded(); // 구독 즉시 1회 발행 (retained-latest)
+}
+
+void SystemManagerActor::handle(const SysDataUnsubscribe& m){
+    subscribers_.erase(m.subscriber);
+    if(subscribers_.empty()) latestSysRes_ = {};
 }
 
 void SystemManagerActor::onSignal(int signum, Callback cb){

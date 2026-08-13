@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+using MonitorBridgeActorMessages = std::tuple<MonitorNewConnection, MonitorClientDisconnected, MonitorSnapshotUpdate>;
+
 MonitorBridgeActor::MonitorBridgeActor(std::string name, uint64_t id, std::string socketPath, int backlog)
     : Actor(std::move(name), id), socketPath_(socketPath), backlog_(backlog){}
 
@@ -51,33 +53,28 @@ int MonitorBridgeActor::close(){
 
 void MonitorBridgeActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    switch(msg.id()){
-        case MessageId::MonitorNewConnection:{
-            const auto& m = msg.as<MonitorNewConnection>();
-            connections_.insert(m.conn);
-            if(connections_.size() == 1) sendMsg("monitor", MonitorSubscribe{"monitor_bridge"}); // 첫 소켓: 수요 시작
-            subscribeClient(m.conn);
-            break;
-        }
-        case MessageId::MonitorClientDisconnected:{
-            const auto& m = msg.as<MonitorClientDisconnected>();
-            if(connections_.erase(m.conn) == 0) return;
-            runtime()->eventLoop()->unsubscribe(m.conn);
-            server_.closeClient(m.conn);
-            if(connections_.empty()) sendMsg("monitor", MonitorUnsubscribe{"monitor_bridge"}); // 마지막 소켓: 수요 중단
-            break;
-        }
-        case MessageId::MonitorSnapshotUpdate:{
-            const auto& m = msg.as<MonitorSnapshotUpdate>();
-            auto snap = m.snapshot;
-            snap.clientCount = static_cast<int>(connections_.size());
-            std::string payload = nlohmann::json(snap).dump() + "\n"; // to_json은 monitor_data.hpp
-            for(ConnHandle conn : connections_){
-                server_.send(conn, payload.data(), payload.size());
-            }
-            break;
-        }
-        default: break;
+    dispatch(*this, msg, MonitorBridgeActorMessages{});
+}
+
+void MonitorBridgeActor::handle(const MonitorNewConnection& m){
+    connections_.insert(m.conn);
+    if(connections_.size() == 1) sendMsg("monitor", MonitorSubscribe{"monitor_bridge"}); // 첫 소켓: 수요 시작
+    subscribeClient(m.conn);
+}
+
+void MonitorBridgeActor::handle(const MonitorClientDisconnected& m){
+    if(connections_.erase(m.conn) == 0) return;
+    runtime()->eventLoop()->unsubscribe(m.conn);
+    server_.closeClient(m.conn);
+    if(connections_.empty()) sendMsg("monitor", MonitorUnsubscribe{"monitor_bridge"}); // 마지막 소켓: 수요 중단
+}
+
+void MonitorBridgeActor::handle(const MonitorSnapshotUpdate& m){
+    auto snap = m.snapshot;
+    snap.clientCount = static_cast<int>(connections_.size());
+    std::string payload = nlohmann::json(snap).dump() + "\n"; // to_json은 monitor_data.hpp
+    for(ConnHandle conn : connections_){
+        server_.send(conn, payload.data(), payload.size());
     }
 }
 

@@ -34,7 +34,9 @@ int TickActor::close(){
 
 void TickActor::handle(const Message& msg){
     if(state_ < Opened){ V2_LOG_ERROR("Actor is not opened"); return; }
-    if(msg.id() == MessageId::Tick){
-        //V2_LOG_INFO("Timer expired! / Time: {}", Time::nowMs());
-    }
+    dispatch(*this, msg, std::tuple<Tick>{});
+}
+
+void TickActor::handle(const Tick&){
+    //V2_LOG_INFO("Timer expired! / Time: {}", Time::nowMs());
 }

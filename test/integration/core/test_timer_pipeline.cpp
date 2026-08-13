@@ -18,8 +18,9 @@ public:
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }
     void handle(const Message& msg) override {
-        if(msg.id() == MessageId::Tick) tickCount++;
+        dispatch(*this, msg, std::tuple<Tick>{});
     }
+    void handle(const Tick&){ tickCount++; }
 
     std::atomic<int> tickCount{0};
 };

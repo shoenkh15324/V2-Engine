@@ -1,6 +1,7 @@
 #include "actor.hpp"
-#include "core/common/util/return.hpp"
 #include "core/common/log/log.hpp"
+#include "core/common/util/return.hpp"
+#include "core/perf/metrics/metrics.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
 #include "core/actor_system/runtime/actor_runtime/i_actor_runtime.hpp"
@@ -63,4 +64,9 @@ size_t Actor::mailboxCount() const {
 
 size_t Actor::mailboxCapacity() const {
     return runtime_ ? runtime_->mailboxCapacity() : 0;
+}
+
+void Actor::handleUnknown(const Message& msg){
+    V2_LOG_WARN("Actor {}: unhandled message id {}", name_.c_str(), (int)msg.id());
+    V2_METRICS()->recordDeadLetter(id());
 }

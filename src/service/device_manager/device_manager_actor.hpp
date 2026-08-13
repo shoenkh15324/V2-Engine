@@ -16,6 +16,9 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const PmuDataSubscribe& m);
+    void handle(const PmuDataUnsubscribe& m);
+    void handle(const PmuDataTick& m);
 
 private:
     void pumpIfNeeded();

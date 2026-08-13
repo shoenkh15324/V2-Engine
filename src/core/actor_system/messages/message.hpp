@@ -1,5 +1,6 @@
 #pragma once
 #include <new>
+#include <tuple>
 #include <cstdint>
 #include <cstddef>
 #include <utility>
@@ -93,6 +94,19 @@ public:
         result.mode_ = StorageMode::Pool;
         result.allocator_ = alloc;
         return result;
+    }
+
+    template<typename Tuple, typename Visitor>
+    bool visit(Visitor&& v) const {
+        return std::apply([&](auto... t){
+            auto tryVisit = [&](auto x){
+                using T = std::decay_t<decltype(x)>;
+                if(id_ != T::kId) return false;
+                v(as<T>());
+                return true;
+            };
+            return (tryVisit(t) || ...);
+        }, Tuple{});
     }
 
     template<typename T>

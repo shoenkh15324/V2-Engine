@@ -26,6 +26,11 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const DbusRegisterMethod& m);
+    void handle(const DbusUnregisterMethod& m);
+    void handle(const DbusMethodCallResult& m);
+    void handle(const DbusProxyCallRequest& m);
+    void handle(const DbusSubscribeSignal& m);
 
     sdbus::IConnection& connection(){ return *connection_; }
 

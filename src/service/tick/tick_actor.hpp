@@ -1,6 +1,7 @@
 #pragma once
 #include "core/actor_system/actor/actor.hpp"
 #include "core/common/config/platform_config.h"
+#include "service/tick/tick_messages.hpp"
 
 class TickActor : public Actor{
 public:
@@ -14,6 +15,7 @@ public:
     int open() override;
     int close() override;
     void handle(const Message& msg) override;
+    void handle(const Tick& m);
     
 private:
     uint64_t tickMs_;
