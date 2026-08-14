@@ -32,7 +32,11 @@ void clearActiveLogger(){ gLogger.store(nullptr, std::memory_order_relaxed); }
 
 Logger::~Logger(){
     std::lock_guard lock(mutex_);
-    if(logFile_) fclose(logFile_);
+    if(gLogger.load(std::memory_order_relaxed) == this) gLogger.store(nullptr, std::memory_order_relaxed);
+    if(logFile_){
+        fclose(logFile_);
+        logFile_ = nullptr;
+    }
 }
 
 void Logger::log(LogLevel level, std::string_view file, int line, std::string_view func, std::string_view msg){
