@@ -8,7 +8,7 @@
 
 class WorkDispatcher : public IWorkDispatcher {
 public:
-    explicit WorkDispatcher(int workerCount);
+    explicit WorkDispatcher(int workerCount, int highWatermark = (kQueueCapacity * 7 / 10));
     ~WorkDispatcher();
 
     WorkDispatcher(const WorkDispatcher&) = delete;
@@ -30,9 +30,14 @@ public:
     void onWorkDone() override;
 
 private:
+    static constexpr int kQueueCapacity = 1024;
+
     bool enqueueEntry(ActorRuntime* actorRuntime);
+    int pickWorker(uint64_t actorId);
+    int pickLeastLoaded(uint64_t actorId);
 
     int workerCount_ = 0;
+    int highWatermark_ = 0;
     std::atomic<bool> running_{false};
     std::atomic<bool> draining_{false};
     std::atomic<size_t> pendingWork_{0};

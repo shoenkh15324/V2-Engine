@@ -3,9 +3,9 @@
 #include "core/actor_system/actor/actor.hpp"
 #include "core/perf/metrics/metrics.hpp"
 
-WorkDispatcher::WorkDispatcher(int workerCount) : workerCount_(workerCount){
+WorkDispatcher::WorkDispatcher(int workerCount, int highWatermark) : workerCount_(workerCount), highWatermark_(highWatermark){
     for(int i = 0; i < workerCount; i++){
-        queues_.push_back(std::make_unique<LockFreeMpscQueue<ActorRuntime*>>(1024));
+        queues_.push_back(std::make_unique<LockFreeMpscQueue<ActorRuntime*>>(kQueueCapacity));
         semas_.push_back(std::make_unique<std::counting_semaphore<>>(0));
     }
 }
@@ -62,9 +62,31 @@ void WorkDispatcher::onWorkDone(){
 
 bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
     uint64_t actorId = actorRuntime->actor()->id();
-    int workerId = static_cast<int>(actorId % workerCount_);
+    int workerId = pickWorker(actorId);
     if(!queues_[workerId]->push(std::move(actorRuntime))) return false;
     V2_METRICS()->recordDispatch(false, queues_[workerId]->count());
     semas_[workerId]->release();
     return true;
+}
+
+int WorkDispatcher::pickWorker(uint64_t actorId){
+    int home = static_cast<int>(actorId % workerCount_);
+    if(workerCount_ <= 1) return home;
+    if(queues_[home]->count() < static_cast<size_t>(highWatermark_)) return home;
+    return pickLeastLoaded(actorId);
+}
+
+int WorkDispatcher::pickLeastLoaded(uint64_t actorId){
+    int best = static_cast<int>(actorId % workerCount_);
+    size_t bestCount = queues_[best]->count();
+    for(int i = 0; i < workerCount_; i++){
+        int w = static_cast<int>((best + i) % workerCount_);
+        size_t c = queues_[w]->count();
+        if(c < bestCount){
+            best = w;
+            bestCount = c;
+            if(bestCount == 0) break;
+        }
+    }
+    return best;
 }

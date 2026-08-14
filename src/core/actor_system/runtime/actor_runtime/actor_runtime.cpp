@@ -38,8 +38,12 @@ void ActorRuntime::enqueue(Message msg){
         return;
     }
     V2_METRICS()->recordEnqueue(actor_->id(), true, mailbox_->count());
-    if(workDispatcher_){
-        workDispatcher_->dispatch(this);
+    if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
+        if(workDispatcher_ && !workDispatcher_->dispatch(this)){
+            scheduled_.store(false, std::memory_order_seq_cst);
+        }
+    }else{
+        V2_METRICS()->recordDispatch(true, 0); // 이미 스케줄됨 → 중복 차단
     }
 }
 
@@ -49,9 +53,24 @@ int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
     auto r = processBatch(maxBatch);
     uint64_t gapNs = Time::toNs(Time::now() - startTime);
     V2_METRICS()->recordHandle(actor_->id(), r.processed, gapNs);
+
+    bool resumed = false;
     if(r.hasMoreWork && workDispatcher_){
-        if(hasMoreWork) *hasMoreWork = workDispatcher_->redispatch(this);
+        resumed = workDispatcher_->redispatch(this); // pendingWork_ 불변
     }
+    if(!resumed){
+        scheduled_.store(false, std::memory_order_seq_cst);
+        if(!stopped_.load(std::memory_order_relaxed) && !mailbox_->empty()){
+            if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
+                if(workDispatcher_ && !workDispatcher_->redispatch(this)){
+                    scheduled_.store(false, std::memory_order_seq_cst);
+                }else{
+                    resumed = true;
+                }
+            }
+        }
+    }
+    if(hasMoreWork) *hasMoreWork = resumed;
     return r.processed;
 }
 

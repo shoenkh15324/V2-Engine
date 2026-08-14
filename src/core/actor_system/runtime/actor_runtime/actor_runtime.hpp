@@ -4,6 +4,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_set>
+#include "core/common/container/cache_line.hpp"
 #include "core/actor_system/messages/message.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/runtime/mailbox/i_mailbox.hpp"
@@ -67,4 +68,5 @@ private:
     std::unordered_set<int> timerIds_;
     std::atomic<int> restartCount_{0};
     std::atomic<bool> stopped_{false};
+    alignas(kCacheLine) std::atomic<bool> scheduled_{false};
 };
