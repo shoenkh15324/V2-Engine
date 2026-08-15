@@ -91,6 +91,15 @@ void Metrics::recordDeadLetter(uint64_t actorId){
     actors_[actorId]->deadLetters.fetch_add(1, std::memory_order_relaxed);
 }
 
+void Metrics::recordSteal(bool success){
+    if(!enabled_) return;
+    if(success){
+        dispatcher_.stealCount.fetch_add(1, std::memory_order_relaxed);
+    }else{
+        dispatcher_.stealFailCount.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 Metrics::Snapshot Metrics::snapshot(){
     Snapshot snap;
     snap.actors.reserve(actors_.size());
@@ -121,4 +130,3 @@ void Metrics::updatePeak(std::atomic<size_t>& peak, size_t current){
         if(peak.compare_exchange_weak(p, current, std::memory_order_relaxed)) break;
     }
 }
-

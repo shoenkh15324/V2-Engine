@@ -1,13 +1,24 @@
 #include "work_dispatcher.hpp"
+#include <chrono>
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/perf/metrics/metrics.hpp"
 
-WorkDispatcher::WorkDispatcher(int workerCount, int highWatermark) : workerCount_(workerCount), highWatermark_(highWatermark){
+WorkDispatcher::WorkDispatcher(
+    int workerCount,
+    int highWatermark,
+    int busyStealIntervalUs,
+    int idleStealIntervalUs
+) : workerCount_(workerCount),
+    highWatermark_(highWatermark),
+    busyStealIntervalUs_(busyStealIntervalUs),
+    idleStealIntervalUs_(idleStealIntervalUs)    
+{
     for(int i = 0; i < workerCount; i++){
-        queues_.push_back(std::make_unique<LockFreeMpscQueue<ActorRuntime*>>(kQueueCapacity));
+        queues_.push_back(std::make_unique<LockFreeMpmcQueue<ActorRuntime*>>(kQueueCapacity));
         semas_.push_back(std::make_unique<std::counting_semaphore<>>(0));
     }
+    idleBackoff_.assign(workerCount, 0);
 }
 
 WorkDispatcher::~WorkDispatcher(){
@@ -37,11 +48,35 @@ bool WorkDispatcher::redispatch(ActorRuntime* actorRuntime){
 }
 
 ActorRuntime* WorkDispatcher::acquire(int workerId){
-    semas_[workerId]->acquire();
     ActorRuntime* ctx = nullptr;
-    queues_[workerId]->pop(ctx);
-    if(ctx) V2_METRICS()->recordAcquire();
-    return ctx;
+    if(tryAcquireOwn(workerId, ctx)){
+        idleBackoff_[workerId] = 0;
+        V2_METRICS()->recordAcquire();
+        return ctx;
+    }
+    while(running_.load(std::memory_order_relaxed) || draining_.load(std::memory_order_relaxed)){
+        if(draining_.load(std::memory_order_relaxed) && (pendingWork_.load(std::memory_order_relaxed) == 0)){
+            break;
+        }
+        auto interval = idleBackoff_[workerId] ? idleStealIntervalUs_ : busyStealIntervalUs_;
+        if(semas_[workerId]->try_acquire_for(std::chrono::microseconds(interval))){
+            if(tryAcquireOwn(workerId, ctx)){
+                idleBackoff_[workerId] = 0;
+                V2_METRICS()->recordAcquire();
+                return ctx;
+            }
+            continue;
+        }
+        if(trySteal(workerId, ctx)){
+            idleBackoff_[workerId] = 0;
+            V2_METRICS()->recordAcquire();
+            V2_METRICS()->recordSteal(true);
+            return ctx;
+        }
+        idleBackoff_[workerId] = 1;
+        V2_METRICS()->recordSteal(false);
+    }
+    return nullptr;
 }
 
 void WorkDispatcher::beginDrain(){
@@ -89,4 +124,20 @@ int WorkDispatcher::pickLeastLoaded(uint64_t actorId){
         }
     }
     return best;
+}
+
+bool WorkDispatcher::tryAcquireOwn(int workerId, ActorRuntime*& out){
+    return queues_[workerId]->pop(out);
+}
+
+bool WorkDispatcher::trySteal(int workerId, ActorRuntime*& out){
+    for(int i = 1; i < workerCount_; i++){
+        int  victim = (workerId + i) % workerCount_;
+        if(queues_[victim]->empty()) continue;
+        if(queues_[victim]->pop(out)){
+            semas_[victim]->try_acquire();
+            return true;
+        }
+    }
+    return false;
 }

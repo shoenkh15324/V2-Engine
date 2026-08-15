@@ -82,12 +82,16 @@ struct DispatcherMetrics{
     alignas(kCacheLine) std::atomic<uint64_t> dispatchCount{0}; // Num of dispatch() calls
     alignas(kCacheLine) std::atomic<uint64_t> acquireCount{0}; // Num of acquire() calls
     alignas(kCacheLine) std::atomic<uint64_t> deduplicated{0}; // Num of duplicate rejections
+    alignas(kCacheLine) std::atomic<uint64_t> stealCount{0}; // Num of steal count
+    alignas(kCacheLine) std::atomic<uint64_t> stealFailCount{0}; // Num of steal fail count
     alignas(kCacheLine) std::atomic<size_t> readyQueuePeak{0}; // Max depth of ready queue
 
     struct Snapshot{
         uint64_t dispatchCount;
         uint64_t acquireCount;
         uint64_t deduplicated;
+        uint64_t stealCount;
+        uint64_t stealFailCount;
         size_t readyQueuePeak;
     };
 
@@ -96,6 +100,8 @@ struct DispatcherMetrics{
             dispatchCount.load(std::memory_order_relaxed),
             acquireCount.load(std::memory_order_relaxed),
             deduplicated.load(std::memory_order_relaxed),
+            stealCount.load(std::memory_order_relaxed),
+            stealFailCount.load(std::memory_order_relaxed),
             readyQueuePeak.load(std::memory_order_relaxed)
         };
     }
@@ -104,6 +110,8 @@ struct DispatcherMetrics{
         dispatchCount.store(0, std::memory_order_relaxed);
         acquireCount.store(0, std::memory_order_relaxed);
         deduplicated.store(0, std::memory_order_relaxed);
+        stealCount.store(0, std::memory_order_relaxed);
+        stealFailCount.store(0, std::memory_order_relaxed);
         readyQueuePeak.store(0, std::memory_order_relaxed);
     }
 };
@@ -130,6 +138,7 @@ public:
     void recordDispatch(bool deduped, size_t queueDepth);
     void recordAcquire();
     void recordDeadLetter(uint64_t actorId);
+    void recordSteal(bool success);
 
     struct Snapshot{
         struct ActorSnap{

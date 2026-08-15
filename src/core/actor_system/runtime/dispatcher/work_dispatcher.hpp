@@ -2,13 +2,22 @@
 #include <atomic>
 #include <vector>
 #include <memory>
+#include <cstdint>
 #include <semaphore>
-#include "core/common/container/lock_free_mpsc_queue.hpp"
+#include "core/common/container/lock_free_mpmc_queue.hpp"
 #include "core/actor_system/runtime/dispatcher/i_work_dispatcher.hpp"
 
 class WorkDispatcher : public IWorkDispatcher {
 public:
-    explicit WorkDispatcher(int workerCount, int highWatermark = (kQueueCapacity * 7 / 10));
+    static constexpr int kQueueCapacity = 1024;
+    static constexpr int kHighWatermark = kQueueCapacity * 7 / 10;
+
+    explicit WorkDispatcher(
+        int workerCount,
+        int highWatermark = kHighWatermark,
+        int busyStealIntervalUs = 200,
+        int idleStealIntervalUs = 2000
+    );
     ~WorkDispatcher();
 
     WorkDispatcher(const WorkDispatcher&) = delete;
@@ -30,17 +39,20 @@ public:
     void onWorkDone() override;
 
 private:
-    static constexpr int kQueueCapacity = 1024;
-
     bool enqueueEntry(ActorRuntime* actorRuntime);
     int pickWorker(uint64_t actorId);
     int pickLeastLoaded(uint64_t actorId);
+    bool tryAcquireOwn(int workerId, ActorRuntime*& out);
+    bool trySteal(int workerId, ActorRuntime*& out);
 
     int workerCount_ = 0;
     int highWatermark_ = 0;
+    int busyStealIntervalUs_ = 0;
+    int idleStealIntervalUs_ = 0;
     std::atomic<bool> running_{false};
     std::atomic<bool> draining_{false};
     std::atomic<size_t> pendingWork_{0};
+    std::vector<std::uint8_t> idleBackoff_; // worker-confined
     std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
-    std::vector<std::unique_ptr<LockFreeMpscQueue<ActorRuntime*>>> queues_;
+    std::vector<std::unique_ptr<LockFreeMpmcQueue<ActorRuntime*>>> queues_;
 };

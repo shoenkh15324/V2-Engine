@@ -18,6 +18,8 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("worker_max_batch")) cfg.workerMaxBatch = j["worker_max_batch"];
         if(j.contains("mainloop_sleep_ms")) cfg.mainLoopSleepMs = j["mainloop_sleep_ms"];
         if(j.contains("mailbox_size")) cfg.mailboxSize = j["mailbox_size"];
+        if(j.contains("busy_steal_interval_us")) cfg.busyStealIntervalUs = j["busy_steal_interval_us"];
+        if(j.contains("idle_steal_interval_us")) cfg.idleStealIntervalUs = j["idle_steal_interval_us"];
 
         // Tick Actor
         if(j.contains("enable_tick")) cfg.enableTick = j["enable_tick"];

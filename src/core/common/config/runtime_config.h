@@ -10,6 +10,8 @@ struct RuntimeConfig{
     int workerMaxBatch = 32;
     int mainLoopSleepMs = 1000;
     int mailboxSize = 512;
+    int busyStealIntervalUs = 200;
+    int idleStealIntervalUs = 2000;
 
     // Tick
     bool enableTick = false;

@@ -345,6 +345,8 @@ std::string CmdActor::formatMetricsSnapshot(){
         << "Dispatches: " << d.dispatchCount
         << "    Acquires: " << d.acquireCount
         << "    Deduplicated: " << d.deduplicated
+        << "    Steals: " << d.stealCount
+        << "    StealFails: " << d.stealFailCount
         << "    QueuePeak: " << d.readyQueuePeak
         << "\n";
     return oss.str();

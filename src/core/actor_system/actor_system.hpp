@@ -4,8 +4,8 @@
 #include <vector>
 #include <string>
 #include <cstddef>
-#include <type_traits>
 #include <utility>
+#include <type_traits>
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/runtime/scheduler/i_scheduler.hpp"
 #include "core/actor_system/runtime/supervisor/i_supervisor.hpp"
@@ -22,6 +22,8 @@ class ActorRuntime;
 struct ActorSystemConfig {
     int numWorkers = 1;
     int maxBatch = 32;
+    int busyStealIntervalUs = 200;
+    int idleStealIntervalUs = 100000;
     size_t defaultMailboxSize = 512;
 };
 

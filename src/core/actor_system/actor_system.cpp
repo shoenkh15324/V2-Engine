@@ -104,7 +104,12 @@ std::unique_ptr<ActorSystem> createDefaultActorSystem(const ActorSystemConfig& c
     auto deadLetterQueue = std::make_unique<DeadLetterQueue>();
     auto supervisor = std::make_unique<Supervisor>(*deadLetterQueue);
     auto registry = std::make_unique<ActorRegistry>();
-    auto dispatcher = std::make_unique<WorkDispatcher>(config.numWorkers);
+    auto dispatcher = std::make_unique<WorkDispatcher>(
+        config.numWorkers,
+        WorkDispatcher::kHighWatermark,
+        config.busyStealIntervalUs,
+        config.idleStealIntervalUs
+    );
     auto scheduler = std::make_unique<Scheduler>(std::move(timer));
 
     ActorSystemDeps deps;
