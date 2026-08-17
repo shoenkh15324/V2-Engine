@@ -8,8 +8,8 @@
 Phase 1: 성능 병목 제거 ✅ 완료
 Phase 2: actor_system 리팩토링 ✅ 완료
 Phase 3: 메모리/전송 최적화 ✅ 완료
-Phase 4: 아키텍처 고도화 🔄 진행 중 
-Phase 5: 벤치마크 인프라 + 보고서 ⬜ 대기 
+Phase 4: 아키텍처 고도화 🔄 진행 중 (4-1~4-4 ✅, 4-5/4-6 🟡 발굴)
+Phase 5: 벤치마크 인프라 + 보고서 + CI/테스트 확대 ⬜ 대기 
 ```
 
 ---
@@ -268,7 +268,7 @@ MemoryPool (Singleton)
 | 작업 | 상세 |
 |------|------|
 | `Message` 클래스 도입 ✅ | SBO (≤64B) + MemoryPool fallback, placement new 저장 |
-| `MessageId` enum ✅ | 33개 메시지 타입 ID 정의 (`message_traits.hpp`) |
+| `MessageId` enum ✅ | 39개 메시지 타입 ID 정의 (`message_traits.hpp`) |
 | `switch + as<T>()` 패턴 ✅ | 각 Actor `handle()`에서 switch-on-id로 타입 복원 |
 | `LockFreeMpscQueue<Message>` ✅ | variant 제거, 72B 고정 슬롯으로 queue slot 크기 65% 감소 |
 
@@ -376,8 +376,9 @@ MemoryPool (Singleton)
 
 | 우선순위 | 기법 | 쉽게 설명 | 방식 | 기대 효과 | 특징/비용 |
 |---|---|---|---|---|---|
-| ★★★ | **로드 어웨어 디스패치** ✅ | 실행 토큰을 놓을 때부터 "가장 덜 바쁜 워커 앞에" 놓는다. 요리사 비유: 일이 쌓이기 전에 덜 바쁜 요리사에게 배정 | 사전(예방형) | 워커 균형 + **백프레셔(큐 1024 가득) 예방** — 70% 임계 초과 시 다른 워커로 라우팅 | 구현 완료 (`work_dispatcher.cpp` `pickWorker`/`pickLeastLoaded`, `highWatermark = kQueueCapacity*7/10`). 라우팅 시 큐 깊이 조회 비용. 액터 지역성 감소(홈 워커 이탈). 로드 측정은 큐 깊이 기반이라 in-flight 실행 토큰 미반영 — 추후 워커별 in-flight 카운터 개선안 |
-| ★★☆ | **워크 스틸링** | 유휴 워커가 바쁜 워커의 토큰을 가져간다. 요리사 비유: 내 앞엔 없는데 저 요리사 앞엔 쌓였다 → 가져와서 함 | 사후(반응형) | 유휴 워커 활용, 이미 생긴 불균형 치유 | 스틸 시도 오버헤드. 유휴 감지(`acquire()` 타임아웃) 필요. `work_stealing_queue.hpp` 신규 (Chase-Lev deque) |
+| ★★★ | **로드 어웨어 디스패치** ✅ | 실행 토큰을 놓을 때부터 "가장 덜 바쁜 워커 앞에" 놓는다. 요리사 비유: 일이 쌓이기 전에 덜 바쁜 요리사에게 배정 | 사전(예방형) | 워커 균형 + **백프레셔(큐 1024 가득) 예방** — 70% 임계 초과 시 다른 워커로 라우팅 | 구현 완료 (`work_dispatcher.cpp` `pickWorker`/`pickLeastLoaded`, `highWatermark = kQueueCapacity*7/10`). 라우팅 시 큐 깊이 조회 비용. 액터 지역성 감소(홈 워커 이탈). **로드 = 큐 깊이만 반영, in-flight 실행 토큰 미반영** → 아래 "워커 in-flight 카운터" 작업으로 보강 |
+| ★★☆ | **워크 스틸링** ✅ | 유휴 워커가 바쁜 워커의 토큰을 가져간다. 요리사 비유: 내 앞엔 없는데 저 요리사 앞엔 쌓였다 → 가져와서 함 | 사후(반응형) | 유휴 워커 활용, 이미 생긴 불균형 치유 | 구현 완료 (`0a49b63`). per-worker 큐를 `LockFreeMpmcQueue`로 전환 + 유휴 시 이웃 큐에서 steal. 세마포어는 순수 wake 신호로만 사용(`try_acquire_for`로 토큰 좌초 방지), `idleBackoff_`로 busy/idle 스틸 간격 적응. 배수 `busyStealIntervalUs=200` / `idleStealIntervalUs=2000` (config에서 조절 가능) |
+| ★★☆ | **워커 in-flight 카운터** | 실행 토큰을 획득했으나 처리 중인 액터 수를 워커별로 추적 → "큐 깊이 + in-flight"를 로드로 사용 | 사전(예방형) | 긴 `handle()` 실행 중인 워커에 과부하 방지 — 균형 정확도 ↑ | `acquired - completed` 카운터를 `WorkerMetrics`에 노출, `pickLeastLoaded`의 로드 계산에 합산. drain 중 스틸은 순서 재배열 가능 → 스킵 옵션 함께 검토 |
 
 > **선택**: 스틸링(사후)과 로드 어웨어(사전)는 **합성 가능** — 사전 예방 + 사후 치유. 단순성과 백프레셔 방지 목적이라면 **로드 어웨어를 먼저** 진행. (아래 "진행 순서 제안" 참고)
 
@@ -404,16 +405,113 @@ MemoryPool (Singleton)
 
 | 지표 | 용도 |
 |---|---|
-| `stealCount` / `stealFailCount` (신규) | 스틸 시도·성공·실패 관찰 |
+| `stealCount` / `stealFailCount` ✅ | 스틸 시도·성공·실패 관찰 — `DispatcherMetrics`에 추가, `v2_cli` metrics 출력(`Steals`/`StealFails`) |
 | 워커별 큐 깊이 / `busyTimeNs` / `idleTimeNs` | 워커 균형 관찰 |
+| `inFlightCount` (신규) | 워커 in-flight 카운터 — "큐 깊이 + in-flight" 로드 계산 검증 |
 | `deduplicated` ✅ | 단일 엔트리 가드 효과 — 가드 구현 후 실제 증가. 유닛 테스트로 검증(`dispatchCount - deduplicated` = 실제 dispatch 1회, 워커 가동 시 redispatch 기록 증가분 주의) |
 
 #### 5. 진행 순서 제안
 
 1. **단일 엔트리 가드** ✅ — `scheduled_` 구현 + `deduplicated` 메트릭 연동 (완료, 유닛 테스트 포함)
 2. **로드 어웨어 디스패치** ✅ — 예방형, 백프레셔 방지 (완료, `highWatermark` 임계 + `pickLeastLoaded` 라우팅)
-3. **워크 스틸링** — 치유형, 로드 어웨어와 합성 (`work_stealing_queue.hpp`) ⬜
-4. **발신자 배칭** — 핫 액터 push 경합 제거 (`bench_contention` 측정 후 확정) ⬜
+3. **워크 스틸링** ✅ — 치유형, 로드 어웨어와 합성 (완료, `LockFreeMpmcQueue` + `try_acquire_for` 유휴 감지 + 적응형 백오프)
+4. **워커 in-flight 카운터** 🟡 — 로드 정확도 보강 (큐 깊이 + in-flight 합산, `inFlightCount` 메트릭) — **4-5.3의 백프레셔 계약과 연계**
+5. **발신자 배칭** — 핫 액터 push 경합 제거 (`bench_contention` 측정 후 확정) ⬜
+
+---
+
+## 4-5. 정확성·신뢰성 하드닝 🟡
+
+> **목표**: 극단 시나리오(홍수·소비자 부재·느린 클라이언트)에서도 메시지/스케줄링/수명주기가 결정적(no hang, no lost wakeup, no silent drop)
+>
+> **메모**: 2026-08-17 코드베이스 전수 점검에서 발굴. 4-4(로드 밸런싱)가 동시성 경쟁을 겨냥했다면, 4-5는 **잘못된 경로가 조용히 실패하는 지점**을 겨냥한다.
+
+### 4-5.1 백프레셔 계약 (Lost-Wakeup 해소)
+
+> **문제**: 메일박스/디스패처 큐가 가득 차면 조용히 드롭되고, 드롭 시 실행 토큰이 소실되어 액터가 좌초될 수 있음
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| dispatch/redispatch 실패 시 좌초 해소 | `ActorRuntime::enqueue()`/`run()`에서 `dispatch()`/`redispatch()` 실패 시 `scheduled_`만 되돌리고 메시지는 메일박스에 남아 **재스케줄 경로 없음** (`actor_runtime.cpp:42-44,61-72`). 전역 오버플로 큐 또는 워커 스윕(pending 플래그)으로 재스케줄 보장 | ⬜ |
+| 메일박스 드롭 시 발신자 통지 | `mailbox_->push` 실패 시 `dropped` 카운터만 증가. NACK/dead-letter 라우팅으로 발신자(또는 감시자)에게 통지하는 옵션 | ⬜ |
+| 드롭·좌초 유닛 테스트 | 홍수(> 큐 용량) 시 좌초 없음, 드롭 카운터·재스케줄 보장 검증 | ⬜ |
+
+### 4-5.2 Supervision 후속
+
+> **문제**: 예외 격리는 완료됐지만 복구·관측 경로가 불완전 — dead-letter는 쓰기만, 재시작은 무제한 즉시, 전달 불가 메시지는 조용히 소멸
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| Dead-letter 소비자/관측 | `DeadLetterQueue`(cap 128)는 push만 하고 소비자 없음 (`dead_letter_queue.hpp:6`). 실패 메시지 관측/재시도/로깅 경로 추가 + `deadLetters` 메트릭을 supervisor push와 연동 (`supervisor.cpp:56-66`) | ⬜ |
+| 재시작 지연·백오프 | `performRestart`가 즉시 close→open (`actor_runtime.cpp:134-140`). 영구 실패 액터가 배치마다 재시작 → 지수 백오프 + 서킷브레이커 옵션 | ⬜ |
+| 전달 불가 sendMsg → dead-letter | 대상 액터 부재/만료 핸들로 `sendMsg`/`sendMsgAfter`/`ActorHandle::send`가 조용히 소멸 (`actor.cpp:13-39`, `actor_handle.cpp:23-28`) → dead-letter 라우팅 옵션 | ⬜ |
+| OneForAll 예산·드레인 정합 | OneForAll 브로드캐스트 시 비실패 액터도 restart budget 소진 없이 재시작 (`supervisor.cpp:86-89`), 실패 액터만 메일박스 드레인 (`actor_runtime.cpp:89-97`) → 시맨틱 통일 | ⬜ |
+
+### 4-5.3 비동기 요청 신뢰성 (CLI hang 해소)
+
+> **문제**: 비동기 응답 요청이 타임아웃/conn 식별 없이 단일 필드로 추적 → 소비자 부재·연속 요청 시 hang·응답 유실
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| `pmu status` 행/hang 수정 | `pmuStatusPending_` 단일 bool + `pendingConn_` 단일 필드 (`cmd_actor.cpp:167-169`). device_manager 미동작 시 CLI 무한 대기, conn 2개째 요청 시 첫 클라이언트 응답 유실 → **conn 키 pending 요청 맵 + `sendMsgAfter` 타임아웃/취소** | ⬜ |
+| `v2_cli` 수신 타임아웃 | `cli_app.cpp:275-279` recv 루프에 타임아웃 없음 → 데몬 무응답 시 영구 대기. 커넥트/읽기 타임아웃 + 재시도 | ⬜ |
+
+### 4-5.4 논블로킹 전송 (느린 클라이언트 격리)
+
+> **문제**: UDS가 블로킹 `::send` 반복 루프 → 느린/정지 클라이언트가 워커 전체를 정지
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| 비차단 소켓 + write 큐 | `UdsServer::send`/`UdsClient::send` 루프 (`uds_server.cpp:65-79`) → `O_NONBLOCK` + conn별 버퍼 + EPOLLOUT 구동 flush. 워커 스레드가 `::send`에서 블록 금지 | ⬜ |
+| `IEventLoop::subscribe` 이벤트 마스크 | `EPOLLIN` 하드코딩 (`event_loop_epoll.cpp:80`), EPOLLOUT/ET/ONESHOT 미사용 → 마스크 파라미터 추가 | ⬜ |
+| 전송/워커 격리 테스트 | 느린 소비자 상태에서 나머지 액터 처리량 보존 검증 (integration) | ⬜ |
+
+### 4-5.5 Timer·MemoryPool 후속
+
+> **문제**: 핵심 성능 컴포넌트의 정확성/경계 케이스 결함
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| 반복 타이머 드리프트 재앵커 | `expiry += interval`이 원점 기준 (`timer_base.cpp:106-108`) → 콜백 지연 시 드리프트. `Clock::now()` + interval로 재앵커 + 드리프트 테스트 | ⬜ |
+| `cleanupTimerCtxs` O(N) 제거 | `addTimer`마다 `timerCtxs_` 전체 스캔 (`scheduler.cpp:26,41-49`). 지연 GC/오래된 ctx만 정리로 | ⬜ |
+| repeating timer clone 비용 | fire마다 `msg.clone()` 힙 할당 (`scheduler.cpp:56`) → 재사용/재배치; non-copyable 메시지가 조용히 빈 메시지 전송 (`message.hpp:81,89`) → 실패 명시화 | ⬜ |
+| MemoryPool `kMaxPools` OOB | `poolId_` 무제한 증가 → `assert`(release에서 제거)만 존재, 17번째 풀 시 OOB (`memory_pool.hpp:52,76,95`) → ID bound/가드 + release 검증 | ⬜ |
+| poison 정책 완성 | deallocate만 0xCD fill (`memory_pool.hpp:21-26`) → allocate fill + magic 기반 이중 해제 감지 | ⬜ |
+| release dealloc size 검증 | `returnBatch` assert (`central_cache.hpp:77,82`) → 잘못된 size/pool 포인터 반환 시 release에서 슬랩 손상. size class 인코딩/검증 추가 | ⬜ |
+
+---
+
+## 4-6. 서비스/구독/설정 정리 🟡
+
+> **목표**: 242a139(데이터 소유자 액터 + pub/sub)의 잔여 결함 정리 + 설정/백엔드 실제 동작과 문서·코드 일치
+
+### 4-6.1 구독 생명주기 + 일반 pub/sub
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| `close()` 시 구독자 정리 | `SystemManagerActor::close()`/`DeviceManagerActor::close()`가 `subscribers_` 미정리 (`system_manager_actor.cpp:40-52`, `device_manager_actor.cpp:25-34`) → 재시작 시 고아 구독자 제거 | ⬜ |
+| 죽은 구독자 감지 | 구독자 액터 비활성/재시작 시 데이터 소유자가 계속 publish → 구독자 상태 확인/자동 탈퇴 | ⬜ |
+| 일반 pub/sub 추출 | SysData/PmuData/Monitor가 각각 Tick/Subscribe/Unsubscribe/Update 4메시지군을 중복 정의 (`system_manager_messages.hpp`, `device_manager_messages.hpp`, `monitor_messages.hpp`) → 공용 템플릿/토픽 기반 패턴으로 추출, 신규 데이터 소유자(i2c/dbus)가 재사용 | ⬜ |
+| 스냅샷 중복 빌드 | `MonitorActor::tryPublish`가 Sys/Pmu 업데이트마다 풀 스냅샷 + 레지스트리 전체 순회 (`monitor_actor.cpp:54-77`) → debounce/데이터 버전(세대) 카운터 | ⬜ |
+
+### 4-6.2 비활성 기능 정리 (wifi / PMU 백엔드)
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| wifi 명령 dead-end 해소 | `network_manager`는 `enable_dbus` 필수 (`main_app.cpp:121-125`) + 결과가 CLI로 미도달 + `NmStatusRequest` 무전송 (`cmd_actor.cpp:189-219`) → async 결과 conn 라우팅 또는 명시적 오류 게이팅. `wifi *`에 대한 README "silently dropped" 문구와 함께 정리 | ⬜ |
+| 미사용 메시지 정리 | `DbusRegisterResult`/`DbusIncomingMethodCall`/`DbusProxyCallResult`/`DbusSignalEvent`/`NmStatusRequest` 미생산·미사용 (`message_traits.hpp:28-37`), `TickActor::handle(Tick)` no-op (`tick_actor.cpp:40-41`) → 오디트/제거 | ⬜ |
+| PMU 백엔드 런타임 선택 | `__aarch64__` 컴파일타임 고정 (`main_app.cpp:93-102`) → 비-RPi aarch64에서 vcgencmd 9회 스폰 실패. 보드 탐지(`/proc/device-tree/model`)/vcgencmd 존재 검사/우아한 fallback | ⬜ |
+| PMU 파서 하드닝 | `std::stof/stoull` 파서가 vcgencmd 이상 출력 시 throw → 액터 핸들러 예외 → supervisor 실패 (`pmu_rsp5.cpp:70-113`). try/catch + 채널별 오류 | ⬜ |
+
+### 4-6.3 설정/코드 정합
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| `enable_pmu` 죽은 키 처리 | config에만 존재, `RuntimeConfig`/로더 미파싱 (`config/v2_main.json:9`) → 백엔드 선택에 연결 또는 키 제거 | ⬜ |
+| 앱별 설정 트리밍 | `v2_cli.json`의 `worker_count`/`mailbox_size`/`epoll_max_events` 등 미사용 키, 스케줄러 튜닝 키(`busy_steal_interval_us` 등)가 JSON에 미기재 → 실제 소비 키만 문서화 | ⬜ |
+| 설정 검증 | `loadFromFile`가 `catch(...)`로 전부 삼킴 (`json_config_loader.cpp:63`) → 스키마 검증/미지 키 경고/타입 오류 표면화 | ⬜ |
+| 데이터 소유자별 poll 간격 분리 | `monitorPollIntervalMs`를 sys/pmu 공유 (`main_app.cpp:111,113`) → `sys_poll_interval_ms`/`pmu_poll_interval_ms` 분리 | ⬜ |
+| 액터 이름 상수화 | 하드코딩 문자열 액터명(`"system_manager"` 등) 10+ 사이트 (`main_app.cpp:111-124`, `cmd_actor.cpp`) → 상수/핸들로 오타 시 컴파일 타임 실패 | ⬜ |
 
 ---
 
@@ -438,15 +536,58 @@ MemoryPool (Singleton)
 ### 커스텀 벤치마크 프레임워크 강화
 
 > **목표**: Google Benchmark 수준의 데이터 신뢰성 확보
+>
+> **현황 점검 (2026-08-17)**: 워밍업/이상치/통계(일부)/cpupower/이력/단일 출력 전부 미구현 — `IBenchmark`는 `name/description/run`만 (`bench/i_benchmark.hpp:8-17`), P50/P95/P99은 latency/scheduler에만, stddev 전무
 
-| 작업 | 상세 |
-|------|------|
-| 자동 워밍업 | `IBenchmark::warmupIterations()` 추가, 기본 100회 |
-| 이상치 탐지 | 결과에서 이상값 자동 제거 (IQR 방식) |
-| 통계 분석 | 평균, 중앙값, P50, P95, P99, 표준편차 |
-| CPU 클럭 안내 | 실행 전 `cpupower frequency-set -g performance` 안내 |
-| 이력 관리 | 이전 결과와 비교하는 `benchmark_history.json` |
-| 단일 출력 형식 | 모든 벤치마크가 동일한 JSON/마크다운 출력 생성 |
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| 자동 워밍업 | `IBenchmark::warmupIterations()` 추가, 기본 100회 (현재 CLI arg 기본 0) | ⬜ |
+| 이상치 탐지 | 결과에서 이상값 자동 제거 (IQR 방식) | ⬜ |
+| 통계 분석 | 평균, 중앙값, P50, P95, P99, 표준편차 — stddev 전 벤치 확장 | ⬜ |
+| CPU 클럭 안내 | 실행 전 `cpupower frequency-set -g performance` 안내 | ⬜ |
+| 이력 관리 | 이전 결과와 비교하는 `benchmark_history.json` | ⬜ |
+| 단일 출력 형식 | 모든 벤치마크가 동일한 JSON/마크다운 출력 생성 (현재 텍스트 전용) | ⬜ |
+
+### 워크스틸링 반영 재측정
+
+> **문제**: `docs/benchmark/*` 수치가 로드 어웨어/워크 스틸링(2026-08-15) 이전 기준 — "single-worker optimal", contention 분석 등 재검증 필요
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| 6개 벤치 재실행 | `throughput`/`latency`/`contention`/`scaling`/`backpressure`/`scheduler` — 워커 1→64 스위프 포함 | ⬜ |
+| 수치·결론 갱신 | 다중 워커에서도 균형 유지되는지 확인, 문서 수치/결론 갱신 | ⬜ |
+| 백프레셔 문서 재작성 | `backpressure.md`가 구 `MutexMailbox` 구현 스니펫 보유 (`backpressure.md:229-241`) → lock-free 기반으로 재작성 | ⬜ |
+
+### 테스트 커버리지 확대
+
+> **문제**: 143개 테스트 전부 core 전용 — service/transport/config/CLI 레이어 테스트 0건
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| 서비스 레이어 테스트 | MonitorActor pub/sub(구독→수집→발행, 마지막 구독자 해제), CmdActor async pmu, SystemManager/DeviceManager, MonitorBridgeActor | ⬜ |
+| 전송 테스트 | `UdsServer`/`UdsClient` — 연결/송수신/EINTR/재연결 | ⬜ |
+| 설정 테스트 | `JsonConfigLoader`/`RuntimeConfig::loadFromFile` — 키 파싱/타입 오류/미지 키 | ⬜ |
+| CLI·Logger 테스트 | `CliApp` 서브커맨드 파싱, 로그 버퍼 RAII/레벨 필터링 | ⬜ |
+| EventLoopEpoll 심화 | 크로스 스레드 구독(pending ops 큐), timerfd, signal-pipe 경로 | ⬜ |
+
+### CI 파이프라인
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| GitHub Actions 워크플로 | push/PR 시 빌드(Release+Debug) + `ctest` + `v2_core_smoke` + 벤치 smoke | ⬜ |
+| 캐시/린트 | ccache 캐시, `-Wall -Wextra -Wpedantic` 경고 제로 게이트 | ⬜ |
+
+### 설치/배포 하드닝
+
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| non-root 실행 | systemd `User=`/샌드박스(`ProtectSystem`, `NoNewPrivileges` 등) (`install.sh:155-176`) | ⬜ |
+| 로그 로테이션 | logrotate 규칙 배포 (현재 `log/v2_main.log` 무한 증가) | ⬜ |
+| `/etc/v2` 설정 배포 | `V2_CONFIG_DIR`가 repo 소스 참조 (`app.cmake:17,33,55`) → 설치본은 `/etc/v2` 참조(fallback 포함) | ⬜ |
+| 소켓 권한 | 모니터/IPC 소켓 0777 (`monitor_bridge_actor.cpp:34`, `ipc_server_actor.cpp:75`) → 서비스 유저 전용 + `SO_PEERCRED`/uid 검사 | ⬜ |
+| uninstall 청소 | `/tmp` 소켓/로그/`build/` 제거 + `--purge` 옵션 (`uninstall.sh:1-27`) | ⬜ |
+| D-Bus 정책 게이팅 | D-Bus 기본 비활성 상태에서도 정책 설치·재로드 (`install.sh:119-141`) → `enable_dbus`에 연동 | ⬜ |
+| CPack 정리 | `CMakeLists.txt:92-94` 주석 처리 → 활성화 또는 제거 + 스테일 빌드 산출물 정리 | ⬜ |
 
 ### 학술 보고서
 
