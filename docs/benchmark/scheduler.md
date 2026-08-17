@@ -46,7 +46,7 @@
 | OS | Linux (WSL Ubuntu-22.04) |
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark scheduler` |
+| 도구 | `./build/v2_bench_cli scheduler` |
 | 측정 방식 | 타이머 기반 (epoll, busy-wait 아님) |
 
 ## 실험 결과
@@ -233,5 +233,5 @@ timerfd는 커널 레벨에서 동작합니다:
 
 ## 참고 문헌
 
-- 소스: `src/core/perf/benchmark/scheduler_bench.cpp`
-- 실행: `./build/v2_cli benchmark scheduler [options]`
+- 소스: `bench/bench_scheduler.cpp`
+- 실행: `./build/v2_bench_cli scheduler [options]`

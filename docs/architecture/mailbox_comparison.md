@@ -1,5 +1,7 @@
 # Mailbox Selection: Mutex vs LockFree
 
+> **📌 아카이브 문서**: MutexMailbox는 코드베이스에서 제거되었습니다 (Phase 1 완료 후 현재 메일박스는 `LockFreeMpscQueue` 단일 구현, `MailboxType::Mutex` 옵션 미존재). 아래 표/벤치 수치는 역사적 기록이며 실행 경로를 반영하지 않습니다.
+
 V2-Engine의 메일박스 구현체 선택에 대한 아키텍처 결정 문서입니다.
 
 ## Decision

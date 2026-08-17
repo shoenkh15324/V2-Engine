@@ -44,7 +44,7 @@
 | OS | Linux (WSL Ubuntu-22.04) |
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark latency` |
+| 도구 | `./build/v2_bench_cli latency` |
 | 측정 방식 | Busy-wait (no sleep, 30초 타임아웃) |
 
 ## 실험 결과
@@ -225,6 +225,6 @@ P99 아웃라이어는 다음에서 발생:
 
 ## 참고 문헌
 
-- 소스: `src/core/perf/benchmark/mailbox_bench.cpp`
-- 실행: `./build/v2_cli benchmark latency [options]`
+- 소스: `bench/bench_latency.cpp`
+- 실행: `./build/v2_bench_cli latency [options]`
 - 아키텍처: [메일박스 선택](../architecture/mailbox_comparison.md)

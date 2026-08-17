@@ -47,7 +47,7 @@
 | OS | Linux (WSL Ubuntu-22.04) |
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark backpressure` |
+| 도구 | `./build/v2_bench_cli backpressure` |
 | 측정 방식 | Busy-wait (no sleep, 30초 타임아웃) |
 
 ## 실험 결과
@@ -224,27 +224,36 @@
 
 ### 백프레셔 구현
 
-V2-Engine은 메일박스 가득 참 시 **조용히 드롭**합니다:
+V2-Engine은 메일박스 가득 참 시 **조용히 드롭**합니다 (Vyukov MPSC):
 
 ```cpp
-// Mailbox::push
-template <typename U>
-bool push(U&& msg){
-    std::lock_guard<std::mutex> lock(mutex_);
-    if(count_ == capacity_){
-        return false;              // 조용히 드롭
+// LockFreeMpscQueue::push (MPSC, slot-based)
+bool push(T&& msg) noexcept {
+    size_t pos = tail_.value.load(std::memory_order_relaxed);
+    for(;;){
+        Slot& slot = slots_[pos % capacity_];
+        size_t seq = slot.sequence.load(std::memory_order_acquire);
+        auto diff = static_cast<SignedSize>(seq) - static_cast<SignedSize>(pos);
+        if(diff == 0){
+            if(tail_.value.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed, std::memory_order_relaxed)){
+                ::new (static_cast<void*>(slot.storage)) T(std::move(msg));
+                slot.sequence.store(pos + 1, std::memory_order_release);
+                return true;
+            }
+        }else if(diff < 0){
+            return false;              // 조용히 드롭 (가득 참)
+        }else{
+            pos = tail_.value.load(std::memory_order_relaxed);
+        }
     }
-    buffer_[tail_] = std::forward<U>(msg);
-    tail_ = (tail_ + 1) % capacity_;
-    ++count_;
-    return true;
 }
 ```
 
 **핵심 특징:**
 - **조용히 드롭**: `sendMsg()`가 `void` 반환 — 발신자가 드롭 감지 불가
-- **조건**: `count_ == capacity_` (가득 참만, 하이워터 마크 없음)
+- **조건**: 큐가 가득 찼을 때만 (`diff < 0`), 하이워터 마크 없음
 - **메트릭만**: `Metrics::recordEnqueue()`가 드롭 수 추적
+- **스케줄러 경로**: 메일박스가 드롭 없이 push되더라도 디스패처 큐가 가득 차면 `dispatch()`가 실패하고 실행 토큰이 좌초될 수 있음 → [로드맵 4-5.1 백프레셔 계약](../plans/roadmap.md#4-51-백프레셔-계약-lost-wakeup-해소) 참조
 
 ### 드레인 메커니즘
 
@@ -323,5 +332,5 @@ void Worker::runLoop(){
 
 ## 참고 문헌
 
-- 소스: `src/core/perf/benchmark/bench_backpressure.cpp`
-- 실행: `./build/v2_cli benchmark backpressure [options]`
+- 소스: `bench/bench_backpressure.cpp`
+- 실행: `./build/v2_bench_cli backpressure [options]`

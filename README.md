@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B-20-blue.svg" alt="c++20">
   <img src="https://img.shields.io/badge/platform-linux-lightgrey.svg" alt="platform">
-  <img src="https://img.shields.io/badge/version-0.12.0-orange.svg" alt="version">
+  <img src="https://img.shields.io/badge/version-0.13.0-orange.svg" alt="version">
   <img src="https://img.shields.io/badge/cmake-3.14+-brightgreen.svg" alt="cmake">
 </p>
 
@@ -38,7 +38,7 @@
 
 ## Overview
 
-V² Engine is a C++20 actor-model runtime designed for long-running system daemons on Linux. It implements an efficient actor system with lock-free message passing, a semaphore-scheduled worker pool, an epoll-based event loop, and a TCMalloc-inspired memory allocator. The system includes service-layer actors for CLI IPC, system monitoring, D-Bus integration, Wi-Fi management, and hardware device management, delivering four executables: a daemon (`v2_main`), a CLI client (`v2_cli`), a TUI monitor (`v2_tui`), and a standalone benchmark CLI (`v2_bench_cli`). D-Bus, Wi-Fi, and device management are compiled but **disabled by default** — re-enable via `config/v2_main.json`. The core (`v2_core`) is a dependency-free C++20 subproject buildable and runnable on its own.
+V² Engine is a C++20 actor-model runtime designed for long-running system daemons on Linux. It implements an efficient actor system with lock-free message passing, a semaphore-scheduled worker pool, an epoll-based event loop, and a TCMalloc-inspired memory allocator. The system includes service-layer actors for CLI IPC, system monitoring, D-Bus integration, Wi-Fi management, and hardware device management, delivering four executables: a daemon (`v2_main`), a CLI client (`v2_cli`), a TUI monitor (`v2_tui`), and a standalone benchmark CLI (`v2_bench_cli`). D-Bus and Wi-Fi management are compiled but **disabled by default** — re-enable via `config/v2_main.json`. The core (`v2_core`) is a dependency-free C++20 subproject buildable and runnable on its own.
 
 **Core design principles:**
 
@@ -53,18 +53,18 @@ V² Engine is a C++20 actor-model runtime designed for long-running system daemo
 
 | Metric             | Value                                             |
 | ------------------ | ------------------------------------------------- |
-| Development period | 2026-05-25 → 2026-08-08 (75 days, ~2.5 months)    |
-| Commits            | 307 (across 46 active days)                       |
-| Total LOC          | ~12,334 (184 files)                               |
-| Source LOC         | ~8,791 (src/)                                     |
-| Core LOC           | ~3,662 (src/core/)                                |
-| Service LOC        | ~2,382 (src/service/)                             |
-| Infra LOC          | ~1,263 (src/infra/)                               |
-| App LOC            | ~1,484 (src/app/)                                 |
+| Development period | 2026-05-25 → 2026-08-15 (82 days, ~2.7 months)    |
+| Commits            | 320 (across 52 active days)                       |
+| Total LOC          | ~13,297 (187 files)                               |
+| Source LOC         | ~9,386 (src/)                                     |
+| Core LOC           | ~3,994 (src/core/)                                |
+| Service LOC        | ~2,600 (src/service/)                             |
+| Infra LOC          | ~1,299 (src/infra/)                               |
+| App LOC            | ~1,493 (src/app/)                                 |
 | Bench LOC          | ~1,328 (bench/)                                   |
-| Test LOC           | ~2,215 (test/)                                    |
+| Test LOC           | ~2,583 (test/)                                    |
 | Executables        | 4 (`v2_main`, `v2_cli`, `v2_tui`, `v2_bench_cli`) |
-| Test suite         | 132 tests (`ctest`)                               |
+| Test suite         | 143 tests (`ctest`)                               |
 
 ```bash
 # Reproduce LOC counts
@@ -135,7 +135,7 @@ All inter-actor communication is **asynchronous and non-blocking** for the sende
 | Thread     | Count            | Role                                                                                        |
 | ---------- | ---------------- | ------------------------------------------------------------------------------------------- |
 | Event Loop | 1                | `epoll_wait`, I/O dispatch, timerfd management                                              |
-| Worker     | N (configurable) | `semaphore::acquire` → actor `run(batch)` loop                                              |
+| Worker     | N (configurable) | `semaphore::try_acquire_for` → own-queue pop → steal → actor `run(batch)` loop |
 | Timer      | 0–1              | Portable core `Timer` (thread + semaphore); infra `LinuxTimer` (timerfd) overrides on Linux |
 
 On Linux the composition root injects `EventLoopEpoll` + `LinuxTimer` together ("epoll injection = Linux detection"). Core defaults — a blocking mock loop and the portable thread-based `Timer` — keep `v2_core` standalone-buildable with messaging and timers working.
@@ -208,7 +208,7 @@ void handle(const Message& msg) override {
 
 - `sizeof(T) ≤ 64` and `alignof(T) ≤ alignof(max_align_t)` → stored **inline** (zero heap)
 - Otherwise → allocator allocation via `defaultMemoryPool()` (or injected `IMemoryAllocator*`)
-- 34 `MessageId` values across 10 categories (system, lifecycle, tick, IPC, monitor, D-Bus, device, command, network, Wi-Fi)
+- 39 `MessageId` values across 11 categories (signal, lifecycle, tick, command, IPC, monitor, D-Bus, network, Wi-Fi, PMU data, system data)
 
 ### Memory Model
 
@@ -253,7 +253,10 @@ Deallocation reverses the path. Excess blocks return to the central Slab when th
 
 ### Scheduling & Worker Pool
 
-The `WorkDispatcher` assigns each actor to a fixed worker via `actor->id() % N`:
+The `WorkDispatcher` assigns each actor to a **home worker** via `actor->id() % N`, then keeps the pool balanced with two complementary mechanisms:
+
+- **Load-aware dispatch (preventive)** — when the home worker's queue exceeds the high-watermark (70% of capacity), the token is routed to the least-loaded worker instead, avoiding backpressure and queues filling up.
+- **Adaptive work stealing (reactive)** — a worker that finds its own queue empty waits on its semaphore with an idle timeout, then steals tokens from busy neighbors' queues; backoff intervals adapt between busy/idle modes.
 
 ```mermaid
 flowchart LR
@@ -267,31 +270,40 @@ flowchart LR
         W2[Worker 2]
         WN[Worker N]
     end
-    Dispatch[dispatch runtime] -->|id % N| Dispatcher
+    Dispatch[dispatch runtime] -->|id % N home<br/>HWM -> least-loaded| Dispatcher
     Q1 --> W1
     Q2 --> W2
     QN --> WN
-    W1 -.->|semaphore| S1[( )]
-    W2 -.->|semaphore| S2[( )]
-    WN -.->|semaphore| SN[( )]
+    W1 -.->|semaphore<br/>wake signal| S1[( )]
+    W2 -.->|semaphore<br/>wake signal| S2[( )]
+    WN -.->|semaphore<br/>wake signal| SN[( )]
     W1 -->|run batch| RT[ActorRuntime<br/>maxBatch=32]
     W2 -->|run batch| RT
     WN -->|run batch| RT
     RT -->|re-dispatch if non-empty| Dispatch
+    W1 -.->|idle: steal from W2..WN| Dispatcher
+    W2 -.->|idle: steal from W1..WN| Dispatcher
 ```
 
 ```
 worker(id):
     while running:
-        semaphore->acquire()                 // block
-        runtime = queue[id]->pop()           // dequeue
-        count = runtime->run(maxBatch)       // process up to N messages
+        semaphore->try_acquire_for(idle backoff) // block until wake or timeout
+        if queue[id]->pop(runtime):              // own queue
+            backoff = 0
+        else if steal(runtime from busiest peer): // idle → steal
+            backoff = 0
+        else: backoff = 1                        // double steal interval next round
+        count = runtime->run(maxBatch)           // process up to N messages
         if runtime->mailbox not empty:
-            dispatch(runtime)                // work-conserving
+            dispatch(runtime)                    // work-conserving
 ```
 
 Key design decisions:
 
+- **Home affinity first** — tokens prefer `actorId % N`, stolen/routed only on imbalance
+- **Load-aware routing** — 70% high-watermark triggers least-loaded-worker routing (prevents backpressure)
+- **Adaptive work stealing** — busy/idle steal intervals with per-worker backoff; the semaphore is a pure wake signal, so tokens can't be stranded
 - **Cooperative scheduling** — actors yield after their batch, no preemption
 - **Batch processing** — maxBatch=32 amortizes semaphore overhead
 - **Continuation dispatch** — non-empty mailboxes are immediately re-dispatched
@@ -369,18 +381,19 @@ All benchmarks disable the metrics subsystem during execution to eliminate measu
 
 ## Service Actors
 
-| Actor                   | Role                                                                         | Handles                                                                                                                          | Sends                                                                                             |
-| ----------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **CmdActor**            | CLI command parser and dispatcher                                            | `CmdRequest`, `WifiScanResult`, `WifiStatusResult`, `WifiConnectResult`, `WifiDisconnectResult`                                  | `CmdResponse`, `ActorEnable/DisableRequest`, `Wifi{Scan,Connect,Disconnect,AutoReconnect}Request` |
-| **IpcServerActor**      | UDS IPC server — receives CLI commands, returns responses                    | `IpcNewConnection`, `IpcDataReceived`, `CmdResponse`                                                                             | `CmdRequest`                                                                                      |
-| **MonitorActor**        | Periodic system resource + PMU data collection, JSON broadcast               | `MonitorPoll`, `MonitorNewConnection`, `MonitorClientDisconnected`                                                               | — (writes directly to UDS clients)                                                                |
-| **TickActor**           | Periodic heartbeat generator                                                 | `Tick`                                                                                                                           | —                                                                                                 |
-| **DbusActor**           | D-Bus gateway — exposes methods, calls external services, subscribes signals | `DbusRegister/UnregisterMethod`, `DbusIncomingMethodCall`, `DbusMethodCallResult`, `DbusProxyCallRequest`, `DbusSubscribeSignal` | `DbusRegisterResult`, `DbusIncomingMethodCall`, `DbusProxyCallResult`, `DbusSignalEvent`          |
-| **DeviceManagerActor**  | In-memory HAL device registry                                                | `DeviceRegister`, `DeviceUnregister`, `DeviceEnumerate`                                                                          | `DeviceList`                                                                                      |
-| **NetworkManagerActor** | Wi-Fi management via NetworkManager D-Bus API                                | `Tick`, `WifiScan/Connect/Disconnect/AutoReconnectRequest`, `NmStatusRequest`                                                    | `WifiScan/Status/Connect/DisconnectResult`                                                        |
-| **SystemManagerActor**  | OS signal handling via self-pipe trick, actor state notifications            | `SignalNotify`                                                                                                                   | —                                                                                                 |
+| Actor                    | Role                                                                         | Handles                                                                                                                          | Sends                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **CmdActor**             | CLI command parser and dispatcher                                            | `CmdRequest`, `PmuDataUpdate`, `WifiScanResult`, `WifiStatusResult`, `WifiConnectResult`, `WifiDisconnectResult`                  | `CmdResponse`, `ActorEnable/DisableRequest`, `PmuDataSubscribe/Unsubscribe`, `Wifi{Scan,Connect,Disconnect,AutoReconnect}Request` |
+| **IpcServerActor**       | UDS IPC server — receives CLI commands, returns responses                    | `IpcNewConnection`, `IpcDataReceived`, `CmdResponse`                                                                             | `CmdRequest`                                                                                      |
+| **SystemManagerActor**   | OS signal handling (self-pipe) **and** system-resource data owner            | `SignalNotify`, `SysDataTick`, `SysDataSubscribe`, `SysDataUnsubscribe`                                                           | `SysDataUpdate`                                                                                   |
+| **DeviceManagerActor**   | PMU data owner — subscriber-driven collection                                | `PmuDataTick`, `PmuDataSubscribe`, `PmuDataUnsubscribe`                                                                           | `PmuDataUpdate`                                                                                   |
+| **MonitorActor**         | Aggregator — merges sys/pmu caches, republishes snapshots to subscribers     | `MonitorSubscribe`, `MonitorUnsubscribe`, `SysDataUpdate`, `PmuDataUpdate`                                                        | `MonitorSnapshotUpdate`, `SysDataSubscribe/Unsubscribe`, `PmuDataSubscribe/Unsubscribe`            |
+| **MonitorBridgeActor**   | UDS bridge — JSON Lines broadcast to TUI clients                             | `MonitorNewConnection`, `MonitorClientDisconnected`, `MonitorSnapshotUpdate`                                                      | `MonitorSubscribe/Unsubscribe` (demand cascade)                                                   |
+| **TickActor**            | Periodic heartbeat generator                                                 | `Tick`                                                                                                                           | —                                                                                                 |
+| **DbusActor**            | D-Bus gateway — exposes methods, calls external services, subscribes signals | `DbusRegister/UnregisterMethod`, `DbusIncomingMethodCall`, `DbusMethodCallResult`, `DbusProxyCallRequest`, `DbusSubscribeSignal` | `DbusRegisterResult`, `DbusIncomingMethodCall`, `DbusProxyCallResult`, `DbusSignalEvent`          |
+| **NetworkManagerActor**  | Wi-Fi management via NetworkManager D-Bus API                                | `Tick`, `WifiScan/Connect/Disconnect/AutoReconnectRequest`, `NmStatusRequest`                                                    | `WifiScan/Status/Connect/DisconnectResult`                                                        |
 
-> **Disabled by default**: `DbusActor`, `NetworkManagerActor`, and `DeviceManagerActor` are compiled but not spawned. Re-enable via `config/v2_main.json` (`enable_dbus`, `enable_network_manager`, `enable_device_manager`). While disabled, `v2_cli` `wifi *` commands are silently dropped.
+> **Disabled by default**: `DbusActor` and `NetworkManagerActor` are compiled but not spawned — re-enable via `config/v2_main.json` (`enable_dbus`, `enable_network_manager`). `DeviceManagerActor` (PMU data owner) **is enabled** on platforms where the PMU backend is available. While D-Bus/Wi-Fi are disabled, `v2_cli` `wifi *` commands are silently dropped.
 
 ### Message Flow
 
@@ -411,21 +424,34 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant CLI as TUI Client
+    participant BR as MonitorBridgeActor
     participant Mon as MonitorActor
-    participant Tick as TickActor
-    participant SYS as ISys HAL
-    participant PMU as IPmu HAL
+    participant SYS as SystemManagerActor
+    participant PMU as DeviceManagerActor
 
-    Note over CLI,PMU: Periodic Monitoring Flow
-    loop every poll interval
-        Tick->>Mon: MonitorPoll
-        Mon->>SYS: collectSystemResources
-        SYS-->>Mon: SystemResources
-        Mon->>PMU: readPmuData
-        PMU-->>Mon: PmuData
-        Mon->>Mon: collect actor info from registry
-        Mon->>CLI: JSON Lines broadcast
+    Note over CLI,PMU: Demand Cascade (구독자 있을 때만 수집)
+    CLI->>BR: connect
+    BR->>Mon: MonitorSubscribe{monitor_bridge}
+    Mon->>SYS: SysDataSubscribe{monitor}
+    Mon->>PMU: PmuDataSubscribe{monitor}
+
+    loop every poll interval (subscribers exist)
+        SYS->>SYS: SysDataTick
+        SYS->>SYS: collect system resources (ISys HAL)
+        SYS->>Mon: SysDataUpdate
+        PMU->>PMU: PmuDataTick
+        PMU->>PMU: readPmuData (IPmu HAL)
+        PMU->>Mon: PmuDataUpdate
+        Mon->>Mon: merge caches + collectActorInfo (registry)
+        Mon->>BR: MonitorSnapshotUpdate
+        BR->>CLI: JSON Lines broadcast
     end
+
+    Note over CLI,PMU: 마지막 구독자 해제 시 수집 중단
+    CLI->>BR: disconnect
+    BR->>Mon: MonitorUnsubscribe{monitor_bridge}
+    Mon->>SYS: SysDataUnsubscribe{monitor}
+    Mon->>PMU: PmuDataUnsubscribe{monitor}
 ```
 
 ```mermaid
@@ -559,11 +585,11 @@ src/
 ├── service/                    # Business actors (use cases — core + own ports only)
 │   ├── cmd/                    #   Command routing (CmdActor) + cmd_messages
 │   ├── dbus/                   #   D-Bus gateway (DbusActor + handlers) + dbus_messages
-│   ├── device_manager/         #   Device registry (DeviceManagerActor) + device_manager_messages
+│   ├── device_manager/         #   PMU data owner (DeviceManagerActor) + device_manager_messages
 │   ├── ipc/                    #   UDS IPC server (IpcServerActor) + ipc_messages
-│   ├── monitor/                #   System monitoring (MonitorActor) + monitor_messages
+│   ├── monitor/                #   Snapshot aggregator (MonitorActor) + bridge + monitor_messages
 │   ├── network_manager/        #   Wi-Fi management (NetworkManagerActor + WifiHandler)
-│   ├── system/                 #   Signal handling (SystemManagerActor)
+│   ├── system_manager/         #   Signal handling + sys data owner (SystemManagerActor)
 │   ├── tick/                   #   Tick generator (TickActor) + tick_messages
 │   └── ports/                  #   Service-owned ports: IPmu, ISys, II2c (consumer-owned)
 ├── infra/                      # Adapters — OS / 3rd-party implementations only
@@ -650,8 +676,7 @@ cmake -B build -G Ninja -DBUILD_TESTING=OFF
 
 ## Related Documentation
 
-- [Roadmap](docs/plans/roadmap.md) — development roadmap and phase status
-- [Refactoring roadmap](docs/plans/refactoring_roadmap.md) — clean-architecture refactor of core/service/infra (phases, decisions, status)
+- [Roadmap](docs/plans/roadmap.md) — development roadmap and phase status (incl. the clean-architecture refactor history of core/service/infra)
 - [Benchmark details](docs/benchmark/) — per-benchmark methodology and results
 - [Mailbox comparison](docs/architecture/mailbox_comparison.md) — lock-free vs mutex mailbox analysis
 - [Configuration](config/) — per-app JSON configuration files under `config/`

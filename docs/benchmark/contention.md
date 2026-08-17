@@ -43,7 +43,7 @@
 | OS | Linux (WSL Ubuntu-22.04) |
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark contention` |
+| 도구 | `./build/v2_bench_cli contention` |
 | 측정 방식 | Busy-wait (no sleep, 30초 타임아웃) |
 
 ## 실험 결과
@@ -223,5 +223,5 @@ LockFreeMailbox는 멀티 프로듀서 시나리오에서 **7.97M msgs/sec 피�
 
 ## 참고 문헌
 
-- 소스: `src/core/perf/benchmark/mailbox_multithread_bench.cpp`
-- 실행: `./build/v2_cli benchmark contention [options]`
+- 소스: `bench/bench_contention.cpp`
+- 실행: `./build/v2_bench_cli contention [options]`

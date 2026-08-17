@@ -43,7 +43,7 @@ push부터 handle까지의 **최대 메시지 처리율**을 측정합니다. �
 | OS | Linux (WSL Ubuntu-22.04) |
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark throughput` |
+| 도구 | `./build/v2_bench_cli throughput` |
 | 측정 방식 | Busy-wait (no sleep, 30초 타임아웃) |
 
 ## 실험 결과
@@ -216,6 +216,6 @@ push부터 handle까지의 **최대 메시지 처리율**을 측정합니다. �
 
 ## 참고 문헌
 
-- 소스: `src/core/perf/benchmark/mailbox_bench.cpp`
-- 실행: `./build/v2_cli benchmark throughput [options]`
+- 소스: `bench/bench_throughput.cpp`
+- 실행: `./build/v2_bench_cli throughput [options]`
 - 아키텍처: [메일박스 선택](../architecture/mailbox_comparison.md)

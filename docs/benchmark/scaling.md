@@ -50,7 +50,7 @@ efficiency(N) = throughput(N) / (N × baseThroughput)
 | OS | Linux (WSL Ubuntu-22.04) |
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark scaling` |
+| 도구 | `./build/v2_bench_cli scaling` |
 | 측정 방식 | Busy-wait (no sleep, 30초 타임아웃) |
 
 ## 실험 결과
@@ -262,5 +262,5 @@ Handle 비용: ~5ns (원자적 카운터)
 
 ## 참고 문헌
 
-- 소스: `src/core/perf/benchmark/mailbox_multithread_bench.cpp`
-- 실행: `./build/v2_cli benchmark scaling [options]`
+- 소스: `bench/bench_scaling.cpp`
+- 실행: `./build/v2_bench_cli scaling [options]`

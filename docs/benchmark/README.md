@@ -2,6 +2,8 @@
 
 V2-Engine 액터 시스템의 체계적 성능 측정.
 
+> ⚠️ **측정 기준점**: 아래 수치는 로드 어웨어 디스패치/워크 스틸링(2026-08-15) **이전** 기준이며, 대부분 단일 워커 환경에서 측정되었다. 멀티 워커 균형은 스케줄러 개편 후 재검증 필요 — 상세 작업은 [로드맵 Phase 5 워크스틸링 반영 재측정](../plans/roadmap.md#워크스틸링-반영-재측정) 참조.
+
 ## 벤치마크 목록
 
 | 벤치마크 | 목적 | 핵심 지표 | 핵심 결과 |
@@ -17,15 +19,15 @@ V2-Engine 액터 시스템의 체계적 성능 측정.
 
 ```bash
 # 개별 벤치마크
-./build/v2_cli benchmark <이름> [options]
+./build/v2_bench_cli <이름> [options]
 
 # 예시
-./build/v2_cli benchmark throughput --workers 4 --actors 1
-./build/v2_cli benchmark latency --iterations 50000
-./build/v2_cli benchmark contention --producers 8
-./build/v2_cli benchmark scaling
-./build/v2_cli benchmark backpressure
-./build/v2_cli benchmark scheduler --interval 50 --duration 5000
+./build/v2_bench_cli throughput --workers 4 --actors 1
+./build/v2_bench_cli latency --iterations 50000
+./build/v2_bench_cli contention --producers 8
+./build/v2_bench_cli scaling
+./build/v2_bench_cli backpressure
+./build/v2_bench_cli scheduler --interval 50 --duration 5000
 ```
 
 ## 테스트 환경
@@ -38,7 +40,7 @@ V2-Engine 액터 시스템의 체계적 성능 측정.
 | 컴파일러 | GCC, C++20, CMake + Ninja |
 | 커널 | Linux 6.x (timerfd, epoll) |
 | 빌드 모드 | Release (LTO 활성화) |
-| 도구 | `./build/v2_cli benchmark <이름>` |
+| 도구 | `./build/v2_bench_cli <이름>` |
 
 ## 핵심 성능 지표
 
@@ -79,4 +81,4 @@ V2-Engine 액터 시스템의 체계적 성능 측정.
 
 - 각 벤치마크는 위 링크된 상세 문서 참조
 - [아키텍처](../architecture/mailbox_comparison.md): 메일박스 선택 기준
-- 소스 코드: `src/core/perf/benchmark/`
+- 소스 코드: `bench/`
