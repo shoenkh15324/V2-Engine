@@ -9,12 +9,13 @@
 
 class WorkDispatcher : public IWorkDispatcher {
 public:
-    static constexpr int kQueueCapacity = 1024;
-    static constexpr int kHighWatermark = kQueueCapacity * 7 / 10;
+    static constexpr int kDefaultQueueCapacity = 1024;
+    static constexpr int kDefaultHighWatermark = kDefaultQueueCapacity * 7 / 10;
 
     explicit WorkDispatcher(
         int workerCount,
-        int highWatermark = kHighWatermark,
+        int queueCapacity = kDefaultQueueCapacity,
+        int highWatermark = kDefaultHighWatermark,
         int busyStealIntervalUs = 200,
         int idleStealIntervalUs = 2000
     );
@@ -46,6 +47,7 @@ private:
     bool trySteal(int workerId, ActorRuntime*& out);
 
     int workerCount_ = 0;
+    int queueCapacity_ = kDefaultQueueCapacity;
     int highWatermark_ = 0;
     int busyStealIntervalUs_ = 0;
     int idleStealIntervalUs_ = 0;

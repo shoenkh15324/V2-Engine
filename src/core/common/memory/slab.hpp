@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
+#include <stdexcept>
 #include "core/common/memory/free_list.hpp"
 
 enum class SlabState{
@@ -13,19 +14,23 @@ enum class SlabState{
 
 class Slab{
 public:
-    explicit Slab(std::size_t blockSize) : blockSize_(blockSize), totalBlocks_(kSlabSize / blockSize){
+    static constexpr std::size_t kDefaultSlabSize = 4096;
+
+    explicit Slab(std::size_t blockSize, std::size_t slabSize = kDefaultSlabSize)
+        : slabSize_(slabSize), blockSize_(blockSize), totalBlocks_(slabSize / blockSize){
         assert(blockSize >= FreeList::kNodeSize);
         assert(totalBlocks_ > 0);
+        if((slabSize & (slabSize - 1)) != 0) throw std::invalid_argument("slabSize must be power of two");
 
-        memory_ = static_cast<uint8_t*>(::operator new(kSlabSize, std::align_val_t{kSlabSize}));
-        assert((reinterpret_cast<std::uintptr_t>(memory_) % kSlabSize) == 0);
+        memory_ = static_cast<uint8_t*>(::operator new(slabSize_, std::align_val_t{slabSize_}));
+        assert((reinterpret_cast<std::uintptr_t>(memory_) % slabSize_) == 0);
 
         for(std::size_t i = 0; i < totalBlocks_; ++i){
             freeList_.push(memory_ + i * blockSize_);
         }
     }
 
-    ~Slab(){ ::operator delete(memory_, std::align_val_t{kSlabSize}); }
+    ~Slab(){ ::operator delete(memory_, std::align_val_t{slabSize_}); }
 
     Slab(const Slab&) = delete;
     Slab& operator=(const Slab&) = delete;
@@ -62,13 +67,11 @@ public:
         return count;
     }
 
-    // ptr이 이 슬랩의 메모리 범위 내에 있으면 true를 반환
     bool owns(void* ptr) const noexcept {
         auto* p = static_cast<uint8_t*>(ptr);
-        return (p >= memory_) && (p < (memory_ + kSlabSize));
+        return (p >= memory_) && (p < (memory_ + slabSize_));
     }
 
-    // ptr이 이 슬랩 내에서 유효하고 블록 정렬된 주소이면 true를 반환
     bool contains(void* ptr) const noexcept {
         if(!owns(ptr)) return false;
         auto* p = static_cast<uint8_t*>(ptr);
@@ -83,19 +86,19 @@ public:
     }
 
     uint8_t* begin() const noexcept { return memory_; }
-    uint8_t* end() const noexcept { return memory_ + kSlabSize; }
+    uint8_t* end() const noexcept { return memory_ + slabSize_; }
     bool full() const noexcept { return freeList_.empty(); }
     bool empty() const noexcept { return freeList_.count() == totalBlocks_; }
     std::size_t usedBlocks() const noexcept { return usedCount_; }
     std::size_t totalBlocks() const noexcept { return totalBlocks_; }
     std::size_t blockSize() const noexcept { return blockSize_; }
+    std::size_t slabSize() const noexcept { return slabSize_; }
 
 private:
-    static constexpr std::size_t kSlabSize = 4096;
-
-    uint8_t* memory_;
+    std::size_t slabSize_;
     std::size_t blockSize_;
     std::size_t totalBlocks_;
+    uint8_t* memory_;
     std::size_t usedCount_ = 0;
     FreeList freeList_;
 };

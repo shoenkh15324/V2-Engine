@@ -30,6 +30,7 @@ enum class RestartStrategy{
 class Supervisor : public ISupervisor {
 public:
     explicit Supervisor(DeadLetterQueue& deadLetterQueue);
+    Supervisor(DeadLetterQueue& deadLetterQueue, int maxRestarts, RestartStrategy defaultStrategy);
 
     Supervisor(const Supervisor&) = delete;
     Supervisor& operator=(const Supervisor&) = delete;

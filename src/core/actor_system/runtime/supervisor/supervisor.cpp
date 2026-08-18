@@ -5,6 +5,9 @@
 
 Supervisor::Supervisor(DeadLetterQueue& deadLetterQueue) : deadLetterQueue_(deadLetterQueue){}
 
+Supervisor::Supervisor(DeadLetterQueue& deadLetterQueue, int maxRestarts, RestartStrategy defaultStrategy)
+    : deadLetterQueue_(deadLetterQueue), defaultStrategy_(defaultStrategy), maxRestarts_(maxRestarts){}
+
 void Supervisor::setDefaultStrategy(RestartStrategy strategy){
     std::lock_guard lock(mutex_);
     defaultStrategy_ = strategy;

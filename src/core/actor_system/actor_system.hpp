@@ -20,11 +20,16 @@ class Worker;
 class ActorRuntime;
 
 struct ActorSystemConfig {
-    int numWorkers = 1;
+    int numWorkers = 4;
     int maxBatch = 32;
     int busyStealIntervalUs = 200;
-    int idleStealIntervalUs = 100000;
+    int idleStealIntervalUs = 2000;
     size_t defaultMailboxSize = 512;
+    int dispatcherQueueCapacity = 1024;
+    int dispatcherHighWatermark = 0; // 0이면 kDefaultHighWatermark 자동 계산
+    int supervisorMaxRestarts = 5;
+    int supervisorDefaultStrategy = 0;
+    int deadLetterQueueCapacity = 128;
 };
 
 struct ActorSystemDeps {
@@ -53,12 +58,13 @@ public:
     ActorSystem& operator=(ActorSystem&&) = delete;
 
     template<typename T, typename ... Args>
-    T* createActor(const std::string& name, size_t mailboxSize = 512, Args&& ... args){
+    T* createActor(const std::string& name, size_t mailboxSize = 0, Args&& ... args){
         static_assert(std::is_base_of_v<Actor, T>, "T must derive from Actor");
+        if(mailboxSize == 0) mailboxSize = defaultMailboxSize_;
         uint64_t id = nextActorId_++;
         auto actor = std::make_unique<T>(std::move(name), id, std::forward<Args>(args)...);
         T* raw = actor.get();
-        attachActor(std::move(actor), mailboxSize, id); // .cpp 비멤버 도우미
+        attachActor(std::move(actor), mailboxSize, id);
         return raw;
     }
 
@@ -77,6 +83,7 @@ private:
     std::unique_ptr<IScheduler> scheduler_;
     std::unique_ptr<IActorRegistry> registry_;
     std::unique_ptr<IEventLoop> eventLoop_;
+    size_t defaultMailboxSize_ = 512;
     int maxBatch_ = 32;
     std::atomic<uint64_t> nextActorId_{0};
     std::vector<std::unique_ptr<Worker>> workers_;

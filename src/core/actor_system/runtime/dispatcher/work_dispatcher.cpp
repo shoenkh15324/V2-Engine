@@ -6,16 +6,18 @@
 
 WorkDispatcher::WorkDispatcher(
     int workerCount,
+    int queueCapacity,
     int highWatermark,
     int busyStealIntervalUs,
     int idleStealIntervalUs
 ) : workerCount_(workerCount),
+    queueCapacity_(queueCapacity),
     highWatermark_(highWatermark),
     busyStealIntervalUs_(busyStealIntervalUs),
     idleStealIntervalUs_(idleStealIntervalUs)    
 {
     for(int i = 0; i < workerCount; i++){
-        queues_.push_back(std::make_unique<LockFreeMpmcQueue<ActorRuntime*>>(kQueueCapacity));
+        queues_.push_back(std::make_unique<LockFreeMpmcQueue<ActorRuntime*>>(queueCapacity_));
         semas_.push_back(std::make_unique<std::counting_semaphore<>>(0));
     }
     idleBackoff_.assign(workerCount, 0);

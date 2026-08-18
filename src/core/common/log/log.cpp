@@ -2,8 +2,6 @@
 #include <chrono>
 
 namespace {
-    static constexpr int kLogFlushBufSize = 512;
-
     std::atomic<Logger*> gLogger{nullptr};
 
     Logger& fallbackLogger(){
@@ -30,6 +28,8 @@ void setActiveLogger(Logger* logger){ gLogger.store(logger, std::memory_order_re
 
 void clearActiveLogger(){ gLogger.store(nullptr, std::memory_order_relaxed); }
 
+Logger::Logger(int flushBufferSize) : flushBufferSize_(flushBufferSize){}
+
 Logger::~Logger(){
     std::lock_guard lock(mutex_);
     if(gLogger.load(std::memory_order_relaxed) == this) gLogger.store(nullptr, std::memory_order_relaxed);
@@ -55,7 +55,7 @@ void Logger::log(LogLevel level, std::string_view file, int line, std::string_vi
     std::format_to(std::back_inserter(gBuf.data), "{}:{} ({}) ", file, line, func);
     gBuf.data += msg;
     gBuf.data += '\n';
-    if(gBuf.data.size() >= kLogFlushBufSize) flushBuffer();
+    if(gBuf.data.size() >= static_cast<size_t>(flushBufferSize_)) flushBuffer();
 }
 
 void Logger::setLogFile(std::string_view path){

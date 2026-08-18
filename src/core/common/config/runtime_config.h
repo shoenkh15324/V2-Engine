@@ -5,13 +5,36 @@
 
 struct RuntimeConfig{
     // Engine
-    int logLevel = 4; // Error
-    int workerCount = 1;
+    int logLevel = 2; // Info (LogLevel::Info = 2)
+    int workerCount = 4;
     int workerMaxBatch = 32;
     int mainLoopSleepMs = 1000;
-    int mailboxSize = 512;
     int busyStealIntervalUs = 200;
     int idleStealIntervalUs = 2000;
+
+    // Mailbox
+    int defaultMailboxSize = 512;
+
+    // Dispatcher
+    int dispatcherQueueCapacity = 1024;
+    int dispatcherHighWatermark = 0; // 0이면 kQueueCapacity * 7 / 10 자동 계산
+
+    // Supervisor
+    int supervisorMaxRestarts = 5;
+    int supervisorDefaultStrategy = 0; // 0=OneForOne, 1=OneForAll, 2=None
+    int deadLetterQueueCapacity = 128;
+
+    // Logging
+    int logFlushBufferSize = 512;
+
+    // Memory
+    int memorySlabSize = 4096;
+    int memoryMaxPoolAllocSize = 2048;
+    int memoryMaxPools = 16;
+    int memoryTlsBatchSize = 64;
+
+    // Message
+    int messageInlineBufferSize = 64;
 
     // Tick
     bool enableTick = false;

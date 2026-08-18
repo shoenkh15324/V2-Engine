@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <utility>
+#include <algorithm>
 #include "core/common/memory/size_class.hpp"
 #include "core/common/memory/central_cache.hpp"
 #include "core/common/memory/thread_local_cache.hpp"
@@ -47,11 +48,13 @@ template<
 >
 class MemoryPoolT : public IMemoryAllocator {
 public:
-    MemoryPoolT(){
+    explicit MemoryPoolT(std::size_t slabSize = Slab::kDefaultSlabSize, std::size_t maxAllocSize = SizeClass::kMaxAllocSize)
+        : slabSize_(slabSize), maxAllocSize_(std::min(maxAllocSize, SizeClass::kMaxAllocSize))
+    {
         poolId_ = nextPoolId.fetch_add(1, std::memory_order_relaxed);
         assert(poolId_ < kMaxPools);
         for(std::size_t i = 0; i < SizeClass::kNumSizeClasses; ++i){
-            central_[i].init(SizeClass::blockSize(i));
+            central_[i].init(SizeClass::blockSize(i), slabSize_);
         }
     }
 
@@ -71,8 +74,8 @@ public:
     }
 
     void* allocate(std::size_t size, std::size_t alignment) override {
-        if(size == 0) size = 1; // SizeClass::index(0) assert 방지
-        if((size <= SizeClass::kMaxAllocSize) && (alignment <= alignof(std::max_align_t))){
+        if(size == 0) size = 1;
+        if((size <= maxAllocSize_) && (alignment <= alignof(std::max_align_t))){
             auto& cache = poolCaches[poolId_];
             if(!cache.initialized()) cache.init(centralPointers());
             return cache.allocate(size);
@@ -91,7 +94,7 @@ public:
     void deallocate(void* ptr, std::size_t size, std::size_t alignment) override {
         if(!ptr) return;
         if(size == 0) size = 1;
-        if((size <= SizeClass::kMaxAllocSize) && (alignment <= alignof(std::max_align_t))){
+        if((size <= maxAllocSize_) && (alignment <= alignof(std::max_align_t))){
             auto& cache = poolCaches[poolId_];
             if(!cache.initialized()) cache.init(centralPointers());
             cache.deallocate(ptr, size);
@@ -152,13 +155,34 @@ private:
     }
 
     std::size_t poolId_ = 0;
+    std::size_t slabSize_ = Slab::kDefaultSlabSize;
+    std::size_t maxAllocSize_ = SizeClass::kMaxAllocSize;
     std::array<CentralCache, SizeClass::kNumSizeClasses> central_;
 };
 
 using MemoryPool = MemoryPoolT<NoDebugPolicy, ThrowAllocPolicy>;
 using DebugMemoryPool = MemoryPoolT<PoisonDebugPolicy, ThrowAllocPolicy>;
 
+struct MemoryPoolConfig{
+    std::size_t slabSize = Slab::kDefaultSlabSize;
+    std::size_t maxAllocSize = SizeClass::kMaxAllocSize;
+};
+
+inline MemoryPoolConfig& globalMemoryPoolConfig(){
+    static MemoryPoolConfig cfg;
+    return cfg;
+}
+
+inline void initGlobalMemoryPoolConfig(std::size_t slabSize, std::size_t maxAllocSize){
+    auto& cfg = globalMemoryPoolConfig();
+    cfg.slabSize = slabSize;
+    cfg.maxAllocSize = maxAllocSize;
+}
+
 inline MemoryPool& defaultMemoryPool(){
-    static MemoryPool pool;
+    static MemoryPool pool([]{
+        auto& cfg = globalMemoryPoolConfig();
+        return MemoryPool(cfg.slabSize, cfg.maxAllocSize);
+    }());
     return pool;
 }

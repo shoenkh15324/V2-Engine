@@ -131,7 +131,7 @@ TEST(WorkDispatcher, StopReleasesWorkers){
 }
 
 TEST(WorkDispatcher, LoadAwareDispatchSpreadsOverflow){
-    WorkDispatcher d(2, 1);
+    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1);
     d.start();
 
     auto actor = std::make_unique<TestActor>("hot", 0);
@@ -147,7 +147,7 @@ TEST(WorkDispatcher, LoadAwareDispatchSpreadsOverflow){
 }
 
 TEST(WorkDispatcher, LoadAwareKeepsHomeBelowWatermark){
-    WorkDispatcher d(3, 5);
+    WorkDispatcher d(3, WorkDispatcher::kDefaultQueueCapacity, 5);
     d.start();
 
     auto actor = std::make_unique<TestActor>("home", 0);

@@ -36,7 +36,7 @@ public:
 } // namespace
 
 TEST(WorkStealing, MovesTokenToIdleWorker){
-    WorkDispatcher d(2, 1);
+    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1);
     d.start();
 
     auto actor = std::make_unique<TestActor>("hot", 0);
@@ -50,7 +50,7 @@ TEST(WorkStealing, MovesTokenToIdleWorker){
 }
 
 TEST(WorkStealing, UsesBusyIntervalFirst){
-    WorkDispatcher d(2, 1, 1, 500);
+    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1, 1, 500);
     d.start();
 
     auto actor = std::make_unique<TestActor>("hot", 0);
@@ -71,7 +71,7 @@ TEST(WorkStealing, BacksOffWhenIdle){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(2, 1, 1, 100000);
+    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1, 1, 100000);
     d.start();
 
     std::thread t([&](){
@@ -91,7 +91,7 @@ TEST(WorkStealing, KeepsSingleEntryGuardConcurrent){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(4, 1000000, 1, 10);
+    WorkDispatcher d(4, WorkDispatcher::kDefaultQueueCapacity, 1000000, 1, 10);
     d.start();
 
     auto actor = std::make_unique<CountingActor>("hot", 0);

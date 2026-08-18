@@ -22,6 +22,7 @@ ActorSystem::ActorSystem(const ActorSystemConfig& config, ActorSystemDeps deps)
         scheduler_(std::move(deps.scheduler)),
         registry_(std::move(deps.registry)),
         eventLoop_(std::move(deps.eventLoop)),
+        defaultMailboxSize_(config.defaultMailboxSize),
         maxBatch_(config.maxBatch)
 {
     assert(dispatcher_ && scheduler_ && supervisor_ && deadLetterQueue_ && registry_);
@@ -113,12 +114,16 @@ void ActorSystem::attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, 
 }
 
 std::unique_ptr<ActorSystem> createDefaultActorSystem(const ActorSystemConfig& config, std::unique_ptr<IEventLoop> eventLoop, std::unique_ptr<ITimer> timer){
-    auto deadLetterQueue = std::make_unique<DeadLetterQueue>();
-    auto supervisor = std::make_unique<Supervisor>(*deadLetterQueue);
+    auto dlqCapacity = static_cast<size_t>(config.deadLetterQueueCapacity);
+    auto deadLetterQueue = std::make_unique<DeadLetterQueue>(dlqCapacity);
+    auto strategy = static_cast<RestartStrategy>(config.supervisorDefaultStrategy);
+    auto supervisor = std::make_unique<Supervisor>(*deadLetterQueue, config.supervisorMaxRestarts, strategy);
     auto registry = std::make_unique<ActorRegistry>();
+    int highWatermark = (config.dispatcherHighWatermark > 0) ? config.dispatcherHighWatermark : (config.dispatcherQueueCapacity * 7 / 10);
     auto dispatcher = std::make_unique<WorkDispatcher>(
         config.numWorkers,
-        WorkDispatcher::kHighWatermark,
+        config.dispatcherQueueCapacity,
+        highWatermark,
         config.busyStealIntervalUs,
         config.idleStealIntervalUs
     );

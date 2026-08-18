@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdint>
 #include <cassert>
+#include <stdexcept>
 #include <unordered_map>
 #include "core/common/memory/slab.hpp"
 
@@ -19,9 +20,12 @@ public:
     CentralCache(CentralCache&&) = delete;
     CentralCache& operator=(CentralCache&&) = delete;
 
-    void init(std::size_t blockSize){
+    void init(std::size_t blockSize, std::size_t slabSize = Slab::kDefaultSlabSize){
         assert(blockSize != 0);
+        if((slabSize & (slabSize - 1)) != 0) throw std::invalid_argument("slabSize must be power of two");
         blockSize_ = blockSize;
+        slabSize_ = slabSize;
+        slabMask_ = ~(slabSize_ - 1);
     }
 
     void* allocate(){
@@ -88,19 +92,16 @@ public:
     std::size_t allocatedBlocks() const noexcept{ return allocatedBlocks_.load(std::memory_order_relaxed); }
 
 private:
-    static constexpr std::size_t kSlabSize = 4096;
-    static_assert((kSlabSize & (kSlabSize - 1)) == 0, "Slab size must be power of two");
-
     Slab* addSlab(){
-        auto slab = std::make_unique<Slab>(blockSize_);
+        auto slab = std::make_unique<Slab>(blockSize_, slabSize_);
         Slab* raw = slab.get();
-        slabMap_.emplace(reinterpret_cast<std::uintptr_t>(raw->begin()), raw); // 주소를 key로 저장
+        slabMap_.emplace(reinterpret_cast<std::uintptr_t>(raw->begin()), raw);
         slabs_.push_back(std::move(slab));
         return raw;
     }
 
     Slab* findSlab(void* ptr){
-        auto it = slabMap_.find(reinterpret_cast<std::uintptr_t>(ptr) & ~(kSlabSize - 1));
+        auto it = slabMap_.find(reinterpret_cast<std::uintptr_t>(ptr) & slabMask_);
         return (it != slabMap_.end()) ? it->second : nullptr;
     }
 
@@ -113,6 +114,8 @@ private:
 
     std::mutex mutex_;
     std::size_t blockSize_ = 0;
+    std::size_t slabSize_ = Slab::kDefaultSlabSize;
+    std::uintptr_t slabMask_ = ~(Slab::kDefaultSlabSize - 1);
     std::list<Slab*> partialSlabs_;
     std::vector<std::unique_ptr<Slab>> slabs_;
     std::atomic<std::size_t> allocatedBlocks_ = 0;
