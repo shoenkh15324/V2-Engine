@@ -35,12 +35,14 @@ ActorRuntime::~ActorRuntime(){
 void ActorRuntime::enqueue(Message msg){
     if(!mailbox_->push(std::move(msg))){
         V2_METRICS()->recordEnqueue(actor_->id(), false, 0);
+        V2_LOG_WARN("Actor {} mailbox full, dropping message id={}", actor_->name().c_str(), static_cast<int>(msg.id()));
         return;
     }
     V2_METRICS()->recordEnqueue(actor_->id(), true, mailbox_->count());
     if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
         if(workDispatcher_ && !workDispatcher_->dispatch(this)){
             scheduled_.store(false, std::memory_order_seq_cst);
+            V2_LOG_WARN("Actor {} dispatch failed, message id={} may be orphaned", actor_->name().c_str(), static_cast<int>(msg.id()));
         }
     }else{
         V2_METRICS()->recordDispatch(true, 0); // 이미 스케줄됨 → 중복 차단
@@ -76,27 +78,27 @@ int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
 
 bool ActorRuntime::tryConsumeLifecycle(const Message& msg){
     switch(msg.id()){
-    case MessageId::ActorEnableRequest:
-        if(actor_->getState() == Closed){
-            actor_->open();
-        }
-        return true;
-    case MessageId::ActorDisableRequest:
-        if(actor_->getState() == Opened && !actor_->isEssential()){
-            actor_->close();
-        }
-        return true;
-    case MessageId::ActorRestartRequest:
-        // OneForAll 브로드캐스트. 실행 중(Opened)인 액터는 상태 무관하게 재시작한다.
-        // Closed(비활성/종료 중) 액터는 건너뛴다 — 셧다운 중 재오픈을 방지한다.
-        // maxRestarts 한계는 OneForOne 개별 실패 루프 방지용이므로 여기서는
-        // restartCount_를 증가시키지 않는다 (Supervisor가 oneForAllBroadcasts_로 집계).
-        if(actor_->getState() == Opened){
-            performRestart(msg.as<ActorRestartRequest>().reason);
-        }
-        return true;
-    default:
-        return false;
+        case MessageId::ActorEnableRequest:
+            if(actor_->getState() == Closed){
+                actor_->open();
+            }
+            return true;
+        case MessageId::ActorDisableRequest:
+            if(actor_->getState() == Opened && !actor_->isEssential()){
+                actor_->close();
+            }
+            return true;
+        case MessageId::ActorRestartRequest:
+            // OneForAll 브로드캐스트. 실행 중(Opened)인 액터는 상태 무관하게 재시작한다.
+            // Closed(비활성/종료 중) 액터는 건너뛴다 — 셧다운 중 재오픈을 방지한다.
+            // maxRestarts 한계는 OneForOne 개별 실패 루프 방지용이므로 여기서는
+            // restartCount_를 증가시키지 않는다 (Supervisor가 oneForAllBroadcasts_로 집계).
+            if(actor_->getState() == Opened){
+                performRestart(msg.as<ActorRestartRequest>().reason);
+            }
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -133,9 +135,30 @@ void ActorRuntime::shutdown(){
 
 void ActorRuntime::performRestart(const std::string& reason){
     V2_LOG_INFO("Restarting actor {} reason: {}", actor_->name().c_str(), reason.c_str());
-    actor_->close();
+    // 1. close() 시도 (실패해도 open()은 시도)
+    try{
+        actor_->close();
+    }catch(const std::exception& e){
+        V2_LOG_ERROR("Actor {} close() failed during restart: {}", actor_->name().c_str(), e.what());
+    }catch(...){
+        V2_LOG_ERROR("Actor {} close() failed with unknown exception", actor_->name().c_str());
+    }
+    // 2. close() 성공 시에만 open() 시도
     if(actor_->getState() == Closed){
-        actor_->open();
+        try{
+            actor_->open();
+        }catch(const std::exception& e){
+            V2_LOG_ERROR("Actor {} open() failed during restart: {}", actor_->name().c_str(), e.what());
+            // open() 실패 시 supervisor에 알림
+            if(supervisor_){
+                supervisor_->onActorFailed(this, Message(), std::string("open() failed: ") + e.what());
+            }
+        }catch(...){
+            V2_LOG_ERROR("Actor {} open() failed with unknown exception", actor_->name().c_str());
+            if(supervisor_){
+                supervisor_->onActorFailed(this, Message(), "open() failed with unknown exception");
+            }
+        }
     }
 }
 
@@ -176,24 +199,24 @@ ActorRuntime::BatchResult ActorRuntime::processBatch(int maxBatch){
     int processed = 0;
     while((maxBatch < 0) || (processed < maxBatch)){
         if(!mailbox_->pop(msg)) break;
-        if(!tryConsumeLifecycle(msg)){
-            try{
+        try{
+            if(!tryConsumeLifecycle(msg)){
                 actor_->handle(msg);
-            }catch(const std::exception& e){
-                if(supervisor_){
-                    supervisor_->onActorFailed(this, std::move(msg), e.what());
-                }else{
-                    V2_LOG_ERROR("Actor {} threw: {}", actor_->name().c_str(), e.what());
-                }
-                break;
-            }catch(...){
-                if(supervisor_){
-                    supervisor_->onActorFailed(this, std::move(msg), "unknown exception");
-                }else{
-                    V2_LOG_ERROR("Actor {} threw unknown exception", actor_->name().c_str());
-                }
-                break;
             }
+        }catch(const std::exception& e){
+            if(supervisor_){
+                supervisor_->onActorFailed(this, std::move(msg), e.what());
+            }else{
+                V2_LOG_ERROR("Actor {} threw: {}", actor_->name().c_str(), e.what());
+            }
+            break;
+        }catch(...){
+            if(supervisor_){
+                supervisor_->onActorFailed(this, std::move(msg), "unknown exception");
+            }else{
+                V2_LOG_ERROR("Actor {} threw unknown exception", actor_->name().c_str());
+            }
+            break;
         }
         processed++;
     }

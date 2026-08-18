@@ -74,7 +74,7 @@ public:
         std::size_t returned = 0;
         for(std::size_t i = 0; i < count; ++i){
             Slab* slab = findSlab(in[i]);
-            assert(slab != nullptr);
+            if(!slab) continue;
             SlabState before = slab->state();
             slab->deallocate(in[i]);
             transitionState(before, slab);

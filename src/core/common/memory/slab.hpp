@@ -14,7 +14,7 @@ enum class SlabState{
 class Slab{
 public:
     explicit Slab(std::size_t blockSize) : blockSize_(blockSize), totalBlocks_(kSlabSize / blockSize){
-        assert(blockSize >= sizeof(FreeList::kNodeSize));
+        assert(blockSize >= FreeList::kNodeSize);
         assert(totalBlocks_ > 0);
 
         memory_ = static_cast<uint8_t*>(::operator new(kSlabSize, std::align_val_t{kSlabSize}));

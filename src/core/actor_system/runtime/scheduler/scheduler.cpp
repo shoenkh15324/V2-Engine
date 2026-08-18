@@ -16,8 +16,8 @@ void Scheduler::start(){
 }
 
 void Scheduler::stop(){
+    timer_->stop(); // 먼저 timer 스레드 중지
     std::lock_guard<std::mutex> lock(mutex_);
-    timer_->stop();
     timerCtxs_.clear();
 }
 
@@ -53,6 +53,12 @@ void Scheduler::timerCallback(int id, void* ctx){
     std::lock_guard<std::mutex> lock(self->mutex_);
     auto it = self->timerCtxs_.find(id);
     if(it == self->timerCtxs_.end()) return; // 취소됐거나 아직 등록 전 → 안전하게 무시
-    it->second->target->enqueue(it->second->msg.clone());
+    try{
+        it->second->target->enqueue(it->second->msg.clone());
+    }catch(const std::exception& e){
+        V2_LOG_ERROR("Timer callback failed for id {}: {}", id, e.what());
+    }catch(...){
+        V2_LOG_ERROR("Timer callback failed for id {} with unknown exception", id);
+    }
 }
 

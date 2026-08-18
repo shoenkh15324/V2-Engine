@@ -11,6 +11,14 @@ inline constexpr std::size_t kMaxPools = 16;
 
 class ThreadLocalCache{
 public:
+    ~ThreadLocalCache(){
+        drainAll();
+        for(auto& ptr : central_){
+            ptr = nullptr;
+        }
+        initialized_ = false;
+    }
+
     void init(const std::array<CentralCache*, SizeClass::kNumSizeClasses>& centralCaches){
         central_ = centralCaches;
         initialized_ = true;
@@ -81,6 +89,16 @@ private:
         std::size_t returned = central_[idx]->returnBatch(buf, returnCount);
         assert(returned == returnCount);
         (void)returned;
+    }
+
+    void drainAll(){
+        for(size_t i = 0; i < SizeClass::kNumSizeClasses; ++i){
+            if(!central_[i]) continue;
+            void* ptrs[kMaxBatchSize];
+            while(size_t n = caches_[i].freeList.popBatch(ptrs, kMaxBatchSize)){
+                central_[i]->returnBatch(ptrs, n);
+            }
+        }
     }
 
     bool initialized_ = false;

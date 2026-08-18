@@ -46,18 +46,30 @@ ActorSystem::ActorSystem(const ActorSystemConfig& config, ActorSystemDeps deps)
 }
 
 ActorSystem::~ActorSystem(){
-    registry_->clear();
     stop();
+    registry_->clear();
 }
 
 void ActorSystem::start(){
     dispatcher_->start();
     if(eventLoop_) eventLoop_->start();
     scheduler_->start();
-    for(auto& ctx : actorRuntimes_){
-        int ret = ctx->actor()->open();
-        if(ret != Ok) V2_LOG_ERROR("Actor {} failed to open", ctx->actor()->name().c_str());
+
+    try{
+        for(auto& ctx : actorRuntimes_){
+            int ret = ctx->actor()->open();
+            if(ret != Ok) V2_LOG_ERROR("Actor {} failed to open", ctx->actor()->name().c_str());
+        }
+    }catch(const std::exception& e){
+        V2_LOG_ERROR("ActorSystem start failed: {}", e.what());
+        stop();
+        throw;
+    }catch(...){
+        V2_LOG_ERROR("ActorSystem start failed with unknown exception");
+        stop();
+        throw;
     }
+
     for(auto& w : workers_){
         w->start();
     }

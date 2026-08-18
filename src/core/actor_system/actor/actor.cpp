@@ -13,12 +13,16 @@ Actor::~Actor(){}
 void Actor::sendMsg(const std::string& targetName, Message msg){
     if(Actor* a = runtime_->actorRegistry()->findActorByName(targetName)){
         a->receiveMsg(std::move(msg));
+    }else{
+        V2_LOG_WARN("Actor {} target '{}' not found, dropping message id={}", name_.c_str(), targetName.c_str(), static_cast<int>(msg.id()));
     }
 }
 
 void Actor::sendMsg(uint64_t targetId, Message msg){
     if(Actor* a = runtime_->actorRegistry()->findActorById(targetId)){
         a->receiveMsg(std::move(msg));
+    }else{
+        V2_LOG_WARN("Actor {} target id={} not found, dropping message id={}", name_.c_str(), targetId, static_cast<int>(msg.id()));
     }
 }
 
