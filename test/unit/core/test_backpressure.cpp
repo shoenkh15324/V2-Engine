@@ -66,7 +66,10 @@ TEST(BackpressureTest, PendingClearedOnStop){
 
     d.dispatch(&rt1);
     d.dispatch(&rt2);
-    d.dispatch(&rt3);
+    EXPECT_FALSE(d.dispatch(&rt3));
+
+    d.acquire(0);
+    d.acquire(0);
 
     d.stop();
 
