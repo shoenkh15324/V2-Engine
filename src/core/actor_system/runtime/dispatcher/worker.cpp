@@ -32,6 +32,7 @@ void Worker::runLoop(){
         auto idleEndTime = Time::now();
 
         if(!actorRuntime){
+            workDispatcher_->drainPendedActor();
             if(workDispatcher_->isDraining() && (workDispatcher_->pendingWork() == 0)) break;
             if(!running_.load(std::memory_order_relaxed)) break;
             continue;

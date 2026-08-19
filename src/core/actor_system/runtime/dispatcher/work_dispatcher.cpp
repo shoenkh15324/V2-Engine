@@ -37,6 +37,8 @@ void WorkDispatcher::stop(){
     for(int i = 0; i < workerCount_; i++){
         semas_[i]->release();
     }
+    std::lock_guard lock(mutex_);
+    pendingActorList_.clear();
 }
 
 bool WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
@@ -100,7 +102,11 @@ void WorkDispatcher::onWorkDone(){
 bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
     uint64_t actorId = actorRuntime->actor()->id();
     int workerId = pickWorker(actorId);
-    if(!queues_[workerId]->push(std::move(actorRuntime))) return false;
+    if(!queues_[workerId]->push(std::move(actorRuntime))){
+        std::lock_guard lock(mutex_);
+        pendingActorList_.push_back(actorRuntime);
+        return false;
+    }
     V2_METRICS()->recordDispatch(false, queues_[workerId]->count());
     semas_[workerId]->release();
     return true;
@@ -142,4 +148,18 @@ bool WorkDispatcher::trySteal(int workerId, ActorRuntime*& out){
         }
     }
     return false;
+}
+
+void WorkDispatcher::drainPendedActor(){
+    std::lock_guard lock(mutex_);
+    for(auto it = pendingActorList_.begin(); it != pendingActorList_.end();){
+        ActorRuntime* rt = *it;
+        int workerId = pickWorker(rt->actor()->id());
+        if(queues_[workerId]->push(std::move(rt))){
+            semas_[workerId]->release();
+            it = pendingActorList_.erase(it);
+        }else{
+            ++it;
+        }
+    }
 }

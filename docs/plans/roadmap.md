@@ -8,7 +8,7 @@
 Phase 1: 성능 병목 제거 ✅ 완료
 Phase 2: actor_system 리팩토링 ✅ 완료
 Phase 3: 메모리/전송 최적화 ✅ 완료
-Phase 4: 아키텍처 고도화 🔄 진행 중 (4-1~4-4 ✅, 4-5/4-6 🟡 발굴)
+Phase 4: 아키텍처 고도화 🔄 진행 중
 Phase 5: 벤치마크 인프라 + 보고서 + CI/테스트 확대 ⬜ 대기 
 ```
 
@@ -356,7 +356,7 @@ MemoryPool (Singleton)
 | 액터 순차 전환 ✅ | 9개 서비스 액터 + integration/standalone 테스트 액터 3개: `handle(const Message&)` 1줄 + `handle(const SpecificMsg&)` 오버로드. CmdActor는 `Actor::dispatch` 정규화 호출(이름 숨김), 기존 `default: break;`(조용한 유실) → 데드 레터 메트릭으로 개선 |
 | 유닛 테스트 ✅ | `test_message_typed_dispatch.cpp` — 타입 라우팅 / 튜플 밖 id → 데드 레터 / 핸들러 없는 타입 static_assert 거부 |
 
-### 4-4. 로드 밸런싱 & 병렬화 (액터 모델 보존) 🟡
+### 4-4. 로드 밸런싱 & 병렬화 (액터 모델 보존) ✅
 
 > **문제**: 고정 악피니티(`actorId % N`)로 워커 간 불균형 + 단일 핫 액터의 메일박스 push 경합
 >
@@ -378,7 +378,6 @@ MemoryPool (Singleton)
 |---|---|---|---|---|---|
 | ★★★ | **로드 어웨어 디스패치** ✅ | 실행 토큰을 놓을 때부터 "가장 덜 바쁜 워커 앞에" 놓는다. 요리사 비유: 일이 쌓이기 전에 덜 바쁜 요리사에게 배정 | 사전(예방형) | 워커 균형 + **백프레셔(큐 1024 가득) 예방** — 70% 임계 초과 시 다른 워커로 라우팅 | 구현 완료 (`work_dispatcher.cpp` `pickWorker`/`pickLeastLoaded`, `highWatermark = kQueueCapacity*7/10`). 라우팅 시 큐 깊이 조회 비용. 액터 지역성 감소(홈 워커 이탈). **로드 = 큐 깊이만 반영, in-flight 실행 토큰 미반영** → 아래 "워커 in-flight 카운터" 작업으로 보강 |
 | ★★☆ | **워크 스틸링** ✅ | 유휴 워커가 바쁜 워커의 토큰을 가져간다. 요리사 비유: 내 앞엔 없는데 저 요리사 앞엔 쌓였다 → 가져와서 함 | 사후(반응형) | 유휴 워커 활용, 이미 생긴 불균형 치유 | 구현 완료 (`0a49b63`). per-worker 큐를 `LockFreeMpmcQueue`로 전환 + 유휴 시 이웃 큐에서 steal. 세마포어는 순수 wake 신호로만 사용(`try_acquire_for`로 토큰 좌초 방지), `idleBackoff_`로 busy/idle 스틸 간격 적응. 배수 `busyStealIntervalUs=200` / `idleStealIntervalUs=2000` (config에서 조절 가능) |
-| ★★☆ | **워커 in-flight 카운터** | 실행 토큰을 획득했으나 처리 중인 액터 수를 워커별로 추적 → "큐 깊이 + in-flight"를 로드로 사용 | 사전(예방형) | 긴 `handle()` 실행 중인 워커에 과부하 방지 — 균형 정확도 ↑ | `acquired - completed` 카운터를 `WorkerMetrics`에 노출, `pickLeastLoaded`의 로드 계산에 합산. drain 중 스틸은 순서 재배열 가능 → 스킵 옵션 함께 검토 |
 
 > **선택**: 스틸링(사후)과 로드 어웨어(사전)는 **합성 가능** — 사전 예방 + 사후 치유. 단순성과 백프레셔 방지 목적이라면 **로드 어웨어를 먼저** 진행. (아래 "진행 순서 제안" 참고)
 
@@ -389,24 +388,12 @@ MemoryPool (Singleton)
 | ✅ 이미 | **배치 처리** (`maxBatch=32`) | 실행권 1개로 메시지 N개 처리 | 스케줄링 오버헤드 절감 |
 | ✅ 이미 | **I/O 오프로드** (`IEventLoop`) | 블로킹 I/O를 이벤트 루프에 위임 | 워커 스레드 비블로킹 |
 
-#### 3. C. 생산자·경합 최적화 — "핫 액터의 실제 병목"
-
-> `bench_contention`(프로듀서 N → 액터 1)으로 먼저 검증: 병목이 **메일박스 push 경합**이면 아래 기법이 **병렬화 없이** 처리량을 올린다.
-
-| 우선순위 | 기법 | 쉽게 설명 | 기대 효과 | 특징 |
-|---|---|---|---|---|
-| ★★★ | **발신자 배칭** | 발신자가 여러 메시지를 모아 한 번에 push | MPSC push의 CAS 경합 감소 → 핫 액터 처리량 ↑ | 생산자 측 버퍼. 메일박스는 MPSC 유지 (모델 보존) |
-| ★★☆ | **메시지 결합(combining)** | "마지막 값만 의미 있는" 메시지(카운터·상태 갱신)는 큐의 이전 것을 폐기 | 큐 압력·처리량 ↓ | 옵트인 — 시맨틱(중간값 유실) 허용 전제 |
-
-> **참고**: 백프레셔 정책(HWM/드랍)은 4-5.1(백프레셔 계약)에서 함께 다룬다.
-
 #### 4. 검증 지표 (로드 밸런싱 메트릭)
 
 | 지표 | 용도 |
 |---|---|
 | `stealCount` / `stealFailCount` ✅ | 스틸 시도·성공·실패 관찰 — `DispatcherMetrics`에 추가, `v2_cli` metrics 출력(`Steals`/`StealFails`) |
 | 워커별 큐 깊이 / `busyTimeNs` / `idleTimeNs` | 워커 균형 관찰 |
-| `inFlightCount` (신규) | 워커 in-flight 카운터 — "큐 깊이 + in-flight" 로드 계산 검증 |
 | `deduplicated` ✅ | 단일 엔트리 가드 효과 — 가드 구현 후 실제 증가. 유닛 테스트로 검증(`dispatchCount - deduplicated` = 실제 dispatch 1회, 워커 가동 시 redispatch 기록 증가분 주의) |
 
 #### 5. 진행 순서 제안
@@ -414,8 +401,6 @@ MemoryPool (Singleton)
 1. **단일 엔트리 가드** ✅ — `scheduled_` 구현 + `deduplicated` 메트릭 연동 (완료, 유닛 테스트 포함)
 2. **로드 어웨어 디스패치** ✅ — 예방형, 백프레셔 방지 (완료, `highWatermark` 임계 + `pickLeastLoaded` 라우팅)
 3. **워크 스틸링** ✅ — 치유형, 로드 어웨어와 합성 (완료, `LockFreeMpmcQueue` + `try_acquire_for` 유휴 감지 + 적응형 백오프)
-4. **워커 in-flight 카운터** 🟡 — 로드 정확도 보강 (큐 깊이 + in-flight 합산, `inFlightCount` 메트릭) — **4-5.1 완료 후 진행** (drain 중 스틸 순서 재배열 가능성)
-5. **발신자 배칭** — 핫 액터 push 경합 제거 — **`bench_contention` 측정 + 4-5.1 완료 후 확정** ⬜
 
 ---
 

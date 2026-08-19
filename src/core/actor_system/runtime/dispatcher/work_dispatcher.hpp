@@ -38,6 +38,7 @@ public:
     bool isDraining() const override { return draining_.load(std::memory_order_relaxed); }
     size_t pendingWork() const override { return pendingWork_.load(std::memory_order_relaxed); }
     void onWorkDone() override;
+    void drainPendedActor();
 
 private:
     bool enqueueEntry(ActorRuntime* actorRuntime);
@@ -51,10 +52,12 @@ private:
     int highWatermark_ = 0;
     int busyStealIntervalUs_ = 0;
     int idleStealIntervalUs_ = 0;
+    std::mutex mutex_;
     std::atomic<bool> running_{false};
     std::atomic<bool> draining_{false};
     std::atomic<size_t> pendingWork_{0};
     std::vector<std::uint8_t> idleBackoff_; // worker-confined
+    std::vector<ActorRuntime*> pendingActorList_;
     std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
     std::vector<std::unique_ptr<LockFreeMpmcQueue<ActorRuntime*>>> queues_;
 };

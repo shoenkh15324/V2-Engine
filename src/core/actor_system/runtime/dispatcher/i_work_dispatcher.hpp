@@ -17,4 +17,5 @@ public:
     virtual bool isDraining() const = 0;
     virtual size_t pendingWork() const = 0;
     virtual void onWorkDone() = 0;
+    virtual void drainPendedActor(){}
 };
