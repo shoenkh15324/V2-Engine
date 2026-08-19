@@ -5,7 +5,11 @@
 
 struct RuntimeConfig{
     // Engine
-    int logLevel = 2; // Info (LogLevel::Info = 2)
+#ifdef V2_DEFAULT_LOG_LEVEL
+    int logLevel = V2_DEFAULT_LOG_LEVEL;
+#else
+    int logLevel = 4; // Error
+#endif
     int workerCount = 4;
     int workerMaxBatch = 32;
     int mainLoopSleepMs = 1000;
