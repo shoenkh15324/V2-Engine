@@ -94,7 +94,7 @@ void ActorSystem::run(){
 }
 
 void ActorSystem::requestStop(){
-    stop();
+    if(eventLoop_) eventLoop_->stop();
 }
 
 void ActorSystem::attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, uint64_t id){
