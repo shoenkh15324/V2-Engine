@@ -268,7 +268,7 @@ MemoryPool (Singleton)
 | 작업 | 상세 |
 |------|------|
 | `Message` 클래스 도입 ✅ | SBO (≤64B) + MemoryPool fallback, placement new 저장 |
-| `MessageId` enum ✅ | 39개 메시지 타입 ID 정의 (`message_traits.hpp`) |
+| `MessageId` enum ✅ | 40개 메시지 타입 ID 정의 (`message_traits.hpp`) |
 | `switch + as<T>()` 패턴 ✅ | 각 Actor `handle()`에서 switch-on-id로 타입 복원 |
 | `LockFreeMpscQueue<Message>` ✅ | variant 제거, 72B 고정 슬롯으로 queue slot 크기 65% 감소 |
 
@@ -388,8 +388,6 @@ MemoryPool (Singleton)
 |---|---|---|---|
 | ✅ 이미 | **배치 처리** (`maxBatch=32`) | 실행권 1개로 메시지 N개 처리 | 스케줄링 오버헤드 절감 |
 | ✅ 이미 | **I/O 오프로드** (`IEventLoop`) | 블로킹 I/O를 이벤트 루프에 위임 | 워커 스레드 비블로킹 |
-| 🆕 | **우선순위 메시지** | 긴급 메시지를 먼저 처리 (FIFO 옵트인 완화) | 지연 민감 메시지 응답성 향상 |
-| 🆕 | **선점/공평성** | 오래 도는 액터가 주기적으로 양보 | 응답성·균등 처리 보장 |
 
 #### 3. C. 생산자·경합 최적화 — "핫 액터의 실제 병목"
 
@@ -399,7 +397,8 @@ MemoryPool (Singleton)
 |---|---|---|---|---|
 | ★★★ | **발신자 배칭** | 발신자가 여러 메시지를 모아 한 번에 push | MPSC push의 CAS 경합 감소 → 핫 액터 처리량 ↑ | 생산자 측 버퍼. 메일박스는 MPSC 유지 (모델 보존) |
 | ★★☆ | **메시지 결합(combining)** | "마지막 값만 의미 있는" 메시지(카운터·상태 갱신)는 큐의 이전 것을 폐기 | 큐 압력·처리량 ↓ | 옵트인 — 시맨틱(중간값 유실) 허용 전제 |
-| ★☆☆ | **백프레셔 정책** | 메일박스 상한/HWM 관리로 드랍·지연 정책 명확화 | 과부하 시 동작 예측 가능 | 정책 결정 필요 |
+
+> **참고**: 백프레셔 정책(HWM/드랍)은 4-5.1(백프레셔 계약)에서 함께 다룬다.
 
 #### 4. 검증 지표 (로드 밸런싱 메트릭)
 
@@ -415,8 +414,8 @@ MemoryPool (Singleton)
 1. **단일 엔트리 가드** ✅ — `scheduled_` 구현 + `deduplicated` 메트릭 연동 (완료, 유닛 테스트 포함)
 2. **로드 어웨어 디스패치** ✅ — 예방형, 백프레셔 방지 (완료, `highWatermark` 임계 + `pickLeastLoaded` 라우팅)
 3. **워크 스틸링** ✅ — 치유형, 로드 어웨어와 합성 (완료, `LockFreeMpmcQueue` + `try_acquire_for` 유휴 감지 + 적응형 백오프)
-4. **워커 in-flight 카운터** 🟡 — 로드 정확도 보강 (큐 깊이 + in-flight 합산, `inFlightCount` 메트릭) — **4-5.3의 백프레셔 계약과 연계**
-5. **발신자 배칭** — 핫 액터 push 경합 제거 (`bench_contention` 측정 후 확정) ⬜
+4. **워커 in-flight 카운터** 🟡 — 로드 정확도 보강 (큐 깊이 + in-flight 합산, `inFlightCount` 메트릭) — **4-5.1 완료 후 진행** (drain 중 스틸 순서 재배열 가능성)
+5. **발신자 배칭** — 핫 액터 push 경합 제거 — **`bench_contention` 측정 + 4-5.1 완료 후 확정** ⬜
 
 ---
 
@@ -475,7 +474,7 @@ MemoryPool (Singleton)
 | 반복 타이머 드리프트 재앵커 | `expiry += interval`이 원점 기준 (`timer_base.cpp:106-108`) → 콜백 지연 시 드리프트. `Clock::now()` + interval로 재앵커 + 드리프트 테스트 | ⬜ |
 | `cleanupTimerCtxs` O(N) 제거 | `addTimer`마다 `timerCtxs_` 전체 스캔 (`scheduler.cpp:26,41-49`). 지연 GC/오래된 ctx만 정리로 | ⬜ |
 | repeating timer clone 비용 | fire마다 `msg.clone()` 힙 할당 (`scheduler.cpp:56`) → 재사용/재배치; non-copyable 메시지가 조용히 빈 메시지 전송 (`message.hpp:81,89`) → 실패 명시화 | ⬜ |
-| MemoryPool `kMaxPools` OOB | `poolId_` 무제한 증가 → `assert`(release에서 제거)만 존재, 17번째 풀 시 OOB (`memory_pool.hpp:52,76,95`) → ID bound/가드 + release 검증 | ⬜ |
+| MemoryPool `kMaxPools` OOB | `poolId_` 무제한 증가 → `assert`(release에서 제거)만 존재, 17번째 풀 시 OOB (`memory_pool.hpp:55,79,98`) → ID bound/가드 + release 검증 | ⬜ |
 | poison 정책 완성 | deallocate만 0xCD fill (`memory_pool.hpp:21-26`) → allocate fill + magic 기반 이중 해제 감지 | ⬜ |
 | release dealloc size 검증 | `returnBatch` assert (`central_cache.hpp:77,82`) → 잘못된 size/pool 포인터 반환 시 release에서 슬랩 손상. size class 인코딩/검증 추가 | ⬜ |
 
