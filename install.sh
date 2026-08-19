@@ -2,7 +2,7 @@
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$PROJECT_DIR/build"
+BUILD_DIR="$PROJECT_DIR/build/Release"
 
 # Format: "name:description:binary:type:deps"
 #   type = "service" -> systemd service; "bin" -> install binary only

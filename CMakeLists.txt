@@ -50,8 +50,12 @@ endif()
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/src/core)
 include(${CMAKE_CURRENT_LIST_DIR}/src/infra/infra.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/service/service.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/bench/bench.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/src/app/app.cmake)
+
+option(BUILD_BENCH "Build benchmark module" ON)
+if(BUILD_BENCH)
+    include(${CMAKE_CURRENT_LIST_DIR}/bench/bench.cmake)
+endif()
 
 # ── Build type ─────────────────────────────────────────────
 if(NOT CMAKE_BUILD_TYPE)
@@ -64,6 +68,15 @@ if(WIN32)
 elseif(UNIX)
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
+
+if(NOT DEFINED V2_DEFAULT_LOG_LEVEL)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(V2_DEFAULT_LOG_LEVEL 0) # Verbose
+    else()
+        set(V2_DEFAULT_LOG_LEVEL 4) # Error
+    endif()
+endif()
+add_compile_definitions(V2_DEFAULT_LOG_LEVEL=${V2_DEFAULT_LOG_LEVEL})
 
 # ── Sanitizers (Debug only) ────────────────────────────────
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
