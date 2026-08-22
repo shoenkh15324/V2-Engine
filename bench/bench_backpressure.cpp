@@ -2,14 +2,16 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "bench/event_loop_factory.hpp"
 #include "core/perf/metrics/metrics.hpp"
-#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
 #include <chrono>
 #include <vector>
 #include <thread>
+
+static constexpr uint64_t kDrainTimeoutNs = 30000000000ULL; // 30초
 
 BackpressureParams BackpressureParams::parse(const IBenchmark::Args& args){
     BackpressureParams p;
@@ -46,11 +48,53 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
     std::atomic<uint64_t> dropped{0};
     std::atomic<uint64_t> processed{0};
 
-    auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-    auto actorSystem = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
+    auto actorSystem = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
     auto* actor = actorSystem->createActor<BenchActor>("bp_actor", p.mailbox, processed);
     size_t cap = actor->mailboxCapacity();
     int64_t totalToSend = std::max(static_cast<int64_t>(1), static_cast<int64_t>(p.floodRate) * p.floodDurationMs);
+
+    auto drainUntil = [&](uint64_t target) -> bool{
+        auto start = Time::now();
+        while(processed.load(std::memory_order_relaxed) < target){
+            if(Time::toNs(Time::now() - start) > kDrainTimeoutNs) return false;
+            std::this_thread::yield();
+        }
+        return true;
+    };
+
+    // 공용 후처리: 시스템 종료 + 결과 조립 + 타임아웃 마킹
+    auto finishResult = [&](uint64_t floodDuration, uint64_t drainDuration,
+                            uint64_t backlogAtDrain, bool drained){
+        actorSystem->stop();
+
+        uint64_t sentVal = sent.load(std::memory_order_relaxed);
+        uint64_t droppedVal = dropped.load(std::memory_order_relaxed);
+        double dropRate = (sentVal + droppedVal > 0)
+            ? (static_cast<double>(droppedVal) * 100.0 / static_cast<double>(sentVal + droppedVal))
+            : 0.0;
+
+        BenchmarkResult res;
+        res.benchmarkName = name();
+        res.description = description();
+        res.config = {p.workers, 1, p.maxbatch, p.mailbox, p.warmup};
+        res.backpressure.sent = sentVal;
+        res.backpressure.dropped = droppedVal;
+        res.backpressure.dropRate = dropRate;
+        res.backpressure.floodDurationNs = floodDuration;
+        res.backpressure.drainDurationNs = drainDuration;
+        res.backpressure.backlogAtDrainStart = backlogAtDrain;
+
+        if(!drained){
+            res.success = false;
+            res.errorMsg = "drain timeout (" + std::to_string(kDrainTimeoutNs / 1000000000ULL) + "s):"
+                + " processed=" + std::to_string(processed.load(std::memory_order_relaxed))
+                + "/" + std::to_string(sentVal)
+                + " dropped=" + std::to_string(droppedVal);
+        }
+
+        V2_METRICS()->setEnabled(wasMetricsEnabled);
+        return res;
+    };
 
     if(p.mode == 0){
         // Mode 0: Empty start - workers 먼저 시작, producer가 consumer보다 빠르게 생성
@@ -68,31 +112,19 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         }
         auto floodEnd = Time::now();
 
+        uint64_t backlogAtDrain = sent.load(std::memory_order_relaxed)
+                                - processed.load(std::memory_order_relaxed);
+
         auto drainStart = Time::now();
-        while(processed.load(std::memory_order_relaxed) < sent.load(std::memory_order_relaxed)){
-        }
+        bool drained = drainUntil(sent.load(std::memory_order_relaxed));
         auto drainEnd = Time::now();
 
-        uint64_t floodDuration = Time::toNs(floodEnd - floodStart);
-        uint64_t drainDuration = Time::toNs(drainEnd - drainStart);
-
-        actorSystem->stop();
-
-        uint64_t sentVal = sent.load(std::memory_order_relaxed);
-        uint64_t droppedVal = dropped.load(std::memory_order_relaxed);
-        double dropRate = (sentVal + droppedVal > 0) ? (static_cast<double>(droppedVal) * 100.0 / static_cast<double>(sentVal + droppedVal)) : 0.0;
-
-        BenchmarkResult res;
-        res.benchmarkName = name();
-        res.description = description();
-        res.config = {p.workers, 1, p.maxbatch, p.mailbox, p.warmup};
-        res.backpressure.sent = sentVal;
-        res.backpressure.dropped = droppedVal;
-        res.backpressure.dropRate = dropRate;
-        res.backpressure.floodDurationNs = floodDuration;
-        res.backpressure.drainDurationNs = drainDuration;
-        V2_METRICS()->setEnabled(wasMetricsEnabled);
-        return res;
+        return finishResult(
+            Time::toNs(floodEnd - floodStart),
+            Time::toNs(drainEnd - drainStart),
+            backlogAtDrain,
+            drained
+        );
     }
     else if(p.mode == 1){
         // Mode 1: Pre-fill - mailbox 미리 다 채우고 시작
@@ -108,31 +140,20 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         auto floodEnd = Time::now();
 
         uint64_t sentBefore = sent.load(std::memory_order_relaxed);
+        uint64_t backlogAtDrain = sentBefore - processed.load(std::memory_order_relaxed);
+
         actorSystem->start();
+
         auto drainStart = Time::now();
-        while(processed.load(std::memory_order_relaxed) < sentBefore){
-        }
+        bool drained = drainUntil(sentBefore);
         auto drainEnd = Time::now();
 
-        actorSystem->stop();
-
-        uint64_t sentVal = sent.load(std::memory_order_relaxed);
-        uint64_t droppedVal = dropped.load(std::memory_order_relaxed);
-        uint64_t floodDuration = Time::toNs(floodEnd - floodStart);
-        uint64_t drainDuration = Time::toNs(drainEnd - drainStart);
-        double dropRate = (sentVal + droppedVal > 0) ? (static_cast<double>(droppedVal) * 100.0 / static_cast<double>(sentVal + droppedVal)) : 0.0;
-
-        BenchmarkResult res;
-        res.benchmarkName = name();
-        res.description = description();
-        res.config = {p.workers, 1, p.maxbatch, p.mailbox, p.warmup};
-        res.backpressure.sent = sentVal;
-        res.backpressure.dropped = droppedVal;
-        res.backpressure.dropRate = dropRate;
-        res.backpressure.floodDurationNs = floodDuration;
-        res.backpressure.drainDurationNs = drainDuration;
-        V2_METRICS()->setEnabled(wasMetricsEnabled);
-        return res;
+        return finishResult(
+            Time::toNs(floodEnd - floodStart),
+            Time::toNs(drainEnd - drainStart),
+            backlogAtDrain,
+            drained
+        );
     }
     else{
         // Mode 2: Nearly full - 80% 채우고 start + flood 동시
@@ -156,30 +177,19 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         }
         auto floodEnd = Time::now();
 
+        uint64_t backlogAtDrain = sent.load(std::memory_order_relaxed)
+                                - processed.load(std::memory_order_relaxed);
+
         auto drainStart = Time::now();
-        while(processed.load(std::memory_order_relaxed) < sent.load(std::memory_order_relaxed)){
-        }
+        bool drained = drainUntil(sent.load(std::memory_order_relaxed));
         auto drainEnd = Time::now();
 
-        actorSystem->stop();
-
-        uint64_t sentVal = sent.load(std::memory_order_relaxed);
-        uint64_t droppedVal = dropped.load(std::memory_order_relaxed);
-        uint64_t floodDuration = Time::toNs(floodEnd - floodStart);
-        uint64_t drainDuration = Time::toNs(drainEnd - drainStart);
-        double dropRate = (sentVal + droppedVal > 0) ? (static_cast<double>(droppedVal) * 100.0 / static_cast<double>(sentVal + droppedVal)) : 0.0;
-
-        BenchmarkResult res;
-        res.benchmarkName = name();
-        res.description = description();
-        res.config = {p.workers, 1, p.maxbatch, p.mailbox, p.warmup};
-        res.backpressure.sent = sentVal;
-        res.backpressure.dropped = droppedVal;
-        res.backpressure.dropRate = dropRate;
-        res.backpressure.floodDurationNs = floodDuration;
-        res.backpressure.drainDurationNs = drainDuration;
-        V2_METRICS()->setEnabled(wasMetricsEnabled);
-        return res;
+        return finishResult(
+            Time::toNs(floodEnd - floodStart),
+            Time::toNs(drainEnd - drainStart),
+            backlogAtDrain,
+            drained
+        );
     }
 }
 

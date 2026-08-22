@@ -1,18 +1,18 @@
 #pragma once
 #include "i_benchmark.hpp"
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include "bench_throughput.hpp"
 #include "bench_latency.hpp"
 #include "bench_contention.hpp"
 #include "bench_scaling.hpp"
 #include "bench_backpressure.hpp"
 #include "bench_scheduler.hpp"
-#include <cstddef>
-#include <cstdint>
-#include <string>
-#include <vector>
-#include <map>
-#include <memory>
-#include <functional>
 
 struct BenchmarkConfig{
     int workers{0};
@@ -59,7 +59,7 @@ public:
     static void registerBenchmark(const std::string& name, BenchmarkCreator creator);
     static std::vector<BenchmarkInfo> list();
     static BenchmarkResult run(const std::string& name, const BenchmarkArgs& args);
-    static std::string runAll(const BenchmarkArgs& args);
+    static std::vector<BenchmarkResult> runAll(const BenchmarkArgs& args);
 
 private:
     struct RegistryEntry{

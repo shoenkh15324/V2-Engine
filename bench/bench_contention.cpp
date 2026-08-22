@@ -2,8 +2,8 @@
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "bench/event_loop_factory.hpp"
 #include "core/perf/metrics/metrics.hpp"
-#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <atomic>
@@ -40,23 +40,34 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
 
     V2_METRICS()->setEnabled(false);
 
-    auto runOnce = [&](int numProducers, int64_t msgsPerProducer) -> uint64_t{
+    struct Outcome{
+        bool completed{false};
+        uint64_t elapsedNs{0};
+        uint64_t handled{0};
+    };
+
+    auto runOnce = [&](int numProducers, int64_t msgsPerProducer) -> Outcome{
         int64_t total = static_cast<int64_t>(numProducers) * msgsPerProducer;
         std::atomic<uint64_t> cnt{0};
-        auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
+        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(total) + 256;
         auto* actor = sys->createActor<BenchActor>("contention_actor", mbSize, cnt);
         sys->start();
-        auto st = Time::now();
+
+        // start barrier: 스레드 생성 비용을 측정 구간 밖으로 (#6)
+        std::atomic<bool> go{false};
         std::vector<std::thread> producers;
         for(int i = 0; i < numProducers; i++){
             producers.emplace_back([&]{
+                while(!go.load(std::memory_order_acquire)) std::this_thread::yield();
                 for(int64_t j = 0; j < msgsPerProducer; j++){
                     actor->receiveMsg(Message::make(Tick{}));
                 }
             });
         }
+
+        auto st = Time::now();
+        go.store(true, std::memory_order_release);
         for(auto& t : producers) t.join();
         auto waitStart = Time::now();
         while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(total)){
@@ -64,22 +75,36 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
         }
         auto et = Time::now();
         sys->stop();
-        return Time::toNs(et - st);
+
+        Outcome out;
+        out.completed = (cnt.load(std::memory_order_relaxed) >= static_cast<uint64_t>(total));
+        out.elapsedNs = Time::toNs(et - st);
+        out.handled = cnt.load(std::memory_order_relaxed);
+        return out;
     };
 
     if(p.warmup > 0) runOnce(p.producers, static_cast<int64_t>(p.warmup));
 
     int64_t msgsPerProducer = static_cast<int64_t>(p.iterations) / p.producers;
     int64_t actualTotal = static_cast<int64_t>(p.producers) * msgsPerProducer;
-    uint64_t totalNs = runOnce(p.producers, msgsPerProducer);
+    Outcome out = runOnce(p.producers, msgsPerProducer);
 
     BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, 1, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(actualTotal) + 256, p.warmup};
+
+    if(!out.completed){
+        res.success = false;
+        res.errorMsg = "contention incomplete: handled=" + std::to_string(out.handled)
+                     + "/" + std::to_string(actualTotal);
+        V2_METRICS()->setEnabled(wasMetricsEnabled);
+        return res;
+    }
+
     res.throughput.iterations = static_cast<uint64_t>(actualTotal);
-    res.throughput.totalDurationNs = totalNs;
-    res.throughput.msgsPerSec = (totalNs > 0) ? (static_cast<double>(actualTotal) * 1000000000.0 / static_cast<double>(totalNs)) : 0.0;
+    res.throughput.totalDurationNs = out.elapsedNs;
+    res.throughput.msgsPerSec = (out.elapsedNs > 0) ? (static_cast<double>(actualTotal) * 1000000000.0 / static_cast<double>(out.elapsedNs)) : 0.0;
 
     V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;

@@ -9,6 +9,7 @@ struct BackpressureResult{
     double dropRate{0.0};
     uint64_t floodDurationNs{0};
     uint64_t drainDurationNs{0};
+    uint64_t backlogAtDrainStart{0}; // flood 종료 시점 미처리 메시지 수
 };
 
 struct BackpressureParams{

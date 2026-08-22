@@ -1,10 +1,18 @@
 #include "bench/benchmark.hpp"
-#include <iostream>
-#include <sstream>
-#include <iomanip>
+#include <ctime>
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
+#include <fstream>
+#include <iostream>
+#include <filesystem>
+
+#ifndef V2_BENCH_RESULTS_DIR
+    #define V2_BENCH_RESULTS_DIR "bench/results"
+#endif
 
 namespace {
 
@@ -73,6 +81,7 @@ std::string formatResult(const BenchmarkResult& result){
         oss << "  Drop Rate:   " << buf << "\n";
         oss << "  Sent:        " << result.backpressure.sent << "\n";
         oss << "  Dropped:     " << result.backpressure.dropped << "\n";
+        oss << "  Backlog:     " << result.backpressure.backlogAtDrainStart << "\n";
         std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.floodDurationNs / 1000000.0);
         oss << "  Flood Time:  " << buf << " ms\n";
         std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.drainDurationNs / 1000000.0);
@@ -97,25 +106,41 @@ std::string formatResult(const BenchmarkResult& result){
         oss << "  P999:         " << buf << " ns\n";
     }
 
-    if(!result.scaling.workerScaling.empty()){
-        oss << "\n[Worker Scaling]\n";
-        double baseTp = result.scaling.workerScaling.front().second;
-        for(auto& [w, tp] : result.scaling.workerScaling){
-            double eff = (baseTp > 0) ? (tp / (w * baseTp)) : 0.0;
-            std::snprintf(buf, sizeof(buf), "%.0f", tp);
-            oss << "  " << w << " workers: " << buf << " m/s";
-            std::snprintf(buf, sizeof(buf), "%.2f", eff);
-            oss << " (" << buf << "x)\n";
-        }
-        oss << "\n[Actor Scaling]\n";
-        baseTp = result.scaling.actorScaling.front().second;
-        for(auto& [a, tp] : result.scaling.actorScaling){
-            double eff = (baseTp > 0) ? (tp / (a * baseTp)) : 0.0;
-            std::snprintf(buf, sizeof(buf), "%.0f", tp);
-            oss << "  " << a << " actors: " << buf << " m/s";
-            std::snprintf(buf, sizeof(buf), "%.2f", eff);
-            oss << " (" << buf << "x)\n";
-        }
+    if(!result.scaling.workerScaling.empty() || !result.scaling.actorScaling.empty()){
+        auto printSeries = [&](const char* label, const std::vector<ScalePoint>& pts){
+            if(pts.empty()) return;
+            double baseTp = pts.front().msgsPerSec;
+            oss << "\n[" << label << "] (baseline = " << pts.front().param << ")\n";
+            for(auto& q : pts){
+                double speedup = (baseTp > 0) ? (q.msgsPerSec / baseTp) : 0.0;
+                double eff = speedup / static_cast<double>(q.param);
+                std::snprintf(buf, sizeof(buf), "%.0f", q.msgsPerSec);
+                oss << "  " << std::setw(4) << q.param << " " << label << ": "
+                    << std::right << std::setw(12) << buf << " m/s";
+                std::snprintf(buf, sizeof(buf), "%.2fx", speedup);
+                oss << " | speedup " << buf;
+                std::snprintf(buf, sizeof(buf), "%.1f%%", eff * 100.0);
+                oss << " | eff " << buf << "\n";
+            }
+        };
+        printSeries("workers", result.scaling.workerScaling);
+        printSeries("actors", result.scaling.actorScaling);
+
+        oss << "\n[Verification] (P=Produced A=Accepted D=Dropped Pr=Processed R=Remaining)\n";
+        auto printVerif = [&](char tag, const ScalePoint& q){
+            bool ok = (q.produced == q.accepted + q.dropped)
+                   && (q.accepted == q.processed + q.remaining)
+                   && (q.remaining == 0);
+            oss << "  " << tag << "=" << std::left << std::setw(6) << q.param << std::right
+                << "P=" << q.produced
+                << " A=" << q.accepted
+                << " D=" << q.dropped
+                << " Pr=" << q.processed
+                << " R=" << q.remaining
+                << (ok ? "  OK" : "  FAIL") << "\n";
+        };
+        for(auto& q : result.scaling.workerScaling) printVerif('w', q);
+        for(auto& q : result.scaling.actorScaling) printVerif('a', q);
     }
 
     if(!result.actorSnaps.empty()){
@@ -137,6 +162,70 @@ std::string formatResult(const BenchmarkResult& result){
         }
     }
     return oss.str();
+}
+
+std::tm localTime(std::time_t t){
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    return tm;
+}
+
+std::string timestamp(){
+    auto tp = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(tp);
+    std::tm tm = localTime(t);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm);
+    return buf;
+}
+
+std::string defaultOutputPath(const std::string& benchName){
+    return (std::filesystem::path(V2_BENCH_RESULTS_DIR) / (benchName + "_" + timestamp() + ".txt")).string();
+
+}
+
+std::string extractArg(const IBenchmark::Args& args, const std::string& key){
+    for(auto& [k, v] : args){
+        if(k == key) return v;
+    }
+    return "";
+}
+
+std::string resolveOutputPath(const BenchmarkArgs& args, const std::string& benchName){
+    std::string out = extractArg(args, "output");
+    std::string fname = benchName + "_" + timestamp() + ".txt";
+
+    if(out.empty()) return defaultOutputPath(benchName);
+    std::filesystem::path p(out);
+    if(std::filesystem::is_directory(p) || (out.back() == '/')){
+        return (p / fname).string();
+    }
+    return p.string();
+}
+
+void saveResult(const std::string& path, const std::string& content){
+    std::error_code ec;
+    auto parent = std::filesystem::path(path).parent_path();
+    if(!parent.empty()){
+        std::filesystem::create_directories(parent, ec);
+        if(ec){
+            std::cerr << "warn: failed to create directory '" << parent.string()
+                      << "': " << ec.message() << "\n";
+            return;
+        }
+    }
+
+    std::ofstream f(path);
+    if(!f.is_open()){
+        std::cerr << "warn: failed to write result file: " << path << "\n";
+        return;
+    }
+    f << content;
+    std::cout << "[saved] " << path << "\n";
 }
 
 } // namespace
@@ -171,11 +260,25 @@ int main(int argc, char** argv){
     }
 
     if(cmd == "all"){
-        std::cout << Benchmark::runAll(args);
+        auto results = Benchmark::runAll(args);
+        std::ostringstream combined;
+        for(size_t i = 0; i < results.size(); ++i){
+            combined << formatResult(results[i]);
+            if(i + 1 < results.size()){
+                combined << "\n";
+            }
+        }
+        std::string content = combined.str();
+        std::cout << content;
+        saveResult(resolveOutputPath(args, "all"), content);
         return 0;
     }
 
     auto result = Benchmark::run(cmd, args);
-    std::cout << formatResult(std::move(result));
+    std::string content = formatResult(result);
+    std::cout << content;
+    if(result.success){
+        saveResult(resolveOutputPath(args, cmd), content);
+    }
     return 0;
 }

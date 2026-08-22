@@ -14,7 +14,7 @@ struct ThroughputResult{
 struct ThroughputParams{
     int workers = 4;
     int actors = 1;
-    int iterations = 10000;
+    int iterations = 100000; // 충분한 측정 시간 확보 (#6)
     int maxbatch = 32;
     int warmup = 0;
     size_t mailbox = 0;

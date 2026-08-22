@@ -9,6 +9,7 @@ add_library(v2_bench OBJECT
     ${CMAKE_CURRENT_LIST_DIR}/bench_scaling.cpp
     ${CMAKE_CURRENT_LIST_DIR}/bench_scheduler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/bench_throughput.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/event_loop_factory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/benchmark.cpp
 )
 
@@ -30,4 +31,7 @@ if(BUILD_BENCH_APP)
         ${CMAKE_CURRENT_LIST_DIR}/..
     )
     target_link_libraries(v2_bench_cli PRIVATE v2_bench v2_core)
+    target_compile_definitions(v2_bench_cli PRIVATE
+        V2_BENCH_RESULTS_DIR="${CMAKE_CURRENT_LIST_DIR}/results"
+    )
 endif()

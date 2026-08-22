@@ -1,8 +1,8 @@
 #include "bench_throughput.hpp"
 #include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
+#include "bench/event_loop_factory.hpp"
 #include "core/perf/metrics/metrics.hpp"
-#include "infra/platform/linux/event_loop_epoll.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <chrono>
@@ -40,10 +40,15 @@ BenchmarkResult ThroughputBenchmark::run(const Args& args){
 
     V2_METRICS()->setEnabled(false);
 
-    auto runOnce = [&](int iters) -> uint64_t{
+    struct Outcome{
+        bool completed{false};
+        uint64_t elapsedNs{0};
+        uint64_t handled{0};
+    };
+
+    auto runOnce = [&](int iters) -> Outcome{
         std::atomic<uint64_t> cnt{0};
-        auto loop = std::make_unique<EventLoopEpoll>(64, 1000);
-        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, std::move(loop));
+        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
         std::vector<BenchActor*> acts;
         for(int i = 0; i < p.actors; i++){
             std::string nm = "bench_" + std::to_string(i);
@@ -61,21 +66,35 @@ BenchmarkResult ThroughputBenchmark::run(const Args& args){
         }
         auto et = Time::now();
         sys->stop();
-        return Time::toNs(et - st);
+
+        Outcome out;
+        out.completed = (cnt.load(std::memory_order_relaxed) >= static_cast<uint64_t>(iters));
+        out.elapsedNs = Time::toNs(et - st);
+        out.handled = cnt.load(std::memory_order_relaxed);
+        return out;
     };
 
     if(p.warmup > 0) runOnce(p.warmup);
 
-    uint64_t totalNs = runOnce(p.iterations);
+    Outcome out = runOnce(p.iterations);
 
     BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
     res.config = {p.workers, p.actors, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(perActor) + 256, p.warmup};
+
+    if(!out.completed){
+        res.success = false;
+        res.errorMsg = "throughput incomplete: handled=" + std::to_string(out.handled)
+                     + "/" + std::to_string(p.iterations);
+        V2_METRICS()->setEnabled(wasMetricsEnabled);
+        return res;
+    }
+
     res.throughput.iterations = p.iterations;
-    res.throughput.totalDurationNs = totalNs;
-    res.throughput.msgsPerSec = (totalNs > 0)
-        ? (static_cast<double>(p.iterations) * 1000000000.0 / static_cast<double>(totalNs))
+    res.throughput.totalDurationNs = out.elapsedNs;
+    res.throughput.msgsPerSec = (out.elapsedNs > 0)
+        ? (static_cast<double>(p.iterations) * 1000000000.0 / static_cast<double>(out.elapsedNs))
         : 0.0;
 
     V2_METRICS()->setEnabled(wasMetricsEnabled);
