@@ -499,6 +499,52 @@ MemoryPool (Singleton)
 
 ---
 
+## 4-7. 스케일링 성능 붕괴 해소 🔴
+
+> **목표**: 멀티 워커/액터 확장 시 처리량 붕괴 해소 — 단일 파이프라인 성능(35M msg/s @ w=1)을 병렬 구간에서 유지
+>
+> **발단**: 2026-08-22 벤치마크 정합성 개수(4-5.1 drain timeout, scaling invariant 검증) 이후 재측정에서 발견. 실측: `bench/results/all_20260822_132617.txt`
+>
+> **핵심 요약**: 표(토큰) 한 장으로 배치 32건을 처리하던 설계가, 액터 수가 많아지면 도착률 저하로 **표 한 장 = 1건**으로 퇴화한다. 이때 토큰당 고정비(큐 push + futex wake 시스템콜 + 컨텍스트 스위치 ≈ 수 µs)가 지배하며, 여기에 캐시라인 경합(eager count()·seq_cst exchange·O(N) 라우팅 스캔·스틸 스캔 무효화)이 겹쳐 설정 무관 ~58K msg/s 플래토에 수렴한다.
+
+### 측정 패턴 (Release, Ryzen 9800X3D)
+
+| Config | Throughput | Speedup | 비고 |
+|--------|-----------|---------|------|
+| w=1 (a=16) | 35.3M/s | 1.00x | 최고점 |
+| w=2 | 24.7M/s | 0.70x | 완만 감소 |
+| **w=4** | **461K/s** | **0.01x** | 계단식 붕괴 (76배) |
+| w=8~32 | ~57K/s | ~0.002x | 설정 무관 동일 플래토 |
+| a=1 @ w=16 | 20.5M/s | 1.00x | 유휴 폴링만으론 붕괴 없음 |
+| a≥8 @ w=16 | ~58K/s | ~0.003x | 플래토 |
+
+### 근본 원인
+
+1. **배치 granularity 붕괴**: 생산자 라운드로빈 → 액터별 도착률 저하 → 소비자 즉시 소진 → `processBatch` 1건 단위 퇴화 → 토큰-per-메시지 사이클
+2. **토큰당 고정비**: 큐 push + 세마포어 release(futex wake) + 워커 wake + ctx switch
+3. **캐시라인 경합 증폭**:
+   - eager `count()` 평가 — metrics 비활성 상태에서도 인자 평가됨 (`actor_runtime.cpp:41`, `work_dispatcher.cpp:110`) — 로드맵 "지연 count()" 항목 회귀
+   - `scheduled_.exchange(seq_cst)` 메시지당 RMW (`actor_runtime.cpp:42`)
+   - `pickWorker/pickLeastLoaded` 토큰마다 O(N) depth 스캔 (`work_dispatcher.cpp:115-134`)
+   - idle 스틸 스캔이 활성 큐 head/tail 라인 무효화 (`work_dispatcher.cpp:141-151`)
+   - watermark 초과 시 토큰이 워커 간 이주 → 로컬리티 상실
+4. **maxBatch=32 고정** — 플러드 시 토큰 사이클 과잉 (200K 건 = 사이클 6,250회)
+
+### 해소 계획
+
+| 순서 | 작업 | 상세 | 상태 |
+|------|------|------|------|
+| P0 | 디스패처 계측 노출 | Phase B에서 DispatcherMetrics(dispatchCount/deduplicated/stealCount/stealFailCount/readyQueuePeak)·WorkerMetrics(busy/idle/batches) 스냅샷 출력 — 붕괴 모드를 데이터로 확정 | ⬜ |
+| F1 | 핫패스 탈경합 | eager count() 게이트 내부 이동, `scheduled_` seq_cst→acq_rel 강등 | ⬜ |
+| F2 | 홈 어피니티 복원 | `pickWorker` 기본 home 고정, push 실패(큐 full) 시에만 least-loaded 탈출 — 리밸런싱은 스틸링 담당 | ⬜ |
+| F3 | 동적 maxBatch | hasMoreWork 연속 시 배치 배가(32→1024 cap), 유휴 시 리셋 — 토큰 사이클 횟수 자체 절감 | ⬜ |
+| F4 | 웨이크 규율 | spin-then-park(마이크로 도착 흡수), 스틸 스캐너 jitter, `pendingWork_` 체크로 스캔 생략 | ⬜ |
+| F5 | 벤치 오염 제거 | scaling/contention의 공유 `cnt` 원자(전 액터가 한 라인 fetch_add) → 샤드 카운터 | ⬜ |
+
+> **검증 프로토콜**: 사이클별(P0+F1 → F2 → F3) scaling 재측정으로 기여도 분리. 목표: w=4 speedup ≥1.5x, w=8 ≥2.5x, 플래토 제거(단조 증가). F3 적용 시 latency P99 트레이드오프 재확인 필수. Phase 5 "워크스틸링 반영 재측정"은 본 항목 해소 후 유효한 수치 확보 가능.
+
+---
+
 ## Phase 5: 벤치마크 인프라 통일 + 학술 보고서 ⬜
 
 > **목표**: 벤치마크 시스템 단일화 + 학술 수준 성능 분석 + 포트폴리오
