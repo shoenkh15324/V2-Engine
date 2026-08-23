@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-static constexpr uint64_t kSpinWaitTimeoutNs = 30000000000ULL; // 30초
+static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
 
 ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
     ScalingParams p;
@@ -54,15 +54,14 @@ RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool c
     RunOutcome out;
     V2_METRICS()->setEnabled(collectMetrics);
 
-    std::atomic<uint64_t> cnt{0};
     auto sys = createDefaultActorSystem({workers, maxbatch}, bench::makeDefaultEventLoop());
     std::vector<BenchActor*> acts;
     for(int i = 0; i < actors; i++){
         std::string nm = "bench_" + std::to_string(i);
         size_t mbSize = static_cast<size_t>(iterations / actors) + 256;
-        acts.push_back(sys->createActor<BenchActor>(nm, mbSize, cnt));
+        acts.push_back(sys->createActor<BenchActor>(nm, mbSize));
     }
-    if(collectMetrics) V2_METRICS()->reset(); // 이전 실행 누적 제거
+    if(collectMetrics) V2_METRICS()->reset();
 
     sys->start();
     auto st = Time::now();
@@ -70,16 +69,19 @@ RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool c
         acts[i % actors]->receiveMsg(Message::make(Tick{}));
     }
     auto waitStart = Time::now();
-    while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(iterations)){
+    uint64_t totalHandled = 0;
+    while(totalHandled < static_cast<uint64_t>(iterations)){
+        totalHandled = 0;
+        for(auto* a : acts) totalHandled += a->processed();
         if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
     }
     auto et = Time::now();
 
-    out.completed = (cnt.load(std::memory_order_relaxed) >= static_cast<uint64_t>(iterations));
+    out.completed = (totalHandled >= static_cast<uint64_t>(iterations));
     out.elapsedNs = Time::toNs(et - st);
-    out.handled = cnt.load(std::memory_order_relaxed);
+    out.handled = totalHandled;
 
-    sys->stop(); // 워커 조인 → 이후 스냅샷/카운트는 최종값 보장
+    sys->stop();
 
     if(collectMetrics){
         auto snap = V2_METRICS()->snapshot();

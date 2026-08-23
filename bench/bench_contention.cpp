@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-static constexpr uint64_t kSpinWaitTimeoutNs = 30000000000ULL; // 30초
+static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
 
 ContentionParams ContentionParams::parse(const IBenchmark::Args& args){
     ContentionParams p;
@@ -48,10 +48,9 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
 
     auto runOnce = [&](int numProducers, int64_t msgsPerProducer) -> Outcome{
         int64_t total = static_cast<int64_t>(numProducers) * msgsPerProducer;
-        std::atomic<uint64_t> cnt{0};
         auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
         size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(total) + 256;
-        auto* actor = sys->createActor<BenchActor>("contention_actor", mbSize, cnt);
+        auto* actor = sys->createActor<BenchActor>("contention_actor", mbSize);
         sys->start();
 
         // start barrier: 스레드 생성 비용을 측정 구간 밖으로 (#6)
@@ -70,16 +69,16 @@ BenchmarkResult ContentionBenchmark::run(const Args& args){
         go.store(true, std::memory_order_release);
         for(auto& t : producers) t.join();
         auto waitStart = Time::now();
-        while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(total)){
+        while(actor->processed() < static_cast<uint64_t>(total)){
             if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
         }
         auto et = Time::now();
         sys->stop();
 
         Outcome out;
-        out.completed = (cnt.load(std::memory_order_relaxed) >= static_cast<uint64_t>(total));
+        out.completed = (actor->processed() >= static_cast<uint64_t>(total));
         out.elapsedNs = Time::toNs(et - st);
-        out.handled = cnt.load(std::memory_order_relaxed);
+        out.handled = actor->processed();
         return out;
     };
 

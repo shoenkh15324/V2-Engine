@@ -24,19 +24,17 @@ struct ThroughputParams{
 
 class BenchActor : public Actor{
 public:
-    BenchActor(std::string name, uint64_t id, std::atomic<uint64_t>& counter) : Actor(std::move(name), id), counter_(counter){}
+    BenchActor(std::string name, uint64_t id) : Actor(std::move(name), id){}
 
     int open() override { state_ = Opened; return 0; }
     int close() override { state_ = Closed; return 0; }
     void handle(const Message& /*msg*/) override {
-        counter_.fetch_add(1, std::memory_order_relaxed);
         processed_.fetch_add(1, std::memory_order_relaxed);
     }
 
     uint64_t processed() const { return processed_.load(std::memory_order_relaxed); }
 
 private:
-    std::atomic<uint64_t>& counter_;
     std::atomic<uint64_t> processed_{0};
 };
 

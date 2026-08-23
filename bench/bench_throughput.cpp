@@ -8,7 +8,7 @@
 #include <chrono>
 #include <vector>
 
-static constexpr uint64_t kSpinWaitTimeoutNs = 30000000000ULL; // 30초
+static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
 
 ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
     ThroughputParams p;
@@ -47,13 +47,12 @@ BenchmarkResult ThroughputBenchmark::run(const Args& args){
     };
 
     auto runOnce = [&](int iters) -> Outcome{
-        std::atomic<uint64_t> cnt{0};
         auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
         std::vector<BenchActor*> acts;
         for(int i = 0; i < p.actors; i++){
             std::string nm = "bench_" + std::to_string(i);
             size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iters / p.actors) + 256;
-            acts.push_back(sys->createActor<BenchActor>(nm, mbSize, cnt));
+            acts.push_back(sys->createActor<BenchActor>(nm, mbSize));
         }
         sys->start();
         auto st = Time::now();
@@ -61,16 +60,19 @@ BenchmarkResult ThroughputBenchmark::run(const Args& args){
             acts[i % p.actors]->receiveMsg(Message::make(Tick{}));
         }
         auto waitStart = Time::now();
-        while(cnt.load(std::memory_order_relaxed) < static_cast<uint64_t>(iters)){
+        uint64_t totalHandled = 0;
+        while(totalHandled < static_cast<uint64_t>(iters)){
+            totalHandled = 0;
+            for(auto* a : acts) totalHandled += a->processed();
             if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
         }
         auto et = Time::now();
         sys->stop();
 
         Outcome out;
-        out.completed = (cnt.load(std::memory_order_relaxed) >= static_cast<uint64_t>(iters));
+        out.completed = (totalHandled >= static_cast<uint64_t>(iters));
         out.elapsedNs = Time::toNs(et - st);
-        out.handled = cnt.load(std::memory_order_relaxed);
+        out.handled = totalHandled;
         return out;
     };
 

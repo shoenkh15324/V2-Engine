@@ -11,7 +11,7 @@
 #include <vector>
 #include <thread>
 
-static constexpr uint64_t kDrainTimeoutNs = 30000000000ULL; // 30초
+static constexpr uint64_t kDrainTimeoutNs = 10000000000ULL; // 10초
 
 BackpressureParams BackpressureParams::parse(const IBenchmark::Args& args){
     BackpressureParams p;
@@ -46,16 +46,15 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
 
     std::atomic<uint64_t> sent{0};
     std::atomic<uint64_t> dropped{0};
-    std::atomic<uint64_t> processed{0};
 
     auto actorSystem = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
-    auto* actor = actorSystem->createActor<BenchActor>("bp_actor", p.mailbox, processed);
+    auto* actor = actorSystem->createActor<BenchActor>("bp_actor", p.mailbox);
     size_t cap = actor->mailboxCapacity();
     int64_t totalToSend = std::max(static_cast<int64_t>(1), static_cast<int64_t>(p.floodRate) * p.floodDurationMs);
 
     auto drainUntil = [&](uint64_t target) -> bool{
         auto start = Time::now();
-        while(processed.load(std::memory_order_relaxed) < target){
+        while(actor->processed() < target){
             if(Time::toNs(Time::now() - start) > kDrainTimeoutNs) return false;
             std::this_thread::yield();
         }
@@ -87,7 +86,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         if(!drained){
             res.success = false;
             res.errorMsg = "drain timeout (" + std::to_string(kDrainTimeoutNs / 1000000000ULL) + "s):"
-                + " processed=" + std::to_string(processed.load(std::memory_order_relaxed))
+                + " processed=" + std::to_string(actor->processed())
                 + "/" + std::to_string(sentVal)
                 + " dropped=" + std::to_string(droppedVal);
         }
@@ -113,7 +112,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         auto floodEnd = Time::now();
 
         uint64_t backlogAtDrain = sent.load(std::memory_order_relaxed)
-                                - processed.load(std::memory_order_relaxed);
+                                - actor->processed();
 
         auto drainStart = Time::now();
         bool drained = drainUntil(sent.load(std::memory_order_relaxed));
@@ -140,7 +139,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         auto floodEnd = Time::now();
 
         uint64_t sentBefore = sent.load(std::memory_order_relaxed);
-        uint64_t backlogAtDrain = sentBefore - processed.load(std::memory_order_relaxed);
+        uint64_t backlogAtDrain = sentBefore - actor->processed();
 
         actorSystem->start();
 
@@ -178,7 +177,7 @@ BenchmarkResult BackpressureBenchmark::run(const Args& args){
         auto floodEnd = Time::now();
 
         uint64_t backlogAtDrain = sent.load(std::memory_order_relaxed)
-                                - processed.load(std::memory_order_relaxed);
+                                - actor->processed();
 
         auto drainStart = Time::now();
         bool drained = drainUntil(sent.load(std::memory_order_relaxed));
