@@ -404,70 +404,265 @@ MemoryPool (Singleton)
 
 ---
 
-## 4-5. 스케일링 성능 붕괴 해소 🔄
+## 4-5. 스케일링 성능 붕괴 해소 — 구조적 리팩토링 🔄
 
-> **목표**: 멀티 워커/액터 확장 시 처리량 붕괴 해소 — 단일 파이프라인 성능(35M msg/s @ w=1)을 병렬 구간에서 유지
+> **목표**: 멀티 워커/액터 확장 시 처리량 붕괴의 근본 원인 제거
 >
-> **발단**: 2026-08-22 벤치마크 정합성 개수(4-5.1 drain timeout, scaling invariant 검증) 이후 재측정에서 발견. 실측: `bench/results/all_20260822_132617.txt`
->
-> **핵심 요약**: 표(토큰) 한 장으로 배치 32건을 처리하던 설계가, 액터 수가 많아지면 도착률 저하로 **표 한 장 = 1건**으로 퇴화한다. 이때 토큰당 고정비(큐 push + futex wake 시스템콜 + 컨텍스트 스위치 ≈ 수 µs)가 지배하며, 여기에 캐시라인 경합(eager count()·seq_cst exchange·O(N) 라우팅 스캔·스틸 스캔 무효화)이 겹쳐 설정 무관 ~58K msg/s 플래토에 수렴한다.
+> **방법**: `scheduled_` flag 기반 per-actor dedup을 `WorkDispatcher` 내부의 `inFlight_` 플래그로 교체하여 seq_cst fence를 제거
 
-### 측정 패턴 (Release, Ryzen 9800X3D)
+### 문제 상황
 
-| Config | Before (어제) | After (오늘) | 변화 |
-|--------|-------------|-------------|------|
-| w=1 (a=16) | 35.3M/s | 35.4M/s | 동일 (기준점) |
-| w=2 | 24.7M/s | 22.8M/s | 약간 악화 |
-| **w=4** | **461K/s** | **2,000K/s** | **4.3x 개선** |
-| w=8 | 58K/s | 101K/s | 1.7x 개선 |
-| w=16 | 58K/s | 69K/s | 약간 개선 |
-| w=32 | 74K/s | 169K/s | 2.3x 개선 |
-| **w=64** | **177K/s** | **6,554K/s** | **37x 개선** |
-| a=1 @ w=16 | 20.5M/s | 28.9M/s | 1.4x 개선 |
-| a=4 @ w=16 | 3.7M/s | 16.7M/s | 4.5x 개선 |
+**throughput 벤치 (w=4, 단일 프로듀서):**
 
-### 1단계 적용 완료 (F1-F5)
+| actors | throughput | w=1 대비 |
+|--------|-----------|---------|
+| 1 | 10.3M | 1.0x |
+| 2 | 2.9M | 3.6x ↓ |
+| 3 | 1.3M | 7.9x ↓ |
+| **4** | **220K** | **46.9x ↓** |
 
-| 순서 | 작업 | 상세 | 상태 |
-|------|------|------|------|
-| P0 | 디스패처 계측 노출 | DispatcherMetrics·WorkerMetrics 스냅샷 CLI 출력 (`metrics enable`/`metrics snapshot`) | ✅ 완료 |
-| F1 | 핫패스 탈경합 | `scheduled_` seq_cst→acq_rel/release, eager `count()`를 `isEnabled()` 게이트 내부로 이동 | ✅ 완료 |
-| F2 | 홈 어피니티 복원 | `pickWorker`에서 `queueCapacity_` 기반 home 고정, 큐 full 시에만 least-loaded 탈출 | ✅ 완료 |
-| F3 | 동적 maxBatch | `currentBatch_` 배가(32→min(maxBatch×2, mailboxCapacity)), 유휴 시 리셋 | ✅ 완료 |
-| F4 | 웨이크 규율 | 스틸 스캐너에 RNG jitter 도입 (lock-step 경합 해소) | ✅ 완료 |
-| F5 | 벤치 오염 제거 | 공유 `std::atomic<uint64_t> cnt` 제거 → per-actor `BenchActor::processed()` 사용 | ✅ 완료 |
+> **핵심**: `actors = workers`일 때 최악. 단순 fence 최적화로는 해결 불가.
 
-> **참고**: F4의 spin-then-park는 레이턴시 P99 회귀(5건/100K 타임아웃)를 유발하여 제거됨. Throughput에 미치는 영향은 측정 필요.
+### 근본 원인 (3가지)
 
-### 잔존 근본 원인: 메인 스레드 병목
+#### 1. `scheduled_` flag + Dekker handshake
 
-F1-F5로 4~64 워커 구간은 크게 개선되었으나, **1→2 워커에서 오히려 36% 성능 하락**(35M→23M)하는 문제가 잔존한다. 이는 아키텍처 수준의 구조적 병목이다.
+현재 `enqueue()`와 `run()`은 seq_cst fence로 상호 배타성을 보장합니다:
 
-**근본 원인**:
+```
+enqueue(): seq_cst exchange (LOCK XCHG ~30ns)
+run():     seq_cst store (MFENCE ~30ns) + fence (MFENCE ~30ns) + seq_cst exchange (LOCK XCHG ~30ns)
+```
 
-1. **단일 프로듀서 병목**: 메인 스레드가 모든 메시지를 순차적으로 `enqueue()` → `dispatch()` → `enqueueEntry()` → `semas_[workerId]->release()` 호출. 워커가 늘어나도 디스패치 경로는 단일 스레드.
+**문제점**:
+- x86에서 `seq_cst exchange`는 이미 full barrier → `seq_cst fence`가 중복
+- N개 액터가 각각 독립적으로 handshake → fence 비용 N배
+- `MFENCE`는 x86에서 ~30ns, 4회/메시지 사이클 → ~120ns/메시지
 
-2. **`pendingWork_` 원자적 카운터 경합**: `dispatch()`에서 `fetch_add(relaxed)`, `onWorkDone()`에서 `fetch_sub(acq_rel)`. 워커 수만큼 `fetch_sub` 경쟁이 발생하지만, `fetch_add`는 메인 스레드 단독 → 비대칭 경합.
+#### 2. `acquire()` 루프의 semaphore 대기
 
-3. **`scheduled_` 원자적 교환 경합**: 메인 스레드의 `exchange(true)`와 워커의 `store(false)`가 같은 캐시 라인에서 경쟁. 워커가 많아져도 `scheduled_`는 액터당 1개이므로 직접적 경합은 작으나, 메인 스레드의 `exchange`가 모든 액터에 대해 순차 수행됨.
+워커가 자기 큐가 비면 `busyStealIntervalUs_=200μs` 동안 semaphore 대기:
 
-4. **`trySteal()` O(N) 오버헤드**: 유휴 워커가 매번 `workerCount-1`개 큐를 순회하여 empty 확인. 64 워커 시 63회 큐 접근 per steal attempt.
+```cpp
+// 현재 work_dispatcher.cpp:66
+semas_[workerId]->try_acquire_for(std::chrono::microseconds(interval));
+```
 
-5. **세마포어 signal 비용**: 워커당 별도 `counting_semaphore`를 `release()` → futex wake 시스템콜. 워커 수 linearly 증가.
+**문제점**:
+- actors = workers일 때, 모든 워커가 동시에 유휴
+- 200μs 대기 × W개 워커 = 수 ms 파이프라인 블로킹
 
-### 해결책 (아키텍처 레벨 변경 필요)
+#### 3. `count()` 기반 `pickWorker` 캐시라인 경합
 
-| 순서 | 작업 | 상세 | 상태 | 기대 효과 |
-|------|------|------|------|-----------|
-| S1 | **배치 디스패치** | 메인 스레드가 단일 `dispatch()` 호출로 여러 액터의 토큰을 한 번에 큐에 삽입. 현재: 액터당 1회 dispatch → 배치: N개 액터를 1회에 배출 | ⬜ | 디스패치 경로 오버헤드 N배 절감 |
-| S2 | **`pendingWork_` 셔드** | `pendingWork_`를 워커별 셔드로 분산. dispatch 시 `pendingWork_[workerId]++`, onWorkDone 시 `pendingWork_[workerId]--`. 전체 합산은 필요 시에만 | ⬜ | 원자적 경합 제거 |
-| S3 | **`scheduled_` 캐시 라인 분리 강화** | `scheduled_`를 `dispatch()`와 분리된 캐시 라인에 배치. 현재는 `alignas(kCacheLine)`이나 `exchange`가 여전히 같은 라인에서 발생 | ⬜ | 메인 스레드→워커 캐시 invalidate 감소 |
-| S4 | **세마포어 배치 웨이크** | 여러 큐의 세마포어를 한 번에 `release()`하는 배치 웨이크 API 도입. 또는 epoll의 `eventfd`로 세마포어 대체 | ⬜ | 시스템콜 수 N배 절감 |
-| S5 | **trySteal 조기 종료** | `pendingWork_` 체크로 유휴 워커의 steal 시도 자체를 방지. 현재: 매번 O(N) 순회 → 변경: `pendingWork_==0`이면 steal 스킵 | ⬜ | 유휴 워커 CPU 소비 제거 |
+```cpp
+// 현재 work_dispatcher.cpp:115-118
+int WorkDispatcher::pickWorker(uint64_t actorId){
+    int home = static_cast<int>(actorId % workerCount_);
+    if(workerCount_ <= 1) return home;
+    if(queues_[home]->count() < static_cast<size_t>(highWatermark_)) return home;
+    return pickLeastLoaded(actorId);
+}
+```
 
-> **진행 순서**: S1(배치 디스패치) → S5(steal 조기 종료) → S2(pendingWork_ 셔드) → S4(배치 웨이크) → S3(scheduled_ 분리)
->
-> **검증 프로토콜**: 각 작업 적용 후 `bench scaling --workers 1,2,4,8,16,32,64` 재측정. 목표: w=1→w=4 speedup ≥ 3.0x (현재 0.06x). latency P99 트레이드오프 재확인 필수.
+**문제점**:
+- `count()`는 `head_`/`tail_` 두 atomic 로드
+- head_는 워커(소비자), tail_은 생산자에 의해 수정 → 캐시라인 바운스
+- N 액터 × 배치당 redispatch = N × count() 호출
+
+### 해결책: `inFlight_` 플래그 기반 dedup
+
+**핵심 아이디어**: per-actor `scheduled_` flag를 `WorkDispatcher` 내부의 `inFlight_` 벡터로 교체
+
+| 비교 | 현재 (scheduled_) | 변경 후 (inFlight_) |
+|------|------------------|---------------------|
+| 소유 위치 | `ActorRuntime` (per-actor) | `WorkDispatcher` (중앙 관리) |
+| 메모리 순서 | `seq_cst` (4회/메시지) | `acq_rel` (1회/배치) |
+| fence | MFENCE 4회 | 0회 |
+| dedup 로직 | `exchange(true)` → `dispatch()` 호출 | `exchange(1)` → 큐 push |
+
+### 변경 대상 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `actor_runtime.hpp` | `scheduled_` 필드 제거 |
+| `actor_runtime.cpp` | `enqueue()`: fence+exchange 제거, `run()`: Dekker handshake 제거, `clearInFlight()` 호출 |
+| `work_dispatcher.hpp` | `InFlightFlag` 구조체 + `inFlight_` 벡터 추가, `clearInFlight()` 메서드 추가 |
+| `work_dispatcher.cpp` | `dispatch()`: inFlight dedup 추가 |
+| `worker.cpp` | `onWorkDone()` 호출 제거 (worker는 run만 호출) |
+| `i_work_dispatcher.hpp` | `onWorkDone()` → `clearInFlight(uint64_t)` 시그니처 변경 |
+
+### 상세 변경 사항
+
+#### 1. `ActorRuntime` — `scheduled_` 제거
+
+```cpp
+// BEFORE (actor_runtime.hpp)
+alignas(kCacheLine) std::atomic<bool> scheduled_{false};
+
+// AFTER — 필드 자체 제거
+```
+
+#### 2. `enqueue()` — 단순화
+
+```cpp
+// BEFORE (actor_runtime.cpp:35-50)
+void ActorRuntime::enqueue(Message msg){
+    if(!mailbox_->push(std::move(msg))){ return; }
+    V2_METRICS()->recordEnqueue(actor_->id(), true, mailbox_->count());
+    if(!scheduled_.exchange(true, std::memory_order_seq_cst)){  // ← 제거: seq_cst fence
+        if(workDispatcher_ && !workDispatcher_->dispatch(this)){
+            scheduled_.store(false, std::memory_order_seq_cst); // ← 제거
+        }
+    }else{
+        V2_METRICS()->recordDispatch(true, 0);
+    }
+}
+
+// AFTER
+void ActorRuntime::enqueue(Message msg){
+    if(!mailbox_->push(std::move(msg))){ return; }
+    V2_METRICS()->recordEnqueue(actor_->id(), true, mailbox_->count());
+    if(workDispatcher_) workDispatcher_->dispatch(this);  // 매번 호출, dedup은 dispatch 내부
+}
+```
+
+#### 3. `dispatch()` — inFlight dedup 추가
+
+```cpp
+// BEFORE (work_dispatcher.cpp:44-48)
+bool WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
+    bool ok = enqueueEntry(actorRuntime);
+    if(ok) pendingWork_.fetch_add(1, std::memory_order_relaxed);
+    return ok;
+}
+
+// work_dispatcher.hpp에 추가
+static constexpr size_t kMaxActors = 1024;
+struct alignas(kCacheLine) InFlightFlag {
+    std::atomic<uint8_t> v{0};
+};
+std::vector<InFlightFlag> inFlight_;  // kMaxActors 크기
+
+// AFTER
+bool WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
+    uint64_t actorId = actorRuntime->actor()->id();
+    
+    // inFlight dedup — 이미 실행 중이면 중복 방지
+    if(inFlight_[actorId % kMaxActors].v.exchange(1, std::memory_order_acq_rel)){
+        return true;  // 이미 큐에 있음
+    }
+    
+    int workerId = pickWorker(actorId);
+    if(!queues_[workerId]->push(actorRuntime)){
+        std::lock_guard lock(mutex_);
+        pendingActorList_.push_back(actorRuntime);
+        return true;
+    }
+    pendingWork_.fetch_add(1, std::memory_order_relaxed);
+    semas_[workerId]->release();
+    return true;
+}
+```
+
+#### 4. `run()` — Dekker handshake 제거
+
+```cpp
+// BEFORE (actor_runtime.cpp:52-77)
+int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
+    if(hasMoreWork) *hasMoreWork = false;
+    auto startTime = Time::now();
+    auto r = processBatch(maxBatch);
+    uint64_t gapNs = Time::toNs(Time::now() - startTime);
+    V2_METRICS()->recordHandle(actor_->id(), r.processed, gapNs);
+    
+    bool resumed = false;
+    if(r.hasMoreWork && workDispatcher_){
+        resumed = workDispatcher_->redispatch(this);
+    }
+    if(!resumed){
+        scheduled_.store(false, std::memory_order_seq_cst);     // ← 제거
+        if(!stopped_.load(std::memory_order_relaxed) && !mailbox_->empty()){  // ← 제거
+            if(!scheduled_.exchange(true, std::memory_order_seq_cst)){        // ← 제거
+                if(workDispatcher_ && !workDispatcher_->redispatch(this)){
+                    scheduled_.store(false, std::memory_order_seq_cst);       // ← 제거
+                }else{
+                    resumed = true;
+                }
+            }
+        }
+    }
+    if(hasMoreWork) *hasMoreWork = resumed;
+    return r.processed;
+}
+
+// AFTER
+int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
+    if(hasMoreWork) *hasMoreWork = false;
+    auto startTime = Time::now();
+    auto r = processBatch(maxBatch);
+    uint64_t gapNs = Time::toNs(Time::now() - startTime);
+    V2_METRICS()->recordHandle(actor_->id(), r.processed, gapNs);
+    
+    bool resumed = false;
+    if(r.hasMoreWork && workDispatcher_ && !stopped_.load(std::memory_order_relaxed)){
+        // 더 많은 작업이 있으면 재디스패치 (pendingWork_ 변화 없음)
+        resumed = workDispatcher_->redispatch(this);
+    }
+    if(!resumed){
+        // 더 이상 작업이 없으면 inFlight 해제
+        workDispatcher_->clearInFlight(actor_->id());
+    }
+    if(hasMoreWork) *hasMoreWork = resumed;
+    return r.processed;
+}
+```
+
+#### 5. `clearInFlight()` — 새 메서드
+
+```cpp
+// work_dispatcher.hpp
+void clearInFlight(uint64_t actorId);  // onWorkDone() 대체
+
+// work_dispatcher.cpp
+// 주의: 이 함수는 배치 처리가 완전히 끝났을 때만 호출됩니다
+void WorkDispatcher::clearInFlight(uint64_t actorId){
+    inFlight_[actorId % kMaxActors].v.store(0, std::memory_order_release);
+    if(pendingWork_.fetch_sub(1, std::memory_order_acq_rel) == 1){
+        if(draining_.load(std::memory_order_acquire)){
+            for(int i = 0; i < workerCount_; i++) semas_[i]->release();
+        }
+    }
+}
+```
+
+> **호출 타이밍**: `run()`에서 `r.hasMoreWork == false`일 때만 호출. 더 많은 작업이 있으면 `redispatch()`로 큐에 다시 넣고 inFlight 상태 유지.
+
+#### 6. `worker.cpp` — `onWorkDone()` 호출 제거
+
+```cpp
+// BEFORE (worker.cpp:45)
+if(!more) workDispatcher_->onWorkDone();
+
+// AFTER — 제거 (clearInFlight이 내부에서 처리)
+// worker는 run만 호출, dedup/카운트는 work_dispatcher 내부에서 관리
+```
+
+### 기대 효과
+
+| 항목 | Before | After |
+|------|--------|-------|
+| enqueue() fence | seq_cst exchange (LOCK XCHG) | 없음 |
+| run() fence | seq_cst store + fence + exchange | 없음 |
+| seq_cst 연산 수 | 4회/메시지 | 0회 |
+| per-actor 아토믹 | `scheduled_` (1개) | `inFlight_` (WorkDispatcher 내부) |
+| dedup 비용 | ~60ns (seq_cst exchange + fence) | ~30ns (acq_rel exchange) |
+
+### 검증 항목
+
+1. **기존 단위 테스트 통과** (149개)
+2. **throughput 스케일링**: w=4, actors=1→4에서 개선 확인
+3. **backpressure**: drain 정상 동작 확인
+4. **불변식 검증**: pendingWork_ 카운트 정합성
 
 ---
 
