@@ -404,7 +404,7 @@ MemoryPool (Singleton)
 
 ---
 
-## 4-5. 스케일링 성능 붕괴 해소 🔴
+## 4-5. 스케일링 성능 붕괴 해소 🔄
 
 > **목표**: 멀티 워커/액터 확장 시 처리량 붕괴 해소 — 단일 파이프라인 성능(35M msg/s @ w=1)을 병렬 구간에서 유지
 >
@@ -414,39 +414,60 @@ MemoryPool (Singleton)
 
 ### 측정 패턴 (Release, Ryzen 9800X3D)
 
-| Config | Throughput | Speedup | 비고 |
-|--------|-----------|---------|------|
-| w=1 (a=16) | 35.3M/s | 1.00x | 최고점 |
-| w=2 | 24.7M/s | 0.70x | 완만 감소 |
-| **w=4** | **461K/s** | **0.01x** | 계단식 붕괴 (76배) |
-| w=8~32 | ~57K/s | ~0.002x | 설정 무관 동일 플래토 |
-| a=1 @ w=16 | 20.5M/s | 1.00x | 유휴 폴링만으론 붕괴 없음 |
-| a≥8 @ w=16 | ~58K/s | ~0.003x | 플래토 |
+| Config | Before (어제) | After (오늘) | 변화 |
+|--------|-------------|-------------|------|
+| w=1 (a=16) | 35.3M/s | 35.4M/s | 동일 (기준점) |
+| w=2 | 24.7M/s | 22.8M/s | 약간 악화 |
+| **w=4** | **461K/s** | **2,000K/s** | **4.3x 개선** |
+| w=8 | 58K/s | 101K/s | 1.7x 개선 |
+| w=16 | 58K/s | 69K/s | 약간 개선 |
+| w=32 | 74K/s | 169K/s | 2.3x 개선 |
+| **w=64** | **177K/s** | **6,554K/s** | **37x 개선** |
+| a=1 @ w=16 | 20.5M/s | 28.9M/s | 1.4x 개선 |
+| a=4 @ w=16 | 3.7M/s | 16.7M/s | 4.5x 개선 |
 
-### 근본 원인
-
-1. **배치 granularity 붕괴**: 생산자 라운드로빈 → 액터별 도착률 저하 → 소비자 즉시 소진 → `processBatch` 1건 단위 퇴화 → 토큰-per-메시지 사이클
-2. **토큰당 고정비**: 큐 push + 세마포어 release(futex wake) + 워커 wake + ctx switch
-3. **캐시라인 경합 증폭**:
-   - eager `count()` 평가 — metrics 비활성 상태에서도 인자 평가됨 (`actor_runtime.cpp:41`, `work_dispatcher.cpp:110`) — 로드맵 "지연 count()" 항목 회귀
-   - `scheduled_.exchange(seq_cst)` 메시지당 RMW (`actor_runtime.cpp:42`)
-   - `pickWorker/pickLeastLoaded` 토큰마다 O(N) depth 스캔 (`work_dispatcher.cpp:115-134`)
-   - idle 스틸 스캔이 활성 큐 head/tail 라인 무효화 (`work_dispatcher.cpp:141-151`)
-   - watermark 초과 시 토큰이 워커 간 이주 → 로컬리티 상실
-4. **maxBatch=32 고정** — 플러드 시 토큰 사이클 과잉 (200K 건 = 사이클 6,250회)
-
-### 해소 계획
+### 1단계 적용 완료 (F1-F5)
 
 | 순서 | 작업 | 상세 | 상태 |
 |------|------|------|------|
-| P0 | 디스패처 계측 노출 | Phase B에서 DispatcherMetrics(dispatchCount/deduplicated/stealCount/stealFailCount/readyQueuePeak)·WorkerMetrics(busy/idle/batches) 스냅샷 출력 — 붕괴 모드를 데이터로 확정 | ⬜ |
-| F1 | 핫패스 탈경합 | eager count() 게이트 내부 이동, `scheduled_` seq_cst→acq_rel 강등 | ⬜ |
-| F2 | 홈 어피니티 복원 | `pickWorker` 기본 home 고정, push 실패(큐 full) 시에만 least-loaded 탈출 — 리밸런싱은 스틸링 담당 | ⬜ |
-| F3 | 동적 maxBatch | hasMoreWork 연속 시 배치 배가(32→1024 cap), 유휴 시 리셋 — 토큰 사이클 횟수 자체 절감 | ⬜ |
-| F4 | 웨이크 규율 | spin-then-park(마이크로 도착 흡수), 스틸 스캐너 jitter, `pendingWork_` 체크로 스캔 생략 | ⬜ |
-| F5 | 벤치 오염 제거 | scaling/contention의 공유 `cnt` 원자(전 액터가 한 라인 fetch_add) → 샤드 카운터 | ⬜ |
+| P0 | 디스패처 계측 노출 | DispatcherMetrics·WorkerMetrics 스냅샷 CLI 출력 (`metrics enable`/`metrics snapshot`) | ✅ 완료 |
+| F1 | 핫패스 탈경합 | `scheduled_` seq_cst→acq_rel/release, eager `count()`를 `isEnabled()` 게이트 내부로 이동 | ✅ 완료 |
+| F2 | 홈 어피니티 복원 | `pickWorker`에서 `queueCapacity_` 기반 home 고정, 큐 full 시에만 least-loaded 탈출 | ✅ 완료 |
+| F3 | 동적 maxBatch | `currentBatch_` 배가(32→min(maxBatch×2, mailboxCapacity)), 유휴 시 리셋 | ✅ 완료 |
+| F4 | 웨이크 규율 | 스틸 스캐너에 RNG jitter 도입 (lock-step 경합 해소) | ✅ 완료 |
+| F5 | 벤치 오염 제거 | 공유 `std::atomic<uint64_t> cnt` 제거 → per-actor `BenchActor::processed()` 사용 | ✅ 완료 |
 
-> **검증 프로토콜**: 사이클별(P0+F1 → F2 → F3) scaling 재측정으로 기여도 분리. 목표: w=4 speedup ≥1.5x, w=8 ≥2.5x, 플래토 제거(단조 증가). F3 적용 시 latency P99 트레이드오프 재확인 필수. Phase 5 "워크스틸링 반영 재측정"은 본 항목 해소 후 유효한 수치 확보 가능.
+> **참고**: F4의 spin-then-park는 레이턴시 P99 회귀(5건/100K 타임아웃)를 유발하여 제거됨. Throughput에 미치는 영향은 측정 필요.
+
+### 잔존 근본 원인: 메인 스레드 병목
+
+F1-F5로 4~64 워커 구간은 크게 개선되었으나, **1→2 워커에서 오히려 36% 성능 하락**(35M→23M)하는 문제가 잔존한다. 이는 아키텍처 수준의 구조적 병목이다.
+
+**근본 원인**:
+
+1. **단일 프로듀서 병목**: 메인 스레드가 모든 메시지를 순차적으로 `enqueue()` → `dispatch()` → `enqueueEntry()` → `semas_[workerId]->release()` 호출. 워커가 늘어나도 디스패치 경로는 단일 스레드.
+
+2. **`pendingWork_` 원자적 카운터 경합**: `dispatch()`에서 `fetch_add(relaxed)`, `onWorkDone()`에서 `fetch_sub(acq_rel)`. 워커 수만큼 `fetch_sub` 경쟁이 발생하지만, `fetch_add`는 메인 스레드 단독 → 비대칭 경합.
+
+3. **`scheduled_` 원자적 교환 경합**: 메인 스레드의 `exchange(true)`와 워커의 `store(false)`가 같은 캐시 라인에서 경쟁. 워커가 많아져도 `scheduled_`는 액터당 1개이므로 직접적 경합은 작으나, 메인 스레드의 `exchange`가 모든 액터에 대해 순차 수행됨.
+
+4. **`trySteal()` O(N) 오버헤드**: 유휴 워커가 매번 `workerCount-1`개 큐를 순회하여 empty 확인. 64 워커 시 63회 큐 접근 per steal attempt.
+
+5. **세마포어 signal 비용**: 워커당 별도 `counting_semaphore`를 `release()` → futex wake 시스템콜. 워커 수 linearly 증가.
+
+### 해결책 (아키텍처 레벨 변경 필요)
+
+| 순서 | 작업 | 상세 | 상태 | 기대 효과 |
+|------|------|------|------|-----------|
+| S1 | **배치 디스패치** | 메인 스레드가 단일 `dispatch()` 호출로 여러 액터의 토큰을 한 번에 큐에 삽입. 현재: 액터당 1회 dispatch → 배치: N개 액터를 1회에 배출 | ⬜ | 디스패치 경로 오버헤드 N배 절감 |
+| S2 | **`pendingWork_` 셔드** | `pendingWork_`를 워커별 셔드로 분산. dispatch 시 `pendingWork_[workerId]++`, onWorkDone 시 `pendingWork_[workerId]--`. 전체 합산은 필요 시에만 | ⬜ | 원자적 경합 제거 |
+| S3 | **`scheduled_` 캐시 라인 분리 강화** | `scheduled_`를 `dispatch()`와 분리된 캐시 라인에 배치. 현재는 `alignas(kCacheLine)`이나 `exchange`가 여전히 같은 라인에서 발생 | ⬜ | 메인 스레드→워커 캐시 invalidate 감소 |
+| S4 | **세마포어 배치 웨이크** | 여러 큐의 세마포어를 한 번에 `release()`하는 배치 웨이크 API 도입. 또는 epoll의 `eventfd`로 세마포어 대체 | ⬜ | 시스템콜 수 N배 절감 |
+| S5 | **trySteal 조기 종료** | `pendingWork_` 체크로 유휴 워커의 steal 시도 자체를 방지. 현재: 매번 O(N) 순회 → 변경: `pendingWork_==0`이면 steal 스킵 | ⬜ | 유휴 워커 CPU 소비 제거 |
+
+> **진행 순서**: S1(배치 디스패치) → S5(steal 조기 종료) → S2(pendingWork_ 셔드) → S4(배치 웨이크) → S3(scheduled_ 분리)
+>
+> **검증 프로토콜**: 각 작업 적용 후 `bench scaling --workers 1,2,4,8,16,32,64` 재측정. 목표: w=1→w=4 speedup ≥ 3.0x (현재 0.06x). latency P99 트레이드오프 재확인 필수.
 
 ---
 
