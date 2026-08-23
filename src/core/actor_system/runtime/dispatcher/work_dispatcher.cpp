@@ -107,8 +107,7 @@ bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
         pendingActorList_.push_back(actorRuntime);
         return false;
     }
-    size_t depth = V2_METRICS()->isEnabled() ? queues_[workerId]->count() : 0;
-    V2_METRICS()->recordDispatch(false, depth);
+    V2_METRICS()->recordDispatch(false, queues_[workerId]->count());
     semas_[workerId]->release();
     return true;
 }
@@ -116,7 +115,7 @@ bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
 int WorkDispatcher::pickWorker(uint64_t actorId){
     int home = static_cast<int>(actorId % workerCount_);
     if(workerCount_ <= 1) return home;
-    if(queues_[home]->count() < static_cast<size_t>(queueCapacity_)) return home;
+    if(queues_[home]->count() < static_cast<size_t>(highWatermark_)) return home;
     return pickLeastLoaded(actorId);
 }
 
@@ -140,12 +139,8 @@ bool WorkDispatcher::tryAcquireOwn(int workerId, ActorRuntime*& out){
 }
 
 bool WorkDispatcher::trySteal(int workerId, ActorRuntime*& out){
-    static thread_local uint32_t rng = workerId * 2654435761u;
-    rng = rng * 1664525u + 1013904223u;
-    int startOffset = 1 + (rng % static_cast<uint32_t>(workerCount_ - 1));
-
-    for(int i = 0; i < workerCount_ - 1; i++){
-        int victim = (workerId + startOffset + i) % workerCount_;
+    for(int i = 1; i < workerCount_; i++){
+        int  victim = (workerId + i) % workerCount_;
         if(queues_[victim]->empty()) continue;
         if(queues_[victim]->pop(out)){
             semas_[victim]->try_acquire();

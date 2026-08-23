@@ -38,11 +38,10 @@ void ActorRuntime::enqueue(Message msg){
         V2_LOG_WARN("Actor {} mailbox full, dropping message id={}", actor_->name().c_str(), static_cast<int>(msg.id()));
         return;
     }
-    size_t depth = V2_METRICS()->isEnabled() ? mailbox_->count() : 0;
-    V2_METRICS()->recordEnqueue(actor_->id(), true, depth);
-    if(!scheduled_.exchange(true, std::memory_order_acq_rel)){
+    V2_METRICS()->recordEnqueue(actor_->id(), true, mailbox_->count());
+    if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
         if(workDispatcher_ && !workDispatcher_->dispatch(this)){
-            scheduled_.store(false, std::memory_order_release);
+            scheduled_.store(false, std::memory_order_seq_cst);
             V2_LOG_WARN("Actor {} dispatch failed, message id={} may be orphaned", actor_->name().c_str(), static_cast<int>(msg.id()));
         }
     }else{
@@ -62,11 +61,11 @@ int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
         resumed = workDispatcher_->redispatch(this); // pendingWork_ 불변
     }
     if(!resumed){
-        scheduled_.store(false, std::memory_order_release);
+        scheduled_.store(false, std::memory_order_seq_cst);
         if(!stopped_.load(std::memory_order_relaxed) && !mailbox_->empty()){
-            if(!scheduled_.exchange(true, std::memory_order_acq_rel)){
+            if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
                 if(workDispatcher_ && !workDispatcher_->redispatch(this)){
-                    scheduled_.store(false, std::memory_order_release);
+                    scheduled_.store(false, std::memory_order_seq_cst);
                 }else{
                     resumed = true;
                 }

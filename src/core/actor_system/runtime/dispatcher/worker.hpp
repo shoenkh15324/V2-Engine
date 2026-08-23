@@ -25,5 +25,4 @@ private:
     std::thread thread_;
     std::atomic<bool> running_{false};
     int id_, maxBatch_;
-    int currentBatch_;
 };

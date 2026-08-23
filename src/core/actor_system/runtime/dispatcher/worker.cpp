@@ -5,7 +5,7 @@
 #include "core/common/time/time.hpp"
 #include "core/perf/metrics/metrics.hpp"
 
-Worker::Worker(IWorkDispatcher* workDispatcher, int id, int maxBatch) : workDispatcher_(workDispatcher), id_(id), maxBatch_(maxBatch), currentBatch_(maxBatch){
+Worker::Worker(IWorkDispatcher* workDispatcher, int id, int maxBatch) : workDispatcher_(workDispatcher), id_(id), maxBatch_(maxBatch){
     //
 }
 
@@ -32,7 +32,6 @@ void Worker::runLoop(){
         auto idleEndTime = Time::now();
 
         if(!actorRuntime){
-            currentBatch_ = maxBatch_;
             workDispatcher_->drainPendedActor();
             if(workDispatcher_->isDraining() && (workDispatcher_->pendingWork() == 0)) break;
             if(!running_.load(std::memory_order_relaxed)) break;
@@ -41,16 +40,7 @@ void Worker::runLoop(){
 
         auto busyStartTime = Time::now();
         bool more = false;
-        int processed = actorRuntime->run(currentBatch_, &more);
-
-        if(more){
-            size_t cap = actorRuntime->mailboxCapacity();
-            int maxAllowed = static_cast<int>(cap > 0 ? cap : static_cast<size_t>(maxBatch_));
-            currentBatch_ = std::min(currentBatch_ * 2, maxAllowed);
-        }else{
-            currentBatch_ = maxBatch_;
-        }
-
+        int processed = actorRuntime->run(maxBatch_, &more);
         auto busyEndTime = Time::now();
         if(!more) workDispatcher_->onWorkDone();
 
