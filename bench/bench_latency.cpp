@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <chrono>
 
-static constexpr uint64_t kSpinWaitTimeoutNs = 30000000000ULL; // 30초
+static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
 
 LatencyParams LatencyParams::parse(const IBenchmark::Args& args){
     LatencyParams p;
