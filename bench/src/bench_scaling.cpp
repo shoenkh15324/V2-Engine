@@ -3,7 +3,7 @@
 #include "bench_throughput.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/perf/metrics/metrics.hpp"
-#include "bench/event_loop_factory.hpp"
+#include "bench/src/event_loop_factory.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <algorithm>

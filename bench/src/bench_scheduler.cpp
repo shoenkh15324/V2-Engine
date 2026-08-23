@@ -1,7 +1,7 @@
 #include "bench_scheduler.hpp"
 #include "benchmark.hpp"
 #include "core/actor_system/actor_system.hpp"
-#include "bench/event_loop_factory.hpp"
+#include "bench/src/event_loop_factory.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 #include "core/common/time/sleep.hpp"
