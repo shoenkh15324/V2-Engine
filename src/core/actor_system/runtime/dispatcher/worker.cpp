@@ -39,10 +39,8 @@ void Worker::runLoop(){
         }
 
         auto busyStartTime = Time::now();
-        bool more = false;
-        int processed = actorRuntime->run(maxBatch_, &more);
+        int processed = actorRuntime->run(maxBatch_);
         auto busyEndTime = Time::now();
-        if(!more) workDispatcher_->onWorkDone();
 
         uint64_t gapIdleNs = Time::toNs(idleEndTime - idleStartTime);
         uint64_t gapBusyNs = Time::toNs(busyEndTime - busyStartTime);

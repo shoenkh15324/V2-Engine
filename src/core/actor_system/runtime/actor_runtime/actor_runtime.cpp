@@ -39,14 +39,7 @@ void ActorRuntime::enqueue(Message msg){
         return;
     }
     V2_METRICS()->recordEnqueue(actor_->id(), true, mailbox_->count());
-    if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
-        if(workDispatcher_ && !workDispatcher_->dispatch(this)){
-            scheduled_.store(false, std::memory_order_seq_cst);
-            V2_LOG_WARN("Actor {} dispatch failed, message id={} may be orphaned", actor_->name().c_str(), static_cast<int>(msg.id()));
-        }
-    }else{
-        V2_METRICS()->recordDispatch(true, 0); // 이미 스케줄됨 → 중복 차단
-    }
+    if(workDispatcher_) workDispatcher_->dispatch(this);
 }
 
 int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
@@ -56,22 +49,7 @@ int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
     uint64_t gapNs = Time::toNs(Time::now() - startTime);
     V2_METRICS()->recordHandle(actor_->id(), r.processed, gapNs);
 
-    bool resumed = false;
-    if(r.hasMoreWork && workDispatcher_){
-        resumed = workDispatcher_->redispatch(this); // pendingWork_ 불변
-    }
-    if(!resumed){
-        scheduled_.store(false, std::memory_order_seq_cst);
-        if(!stopped_.load(std::memory_order_relaxed) && !mailbox_->empty()){
-            if(!scheduled_.exchange(true, std::memory_order_seq_cst)){
-                if(workDispatcher_ && !workDispatcher_->redispatch(this)){
-                    scheduled_.store(false, std::memory_order_seq_cst);
-                }else{
-                    resumed = true;
-                }
-            }
-        }
-    }
+    bool resumed = workDispatcher_ ? workDispatcher_->finalize(this) : false;
     if(hasMoreWork) *hasMoreWork = resumed;
     return r.processed;
 }

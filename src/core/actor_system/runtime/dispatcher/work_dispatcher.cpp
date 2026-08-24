@@ -42,6 +42,11 @@ void WorkDispatcher::stop(){
 }
 
 bool WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
+    uint64_t actorId = actorRuntime->actor()->id();
+    if(inFlightSlot(actorId).held.exchange(1, std::memory_order_acq_rel)){
+        V2_METRICS()->recordDispatch(true, 0);
+        return true;
+    }
     bool ok = enqueueEntry(actorRuntime);
     if(ok) pendingWork_.fetch_add(1, std::memory_order_relaxed);
     return ok;
@@ -91,12 +96,14 @@ void WorkDispatcher::beginDrain(){
     }
 }
 
-void WorkDispatcher::onWorkDone(){
-    if(pendingWork_.fetch_sub(1, std::memory_order_acq_rel) == 1){
-        if(draining_.load(std::memory_order_acquire)){
-            for(int i = 0; i < workerCount_; i++) semas_[i]->release();
-        }
+bool WorkDispatcher::finalize(ActorRuntime* actorRuntime){
+    uint64_t actorId = actorRuntime->actorId();
+    releaseInFlight(actorId);
+    if(!actorRuntime->isStopped() && (actorRuntime->mailboxCount() != 0) && claimInFlight(actorId)){
+        return redispatch(actorRuntime);
     }
+    retirePendingWork();
+    return false;
 }
 
 bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
@@ -156,10 +163,33 @@ void WorkDispatcher::drainPendedActor(){
         ActorRuntime* rt = *it;
         int workerId = pickWorker(rt->actor()->id());
         if(queues_[workerId]->push(std::move(rt))){
+            pendingWork_.fetch_add(1, std::memory_order_relaxed);
             semas_[workerId]->release();
             it = pendingActorList_.erase(it);
         }else{
             ++it;
+        }
+    }
+}
+
+WorkDispatcher::InFlightSlot& WorkDispatcher::inFlightSlot(uint64_t actorId){
+    return inFlightSlots_[actorId % kMaxActors];
+}
+
+void WorkDispatcher::releaseInFlight(uint64_t actorId){
+    inFlightSlot(actorId).held.exchange(0, std::memory_order_acq_rel);
+}
+
+bool WorkDispatcher::claimInFlight(uint64_t actorId){
+    return inFlightSlot(actorId).held.exchange(1, std::memory_order_acq_rel) == 0;
+}
+
+void WorkDispatcher::retirePendingWork(){
+    if(pendingWork_.fetch_sub(1, std::memory_order_acq_rel) == 1){
+        if(draining_.load(std::memory_order_acquire)){
+            for(int i = 0; i < workerCount_; i++){
+                semas_[i]->release();
+            }
         }
     }
 }

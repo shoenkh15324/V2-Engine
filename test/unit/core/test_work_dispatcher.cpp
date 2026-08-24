@@ -134,14 +134,18 @@ TEST(WorkDispatcher, LoadAwareDispatchSpreadsOverflow){
     WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1);
     d.start();
 
-    auto actor = std::make_unique<TestActor>("hot", 0);
-    auto mailbox = std::make_unique<Mailbox>(16);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    auto a0 = std::make_unique<TestActor>("hot0", 0);
+    auto m0 = std::make_unique<Mailbox>(16);
+    ActorRuntime rt0(std::move(a0), std::move(m0), &d, nullptr, nullptr);
 
-    ASSERT_TRUE(d.dispatch(&rt));
-    ASSERT_TRUE(d.dispatch(&rt));
-    ASSERT_EQ(d.acquire(0), &rt);
-    ASSERT_EQ(d.acquire(1), &rt);
+    auto a1 = std::make_unique<TestActor>("hot1", 2);
+    auto m1 = std::make_unique<Mailbox>(16);
+    ActorRuntime rt1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
+
+    ASSERT_TRUE(d.dispatch(&rt0));
+    ASSERT_TRUE(d.dispatch(&rt1));
+    ASSERT_EQ(d.acquire(0), &rt0);
+    ASSERT_EQ(d.acquire(1), &rt1);
 
     d.stop();
 }
@@ -150,15 +154,15 @@ TEST(WorkDispatcher, LoadAwareKeepsHomeBelowWatermark){
     WorkDispatcher d(3, WorkDispatcher::kDefaultQueueCapacity, 5);
     d.start();
 
-    auto actor = std::make_unique<TestActor>("home", 0);
-    auto mailbox = std::make_unique<Mailbox>(16);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
-
-    for(int i = 0; i < 5; i++){
-        ASSERT_TRUE(d.dispatch(&rt));
+    std::vector<std::unique_ptr<ActorRuntime>> runtimes;
+    for(uint64_t i = 0; i < 5; i++){
+        auto actor = std::make_unique<TestActor>("home" + std::to_string(i), i * 3);
+        auto mailbox = std::make_unique<Mailbox>(16);
+        runtimes.push_back(std::make_unique<ActorRuntime>(std::move(actor), std::move(mailbox), &d, nullptr, nullptr));
+        ASSERT_TRUE(d.dispatch(runtimes.back().get()));
     }
     for(int i = 0; i < 5; i++){
-        EXPECT_EQ(d.acquire(0), &rt);
+        EXPECT_EQ(d.acquire(0), runtimes[static_cast<size_t>(i)].get());
     }
 
     d.stop();
@@ -245,4 +249,68 @@ TEST(WorkDispatcher, SingleEntryGuardConcurrentNoLoss){
     EXPECT_GT(snap.deduplicated, 0);
 
     V2_METRICS()->setEnabled(false);
+}
+
+TEST(WorkDispatcher, LostWakeupStress){
+    WorkDispatcher d(2);
+    d.start();
+
+    auto actor = std::make_unique<CountingActor>("hot", 0);
+    auto* counter = actor.get();
+    auto mailbox = std::make_unique<Mailbox>(100000);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+
+    const size_t N = 50000;
+    std::thread producer([&](){
+        for(size_t i = 0; i < N; i++){
+            rt.enqueue(Message::make(Tick{}));
+        }
+    });
+
+    while(counter->handled.load(std::memory_order_acquire) < N){
+        ActorRuntime* t = d.acquire(0);
+        if(t) t->run(1);
+    }
+    producer.join();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while((d.pendingWork() != 0) && (std::chrono::steady_clock::now() < deadline)){
+        ActorRuntime* t = d.acquire(0);
+        if(t){
+            t->run(-1);
+        }else{
+            std::this_thread::yield();
+        }
+    }
+
+    EXPECT_EQ(counter->handled.load(), N);
+    EXPECT_EQ(rt.mailboxCount(), 0u);
+    EXPECT_EQ(d.pendingWork(), 0u);
+
+    d.stop();
+}
+
+TEST(WorkDispatcher, FinalizeRetiresExactlyOnce){
+    WorkDispatcher d(1);
+    d.start();
+
+    auto actor = std::make_unique<CountingActor>("solo", 7);
+    auto* counter = actor.get();
+    auto mailbox = std::make_unique<Mailbox>(64);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+
+    for(size_t i = 0; i < 10; i++){
+        rt.enqueue(Message::make(Tick{}));
+    }
+    ASSERT_EQ(d.pendingWork(), 1u);
+
+    ActorRuntime* t = d.acquire(0);
+    ASSERT_EQ(t, &rt);
+    t->run(-1);
+
+    EXPECT_EQ(counter->handled.load(), 10u);
+    EXPECT_EQ(rt.mailboxCount(), 0u);
+    EXPECT_EQ(d.pendingWork(), 0u);
+
+    d.stop();
 }

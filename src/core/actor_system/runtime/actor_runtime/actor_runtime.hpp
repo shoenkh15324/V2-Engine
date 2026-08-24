@@ -4,7 +4,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_set>
-#include "core/common/container/cache_line.hpp"
 #include "core/actor_system/messages/message.hpp"
 #include "core/actor_system/actor/i_actor_registry.hpp"
 #include "core/actor_system/runtime/mailbox/i_mailbox.hpp"
@@ -33,6 +32,7 @@ public:
     IEventLoop* eventLoop() const override { return eventLoop_; }
     size_t mailboxCount() const override { return mailbox_->count(); }
     size_t mailboxCapacity() const override { return mailbox_->capacity(); }
+    bool isStopped() const { return stopped_.load(std::memory_order_relaxed); }
 
     int addTimer(Actor* target, Message msg, uint64_t delayMs, bool repeating) override;
     void cancelTimer(int timerId) override;
@@ -68,5 +68,4 @@ private:
     std::unordered_set<int> timerIds_;
     std::atomic<int> restartCount_{0};
     std::atomic<bool> stopped_{false};
-    alignas(kCacheLine) std::atomic<bool> scheduled_{false};
 };

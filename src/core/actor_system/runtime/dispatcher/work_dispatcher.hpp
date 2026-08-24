@@ -4,6 +4,7 @@
 #include <memory>
 #include <cstdint>
 #include <semaphore>
+#include "core/common/container/cache_line.hpp"
 #include "core/common/container/lock_free_mpmc_queue.hpp"
 #include "core/actor_system/runtime/dispatcher/i_work_dispatcher.hpp"
 
@@ -11,6 +12,7 @@ class WorkDispatcher : public IWorkDispatcher {
 public:
     static constexpr int kDefaultQueueCapacity = 1024;
     static constexpr int kDefaultHighWatermark = kDefaultQueueCapacity * 7 / 10;
+    static constexpr size_t kMaxActors = 1024;
 
     explicit WorkDispatcher(
         int workerCount,
@@ -37,15 +39,24 @@ public:
     void beginDrain() override;
     bool isDraining() const override { return draining_.load(std::memory_order_relaxed); }
     size_t pendingWork() const override { return pendingWork_.load(std::memory_order_relaxed); }
-    void onWorkDone() override;
+    bool finalize(ActorRuntime* actorRuntime) override;
     void drainPendedActor();
 
 private:
+    struct alignas(kCacheLine) InFlightSlot {
+        std::atomic<uint8_t> held{0};
+    };
+
     bool enqueueEntry(ActorRuntime* actorRuntime);
     int pickWorker(uint64_t actorId);
     int pickLeastLoaded(uint64_t actorId);
     bool tryAcquireOwn(int workerId, ActorRuntime*& out);
     bool trySteal(int workerId, ActorRuntime*& out);
+
+    InFlightSlot& inFlightSlot(uint64_t actorId);
+    void releaseInFlight(uint64_t actorId);
+    bool claimInFlight(uint64_t actorId);
+    void retirePendingWork();
 
     int workerCount_ = 0;
     int queueCapacity_ = kDefaultQueueCapacity;
@@ -57,6 +68,7 @@ private:
     std::atomic<bool> draining_{false};
     std::atomic<size_t> pendingWork_{0};
     std::vector<std::uint8_t> idleBackoff_; // worker-confined
+    std::vector<InFlightSlot> inFlightSlots_;
     std::vector<ActorRuntime*> pendingActorList_;
     std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
     std::vector<std::unique_ptr<LockFreeMpmcQueue<ActorRuntime*>>> queues_;
