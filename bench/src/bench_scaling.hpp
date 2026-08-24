@@ -27,6 +27,8 @@ struct ScalingParams{
     int maxbatch = 32;
     int warmup = 1;
     int scaleMax = 64;
+    int busyStealUs = -1;    // -1이면 엔진 기본값 사용
+    int idleStealUs = -1;
 
     static ScalingParams parse(const IBenchmark::Args& args);
 };

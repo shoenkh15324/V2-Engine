@@ -1,4 +1,6 @@
 #include "bench/src/benchmark.hpp"
+#include "core/perf/metrics/metrics.hpp"
+#include <cstdlib>
 #include <ctime>
 #include <string>
 #include <vector>
@@ -277,6 +279,25 @@ int main(int argc, char** argv){
     auto result = Benchmark::run(cmd, args);
     std::string content = formatResult(result);
     std::cout << content;
+
+    if(std::getenv("V2_DIAG") != nullptr){
+        auto snap = V2_METRICS()->snapshot();
+        std::cout << "\n[Diag: Workers]\n"
+                  << "  id  batches     messages   busyMs    idleMs   avgBatch\n";
+        for(size_t i = 0; i < snap.workers.size(); ++i){
+            const auto& w = snap.workers[i];
+            double avgBatch = (w.batches > 0) ? static_cast<double>(w.messages) / w.batches : 0.0;
+            std::printf("  %3zu %8llu %12llu %8.1f %8.1f %9.2f\n",
+                        i, (unsigned long long)w.batches, (unsigned long long)w.messages,
+                        w.busyTimeNs / 1000000.0, w.idleTimeNs / 1000000.0, avgBatch);
+        }
+        const auto& d = snap.dispatcher;
+        std::cout << "[Diag: Dispatcher]\n"
+                  << "  dispatch=" << d.dispatchCount << " dedup=" << d.deduplicated
+                  << " acquire=" << d.acquireCount
+                  << " steal=" << d.stealCount << " stealFail=" << d.stealFailCount << "\n";
+    }
+
     if(result.success){
         saveResult(resolveOutputPath(args, cmd), content);
     }

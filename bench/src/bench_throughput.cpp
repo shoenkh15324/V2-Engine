@@ -6,6 +6,7 @@
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
 #include <chrono>
+#include <cstdlib>
 #include <vector>
 
 static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
@@ -38,7 +39,9 @@ BenchmarkResult ThroughputBenchmark::run(const Args& args){
     ThroughputParams p = ThroughputParams::parse(args);
     int perActor = p.iterations / p.actors;
 
-    V2_METRICS()->setEnabled(false);
+    bool diag = std::getenv("V2_DIAG") != nullptr;
+    if(diag) V2_METRICS()->init(static_cast<size_t>(p.workers));
+    V2_METRICS()->setEnabled(diag);
 
     struct Outcome{
         bool completed{false};

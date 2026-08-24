@@ -24,6 +24,8 @@ ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
             else if(k == "maxbatch") p.maxbatch = std::stoi(v);
             else if(k == "warmup") p.warmup = std::stoi(v);
             else if(k == "scale-max") p.scaleMax = std::stoi(v);
+            else if(k == "busy-steal-us") p.busyStealUs = std::stoi(v);
+            else if(k == "idle-steal-us") p.idleStealUs = std::stoi(v);
         }catch(const std::exception&){
         }
     }
@@ -50,11 +52,17 @@ struct RunOutcome{
 
 // config 하나당 새 ActorSystem으로 독립 측정.
 // collectMetrics=false: 성능 실측(Phase A). true: 카운터 수집(Phase B).
-RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool collectMetrics){
+RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool collectMetrics, const ScalingParams& p){
     RunOutcome out;
     V2_METRICS()->setEnabled(collectMetrics);
 
-    auto sys = createDefaultActorSystem({workers, maxbatch}, bench::makeDefaultEventLoop());
+    ActorSystemConfig sysCfg;
+    sysCfg.numWorkers = workers;
+    sysCfg.maxBatch = maxbatch;
+    if(p.busyStealUs >= 0) sysCfg.busyStealIntervalUs = p.busyStealUs;
+    if(p.idleStealUs >= 0) sysCfg.idleStealIntervalUs = p.idleStealUs;
+
+    auto sys = createDefaultActorSystem(sysCfg, bench::makeDefaultEventLoop());
     std::vector<BenchActor*> acts;
     for(int i = 0; i < actors; i++){
         std::string nm = "bench_" + std::to_string(i);
@@ -116,14 +124,14 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
     };
 
     if(p.warmup > 0){
-        runOnce(p.workers, p.actors, std::min(p.iterations, 10000), p.maxbatch, false);
+        runOnce(p.workers, p.actors, std::min(p.iterations, 10000), p.maxbatch, false, p);
     }
 
     // config 하나 = Phase A(성능, metrics off) + Phase B(검증 재실행, metrics on)
     auto measure = [&](int workers, int actors, ScalePoint& pt) -> std::string{
         pt.produced = static_cast<uint64_t>(p.iterations);
 
-        RunOutcome perf = runOnce(workers, actors, p.iterations, p.maxbatch, false);
+        RunOutcome perf = runOnce(workers, actors, p.iterations, p.maxbatch, false, p);
         if(!perf.completed){
             return "incomplete(perf): handled=" + std::to_string(perf.handled)
                  + "/" + std::to_string(pt.produced);
@@ -133,7 +141,7 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
             ? (static_cast<double>(pt.produced) * 1e9 / static_cast<double>(perf.elapsedNs))
             : 0.0;
 
-        RunOutcome verif = runOnce(workers, actors, p.iterations, p.maxbatch, true);
+        RunOutcome verif = runOnce(workers, actors, p.iterations, p.maxbatch, true, p);
         pt.accepted = verif.accepted;
         pt.dropped = verif.dropped;
         pt.processed = verif.processed;
