@@ -12,6 +12,9 @@ class WorkDispatcher : public IWorkDispatcher {
 public:
     static constexpr int kDefaultQueueCapacity = 1024;
     static constexpr int kDefaultHighWatermark = kDefaultQueueCapacity * 7 / 10;
+    static constexpr int kDefaultParkSpinNs = 3000; // 파킹 전 스핀 예산
+    static constexpr int kDefaultTokenGraceNs = 5000; // 토큰 유예 예산
+    static constexpr int kSpinPauseStride = 32; // 조건 재확인 주기(pause 횟수)
     static constexpr size_t kMaxActors = 1024;
 
     explicit WorkDispatcher(
@@ -19,7 +22,9 @@ public:
         int queueCapacity = kDefaultQueueCapacity,
         int highWatermark = kDefaultHighWatermark,
         int busyStealIntervalUs = 200,
-        int idleStealIntervalUs = 2000
+        int idleStealIntervalUs = 2000,
+        int parkSpinNs = kDefaultParkSpinNs,
+        int tokenGraceNs = kDefaultTokenGraceNs
     );
     ~WorkDispatcher();
 
@@ -56,11 +61,15 @@ private:
     InFlightSlot& inFlightSlot(uint64_t actorId);
     void releaseInFlight(uint64_t actorId);
     bool claimInFlight(uint64_t actorId);
+    bool spinAcquire(int workerId, ActorRuntime*& out);
+    void graceSpin(const ActorRuntime* actorRuntime);
     void retirePendingWork();
 
     int workerCount_ = 0;
     int queueCapacity_ = kDefaultQueueCapacity;
     int highWatermark_ = 0;
+    int parkSpinNs_ = 0;
+    int tokenGraceNs_ = 0;
     int busyStealIntervalUs_ = 0;
     int idleStealIntervalUs_ = 0;
     std::mutex mutex_;
@@ -68,7 +77,7 @@ private:
     std::atomic<bool> draining_{false};
     std::atomic<size_t> pendingWork_{0};
     std::vector<std::uint8_t> idleBackoff_; // worker-confined
-    std::vector<InFlightSlot> inFlightSlots_;
+    std::vector<InFlightSlot> inFlightSlots_{kMaxActors};
     std::vector<ActorRuntime*> pendingActorList_;
     std::vector<std::unique_ptr<std::counting_semaphore<>>> semas_;
     std::vector<std::unique_ptr<LockFreeMpmcQueue<ActorRuntime*>>> queues_;

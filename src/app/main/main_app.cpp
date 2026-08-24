@@ -115,6 +115,8 @@ void MainApp::createActors(){
     sysConfig.maxBatch = cfg_.workerMaxBatch;
     sysConfig.busyStealIntervalUs = cfg_.busyStealIntervalUs;
     sysConfig.idleStealIntervalUs = cfg_.idleStealIntervalUs;
+    sysConfig.parkSpinNs = cfg_.parkSpinNs;
+    sysConfig.tokenGraceNs = cfg_.tokenGraceNs;
     sysConfig.defaultMailboxSize = cfg_.defaultMailboxSize;
     sysConfig.dispatcherQueueCapacity = cfg_.dispatcherQueueCapacity;
     sysConfig.dispatcherHighWatermark = cfg_.dispatcherHighWatermark;

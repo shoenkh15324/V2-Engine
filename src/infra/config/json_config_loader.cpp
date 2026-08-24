@@ -19,6 +19,8 @@ RuntimeConfig RuntimeConfig::loadFromFile(const std::string& path){
         if(j.contains("mainloop_sleep_ms")) cfg.mainLoopSleepMs = j["mainloop_sleep_ms"];
         if(j.contains("busy_steal_interval_us")) cfg.busyStealIntervalUs = j["busy_steal_interval_us"];
         if(j.contains("idle_steal_interval_us")) cfg.idleStealIntervalUs = j["idle_steal_interval_us"];
+        if(j.contains("park_spin_ns")) cfg.parkSpinNs = j["park_spin_ns"];
+        if(j.contains("token_grace_ns")) cfg.tokenGraceNs = j["token_grace_ns"];
 
         // Mailbox
         if(j.contains("default_mailbox_size")) cfg.defaultMailboxSize = j["default_mailbox_size"];

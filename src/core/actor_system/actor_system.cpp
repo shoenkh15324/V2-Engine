@@ -125,7 +125,9 @@ std::unique_ptr<ActorSystem> createDefaultActorSystem(const ActorSystemConfig& c
         config.dispatcherQueueCapacity,
         highWatermark,
         config.busyStealIntervalUs,
-        config.idleStealIntervalUs
+        config.idleStealIntervalUs,
+        config.parkSpinNs,
+        config.tokenGraceNs
     );
     auto scheduler = std::make_unique<Scheduler>(std::move(timer));
 

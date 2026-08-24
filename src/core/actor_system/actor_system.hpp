@@ -24,6 +24,8 @@ struct ActorSystemConfig {
     int maxBatch = 32;
     int busyStealIntervalUs = 200;
     int idleStealIntervalUs = 2000;
+    int parkSpinNs = 3000;
+    int tokenGraceNs = 5000;
     size_t defaultMailboxSize = 512;
     int dispatcherQueueCapacity = 1024;
     int dispatcherHighWatermark = 0; // 0이면 kDefaultHighWatermark 자동 계산

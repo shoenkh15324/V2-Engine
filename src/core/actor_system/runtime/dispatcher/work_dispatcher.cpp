@@ -1,26 +1,46 @@
 #include "work_dispatcher.hpp"
 #include <chrono>
+#include "core/common/time/time.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/perf/metrics/metrics.hpp"
+
+namespace {
+
+inline void cpuRelax(){ // 포터블 스핀 프리미티브
+#if defined(__x86_64__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__)
+    __builtin_arm_yield();
+#else
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
+}
+
+} // namespace
 
 WorkDispatcher::WorkDispatcher(
     int workerCount,
     int queueCapacity,
     int highWatermark,
     int busyStealIntervalUs,
-    int idleStealIntervalUs
+    int idleStealIntervalUs,
+    int parkSpinNs,
+    int tokenGraceNs
 ) : workerCount_(workerCount),
     queueCapacity_(queueCapacity),
     highWatermark_(highWatermark),
     busyStealIntervalUs_(busyStealIntervalUs),
-    idleStealIntervalUs_(idleStealIntervalUs)    
+    idleStealIntervalUs_(idleStealIntervalUs),
+    parkSpinNs_(parkSpinNs),
+    tokenGraceNs_(tokenGraceNs)
 {
     for(int i = 0; i < workerCount; i++){
         queues_.push_back(std::make_unique<LockFreeMpmcQueue<ActorRuntime*>>(queueCapacity_));
         semas_.push_back(std::make_unique<std::counting_semaphore<>>(0));
     }
     idleBackoff_.assign(workerCount, 0);
+    
 }
 
 WorkDispatcher::~WorkDispatcher(){
@@ -67,6 +87,11 @@ ActorRuntime* WorkDispatcher::acquire(int workerId){
         if(draining_.load(std::memory_order_relaxed) && (pendingWork_.load(std::memory_order_relaxed) == 0)){
             break;
         }
+        if((parkSpinNs_ > 0) && spinAcquire(workerId, ctx)){
+            idleBackoff_[workerId] = 0;
+            V2_METRICS()->recordAcquire();
+            return ctx;
+        }
         auto interval = idleBackoff_[workerId] ? idleStealIntervalUs_ : busyStealIntervalUs_;
         if(semas_[workerId]->try_acquire_for(std::chrono::microseconds(interval))){
             if(tryAcquireOwn(workerId, ctx)){
@@ -97,6 +122,7 @@ void WorkDispatcher::beginDrain(){
 }
 
 bool WorkDispatcher::finalize(ActorRuntime* actorRuntime){
+    if(tokenGraceNs_ > 0) graceSpin(actorRuntime);
     uint64_t actorId = actorRuntime->actorId();
     releaseInFlight(actorId);
     if(!actorRuntime->isStopped() && (actorRuntime->mailboxCount() != 0) && claimInFlight(actorId)){
@@ -182,6 +208,30 @@ void WorkDispatcher::releaseInFlight(uint64_t actorId){
 
 bool WorkDispatcher::claimInFlight(uint64_t actorId){
     return inFlightSlot(actorId).held.exchange(1, std::memory_order_acq_rel) == 0;
+}
+
+bool WorkDispatcher::spinAcquire(int workerId, ActorRuntime*& out){
+    const auto start = Time::now();
+    while(running_.load(std::memory_order_relaxed)){
+        for(int i = 0; i < kSpinPauseStride; ++i){
+            cpuRelax();
+            if(tryAcquireOwn(workerId, out)) return true;
+        }
+        if(Time::toNs(Time::now() - start) >= parkSpinNs_) return false;
+    }
+    return false;
+}
+
+void WorkDispatcher::graceSpin(const ActorRuntime* actorRuntime){
+    const auto start = Time::now();
+    while(actorRuntime->mailboxCount() == 0){
+        if(actorRuntime->isStopped()) break;
+        if(draining_.load(std::memory_order_relaxed)) break;
+        if(Time::toNs(Time::now() - start) >= tokenGraceNs_) break;
+        for(int i = 0; i < kSpinPauseStride; ++i){
+            cpuRelax();
+        }
+    }
 }
 
 void WorkDispatcher::retirePendingWork(){

@@ -15,6 +15,8 @@ struct RuntimeConfig{
     int mainLoopSleepMs = 1000;
     int busyStealIntervalUs = 200;
     int idleStealIntervalUs = 2000;
+    int parkSpinNs = 3000;
+    int tokenGraceNs = 5000;
 
     // Mailbox
     int defaultMailboxSize = 512;
