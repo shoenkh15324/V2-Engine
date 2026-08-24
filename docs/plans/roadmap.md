@@ -410,6 +410,61 @@ MemoryPool (Singleton)
 >
 > **방법**: `scheduled_` flag 기반 per-actor dedup을 `WorkDispatcher` 내부의 `inFlight_` 플래그로 교체하여 seq_cst fence를 제거
 
+### 진행 현황 (2026-08-24)
+
+#### 완료 ① — `inFlight_` 슬롯 전환 ✅ (`0ab017c`)
+
+아래 설계대로 구현하되 스케치의 정확성 결함 3건을 교정:
+
+| 스케치의 결함 | 교정 |
+|------|------|
+| `clearInFlight()`가 plain `store(release)` 사용 | **전 연산 `exchange(acq_rel)`로 통일** — RMW 수정 순서가 곧 happens-before 체인이 되어 seq_cst 없이 Dekker-equivalent 보장 |
+| clear 후 메일박스 재확인 누락 | **반납→재확인→재획득** 프로토콜로 복원 (`finalize()`) |
+| 파킹 경로 pendingWork_ 회계 불균형 (기존 버그) | `drainPendedActor()` 부활 시 크레딧 +1 |
+
+인터페이스: `-onWorkDone() +finalize(ActorRuntime*)`. 워커는 순수 실행자로 축소. 회귀 테스트: `LostWakeupStress`, `FinalizeRetiresExactlyOnce`, 단일 토큰 계약 재작성 2건.
+
+#### 완료 ② — 근본 원인 확정: futex 수면 진동 (V2_DIAG 실측) ✅
+
+fence 제거만으로 w=4 붕괴가 남아 E1(스틸 간격 50배 상향) 실험 → 스틸 프로브 기각. 그리드(w×a)에서 붕괴 조건이 `a≥2 ∧ w≥2`로 국소화 → `V2_DIAG` 메트릭으로 인과 확정:
+
+| 지표 | w=1 a=1 (정상) | w=4 a=16 (붕괴) |
+|---|---|---|
+| 평균 배치 | 18.5 | **1.41** |
+| 워커 idle 비율 | 0.4% | **94%** |
+| 사이클당 | ~1.4μs | **8.6μs (이 중 깨우기 7.4μs)** |
+
+> **인과 사슬**: 소비자 ≥ 생산자 공급 속도 → 메일박스 상시 얕음 → 배치 1.4로 붕괴 → 배치마다 토큰 사멸/재탄생 → 메시지당 futex wake(~7μs). **작업 단위(ns급 메시지)와 깨움 단위(μ급 커널 웨이크)의 두 자릿수 격차** — 설계 결함이 아니라 계층형 대기(스핀 티어) 부재로, 업계 표준 패턴(Tokio parker 등)으로 해소하는 영역.
+
+#### 완료 ③ — 스핀-던-파크 Site A+B ✅ (`35a1fa8`)
+
+- **Site A** `spinAcquire`: 파킹 전 최대 `parkSpinNs`(3μs) 자기 큐 재확인
+- **Site B** `graceSpin`: finalize 초입, 슬롯 반납 **전** `tokenGraceNs`(5μs) 메일박스 폴링 — 유예 중 도착 메시지를 기존 토큰이 흡수 (경합 창 추가 없음, ③ 토큰 유예를 흡수)
+- 포터블 `cpuRelax`, json 키 `park_spin_ns`/`token_grace_ns`
+
+#### 실측 결과 (단일 프로듀서, A=16 고정 worker sweep)
+
+| w | 이전 | 현재 |
+|---|------|------|
+| 1 | 19.6M | **23.7M** (+21%) |
+| 2 | 12.4M (0.64x) | **20.6M (0.87x)** |
+| **4** | **446K (0.02x)** | **18.9M (0.80x)** ← 로드맵 목표점 도달 |
+| 8 | 101K | 5.9M (0.25x) |
+| 16 (=A) | 93K | 96K (미개선 절벽) |
+
+> **구조적 상한 명시**: throughput 벤치는 드라이버 **단일 프로듀서**라 생산자 속도(~24M/s, dedup 경로 40~80ns/msg)가 시스템 캡. 이론적 최선은 flat 1.0x이며, 양의 스케일링 입증은 멀티 프로듀서 모드(`--producers N`)가 필요 — 엔진은 이미 MPSC/MPMC로 멀티 프로듀서 아키텍처.
+
+#### 잔여 과제 ⬜
+
+| 과제 | 상태 |
+|------|------|
+| **A≥W 절벽**: a==w 경계에서만 붕괴(96K) — 라우팅 폭풍 vs 깨우기 잔존 판별 필요. `--park-spin-ns/--token-grace-ns` 벤치 노출 후 D1~D3 진단 매트릭스 | ⬜ |
+| **저지연 회귀**: latency 벤치 P50 481ns→1.4μs, 처리량 −60% (w4a1 핑퐁) — Site B 무조건 세금 의심. grace=0 대조 실험 → 조건부 유예(직전 배치 크기 게이팅) 검토 | ⬜ |
+| contention −16%, backpressure 드롭율 변동 동반 관측 — 위 수정 후 재확인 | ⬜ |
+| throughput `--producers N` (멀티프로듀서 발행 모드) 추가 — Phase 5 참고 | ⬜ |
+
+---
+
 ### 문제 상황
 
 **throughput 벤치 (w=4, 단일 프로듀서):**
@@ -421,7 +476,7 @@ MemoryPool (Singleton)
 | 3 | 1.3M | 7.9x ↓ |
 | **4** | **220K** | **46.9x ↓** |
 
-> **핵심**: `actors = workers`일 때 최악. 단순 fence 최적화로는 해결 불가.
+> **핵심**: `actors = workers`일 때 최악. 단순 fence 최적화로는 해결 불가. *(2026-08-24 갱신: 실제 근본 원인은 위 futex 수면 진동으로 확정됨 — 아래 3가지 분석은 당시 가설)*
 
 ### 근본 원인 (3가지)
 
@@ -793,6 +848,9 @@ if(!more) workDispatcher_->onWorkDone();
 | CPU 클럭 안내 | 실행 전 `cpupower frequency-set -g performance` 안내 | ⬜ |
 | 이력 관리 | 이전 결과와 비교하는 `benchmark_history.json` | ⬜ |
 | 단일 출력 형식 | 모든 벤치마크가 동일한 JSON/마크다운 출력 생성 (현재 텍스트 전용) | ⬜ |
+| 멀티 프로듀서 발행 모드 | throughput에 `--producers N` — N스레드가 액터 집합을 분담해 발행. 단일 드라이버 구조상 생산자(~24M/s)가 시스템 캡이라 양의 스케일링 입증 불가한 현재 한계 해소 (4-5 잔여 과제 참고). 실제 데몬도 IPC·타이머·워커 redispatch 등 복수 발행 경로 보유 | ⬜ |
+| 스케줄러 튜닝 인자 표준화 | `--busy-steal-us/--idle-steal-us`(scaling), `--park-spin-ns/--token-grace-ns`(throughput, 예정)를 공통 옵션으로 승격 + 사용법 문서화 | ⬜ |
+| 진단 출력 기능화 | `V2_DIAG=1` 워커/디스패처 메트릭 덤프(현재 bench/main.cpp 임시 블록) — README bench 섹션 문서화 후 유지 | ⬜ |
 
 ### 워크스틸링 반영 재측정
 
