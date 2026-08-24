@@ -39,6 +39,10 @@
 
 ## Overview
 
+> 📌 **2026-08-24**: 실행 토큰 생명주기·inFlight 슬롯·finalize 정산·스핀 티어 설계는
+> [Scheduling](scheduling.md)으로 이관되었습니다. 이 문서의 일부 절(Worker 루프의 `onWorkDone`,
+> Scheduled Flag 게이트, 메모리 오더 표의 `scheduled_` 행)은 구 설계 기록으로 남아 있습니다.
+
 V² Engine uses an actor-based concurrency model built on three pillars: **lock-free data structures**, a **work-stealing thread pool**, and **actor affinity**. Thread safety is achieved through message passing via lock-free queues rather than shared-state locking. Locks are confined to infrastructure components that sit outside the message hot path.
 
 ---
@@ -401,7 +405,11 @@ No actor-level locking is needed — the queue's single-consumer property provid
 
 ### Scheduled Flag (Deduplication Gate)
 
-**File:** `src/core/actor_system/runtime/actor_runtime/actor_runtime.hpp:71`
+> ⚠️ **2026-08-24 갱신**: 이 절은 구 설계(`ActorRuntime::scheduled_`)를 다룹니다. 현재는
+> `WorkDispatcher` 내부의 inFlight 슬롯 + `finalize()` 정산 프로토콜로 대체되었습니다 —
+> 현행 설계는 [Scheduling](scheduling.md) §4~6을 참고하세요.
+
+**File:** `src/core/actor_system/runtime/actor_runtime/actor_runtime.hpp` *(구현 제거됨 — 역사 문서)*
 
 ```cpp
 alignas(kCacheLine) std::atomic<bool> scheduled_{false};
