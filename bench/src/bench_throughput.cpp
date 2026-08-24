@@ -1,15 +1,62 @@
 #include "bench_throughput.hpp"
 #include "benchmark.hpp"
+#include "bench/src/bench_common.hpp"
+#include "bench/src/bench_load.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "bench/src/event_loop_factory.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "core/common/time/time.hpp"
 #include "service/tick/tick_messages.hpp"
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
+#include <thread>
 #include <vector>
 
-static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
+namespace {
+
+struct RunOutcome{
+    bool completed{false};
+    uint64_t elapsedNs{0};
+    uint64_t handled{0};
+};
+
+std::unique_ptr<ActorSystem> makeSystem(const ThroughputParams& p){
+    ActorSystemConfig sysCfg;
+    sysCfg.numWorkers = p.workers;
+    sysCfg.maxBatch = p.maxbatch;
+    if(p.parkSpinNs >= 0) sysCfg.parkSpinNs = p.parkSpinNs;
+    if(p.tokenGraceNs >= 0) sysCfg.tokenGraceNs = p.tokenGraceNs;
+    return createDefaultActorSystem(sysCfg, bench::makeDefaultEventLoop());
+}
+
+std::vector<BenchActor*> createActors(ActorSystem& sys, const ThroughputParams& p, int64_t iterations){
+    std::vector<BenchActor*> acts;
+    size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iterations / p.actors) + 256;
+    for(int i = 0; i < p.actors; ++i){
+        acts.push_back(sys.createActor<BenchActor>("bench_" + std::to_string(i), mbSize));
+    }
+    return acts;
+}
+
+RunOutcome runOnce(const ThroughputParams& p, int64_t iterations){
+    auto sys = makeSystem(p);
+    std::vector<BenchActor*> acts = createActors(*sys, p, iterations);
+    sys->start();
+
+    auto start = bench::publishMessages(acts, p.producers, iterations);
+
+    auto waitStart = Time::now();
+    bool completed = bench::waitForTotal([&]{ return bench::totalProcessed(acts); },
+                                         static_cast<uint64_t>(iterations), waitStart);
+    auto end = Time::now();
+    sys->stop();
+
+    return { completed, static_cast<uint64_t>(Time::toNs(end - start)), bench::totalProcessed(acts) };
+}
+
+} // namespace
 
 ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
     ThroughputParams p;
@@ -20,9 +67,11 @@ ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
             else if(k == "iterations") p.iterations = std::stoi(v);
             else if(k == "maxbatch") p.maxbatch = std::stoi(v);
             else if(k == "warmup") p.warmup = std::stoi(v);
+            else if(k == "producers") p.producers = std::stoi(v);
+            else if(k == "park-spin-ns") p.parkSpinNs = std::stoi(v);
+            else if(k == "token-grace-ns") p.tokenGraceNs = std::stoi(v);
             else if(k == "mailbox") p.mailbox = std::stoul(v);
         }catch(const std::exception&){
-            // 파싱 실패 시 기본값 유지
         }
     }
     if(p.workers < 1) p.workers = 1;
@@ -31,62 +80,27 @@ ThroughputParams ThroughputParams::parse(const IBenchmark::Args& args){
     if(p.actors < 1) p.actors = 1;
     if(p.actors > p.iterations) p.actors = p.iterations;
     if(p.warmup < 0) p.warmup = 0;
+    if(p.producers < 1) p.producers = 1;
     return p;
 }
 
 BenchmarkResult ThroughputBenchmark::run(const Args& args){
     bool wasMetricsEnabled = V2_METRICS()->isEnabled();
     ThroughputParams p = ThroughputParams::parse(args);
-    int perActor = p.iterations / p.actors;
 
     bool diag = std::getenv("V2_DIAG") != nullptr;
     if(diag) V2_METRICS()->init(static_cast<size_t>(p.workers));
     V2_METRICS()->setEnabled(diag);
 
-    struct Outcome{
-        bool completed{false};
-        uint64_t elapsedNs{0};
-        uint64_t handled{0};
-    };
-
-    auto runOnce = [&](int iters) -> Outcome{
-        auto sys = createDefaultActorSystem({p.workers, p.maxbatch}, bench::makeDefaultEventLoop());
-        std::vector<BenchActor*> acts;
-        for(int i = 0; i < p.actors; i++){
-            std::string nm = "bench_" + std::to_string(i);
-            size_t mbSize = (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(iters / p.actors) + 256;
-            acts.push_back(sys->createActor<BenchActor>(nm, mbSize));
-        }
-        sys->start();
-        auto st = Time::now();
-        for(int i = 0; i < iters; i++){
-            acts[i % p.actors]->receiveMsg(Message::make(Tick{}));
-        }
-        auto waitStart = Time::now();
-        uint64_t totalHandled = 0;
-        while(totalHandled < static_cast<uint64_t>(iters)){
-            totalHandled = 0;
-            for(auto* a : acts) totalHandled += a->processed();
-            if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
-        }
-        auto et = Time::now();
-        sys->stop();
-
-        Outcome out;
-        out.completed = (totalHandled >= static_cast<uint64_t>(iters));
-        out.elapsedNs = Time::toNs(et - st);
-        out.handled = totalHandled;
-        return out;
-    };
-
-    if(p.warmup > 0) runOnce(p.warmup);
-
-    Outcome out = runOnce(p.iterations);
+    if(p.warmup > 0) runOnce(p, p.warmup);
+    RunOutcome out = runOnce(p, p.iterations);
 
     BenchmarkResult res;
     res.benchmarkName = name();
     res.description = description();
-    res.config = {p.workers, p.actors, p.maxbatch, (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(perActor) + 256, p.warmup};
+    res.config = {p.workers, p.actors, p.maxbatch,
+                  (p.mailbox > 0) ? p.mailbox : static_cast<size_t>(p.iterations / p.actors) + 256,
+                  p.warmup};
 
     if(!out.completed){
         res.success = false;

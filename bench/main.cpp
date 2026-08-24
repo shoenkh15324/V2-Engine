@@ -33,15 +33,18 @@ void printUsage(const char* prog){
         << "  --iterations N               Iteration count\n"
         << "  --maxbatch N                 Max batch size\n"
         << "  --warmup N                   Warmup rounds\n"
-        << "  --mailbox N                  Mailbox size\n";
+        << "  --mailbox N                  Mailbox size\n"
+        << "  --producers N                Producer thread count (load generators)\n"
+        << "  --park-spin-ns N             Dispatcher spin budget before parking (ns)\n"
+        << "  --token-grace-ns N           Token grace window at finalize (ns)\n";
 }
 
-std::string formatResult(const BenchmarkResult& result){
-    if(!result.success) return "error: " + result.errorMsg + "\n";
-
-    std::ostringstream oss;
+void appendHeader(std::ostringstream& oss, const BenchmarkResult& result){
     oss << "=== Benchmark: " << result.benchmarkName << " ===\n"
         << result.description << "\n\n";
+}
+
+void appendConfig(std::ostringstream& oss, const BenchmarkResult& result){
     oss << "[Test Config]\n"
         << "  Workers:    " << result.config.workers << "\n"
         << "  Actors:     " << result.config.actors << "\n"
@@ -50,7 +53,9 @@ std::string formatResult(const BenchmarkResult& result){
     if(result.throughput.iterations > 0)
         oss << "  Iterations: " << result.throughput.iterations << "\n";
     oss << "  Warmup:     " << result.config.warmup << "\n";
+}
 
+void appendHeadlineMetrics(std::ostringstream& oss, const BenchmarkResult& result){
     char buf[64];
     if(result.throughput.msgsPerSec > 0.0){
         std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.msgsPerSec);
@@ -64,105 +69,129 @@ std::string formatResult(const BenchmarkResult& result){
         std::snprintf(buf, sizeof(buf), "%.2f", result.throughput.totalDurationNs / 1000000.0);
         oss << "  Total Time: " << buf << " ms\n";
     }
+}
 
-    if(result.latency.percentiles.p50 > 0.0){
-        oss << "\n[Latency Distribution]\n";
-        std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p50);
-        oss << "  P50:  " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p95);
-        oss << "  P95:  " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p99);
-        oss << "  P99:  " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p999);
-        oss << "  P999: " << buf << " ns\n";
-    }
+void appendLatencyDistribution(std::ostringstream& oss, const BenchmarkResult& result){
+    if(result.latency.percentiles.p50 <= 0.0) return;
+    char buf[64];
+    oss << "\n[Latency Distribution]\n";
+    std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p50);
+    oss << "  P50:  " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p95);
+    oss << "  P95:  " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p99);
+    oss << "  P99:  " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.0f", result.latency.percentiles.p999);
+    oss << "  P999: " << buf << " ns\n";
+}
 
-    if(result.backpressure.sent > 0){
-        oss << "\n[Backpressure]\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.dropRate);
-        oss << "  Drop Rate:   " << buf << "\n";
-        oss << "  Sent:        " << result.backpressure.sent << "\n";
-        oss << "  Dropped:     " << result.backpressure.dropped << "\n";
-        oss << "  Backlog:     " << result.backpressure.backlogAtDrainStart << "\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.floodDurationNs / 1000000.0);
-        oss << "  Flood Time:  " << buf << " ms\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.drainDurationNs / 1000000.0);
-        oss << "  Drain Time:  " << buf << " ms\n";
-    }
+void appendBackpressure(std::ostringstream& oss, const BenchmarkResult& result){
+    if(result.backpressure.sent <= 0) return;
+    char buf[64];
+    oss << "\n[Backpressure]\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.dropRate);
+    oss << "  Drop Rate:   " << buf << "\n";
+    oss << "  Sent:        " << result.backpressure.sent << "\n";
+    oss << "  Dropped:     " << result.backpressure.dropped << "\n";
+    oss << "  Backlog:     " << result.backpressure.backlogAtDrainStart << "\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.floodDurationNs / 1000000.0);
+    oss << "  Flood Time:  " << buf << " ms\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.drainDurationNs / 1000000.0);
+    oss << "  Drain Time:  " << buf << " ms\n";
+}
 
-    if(result.scheduler.iterations > 0){
-        oss << "\n[Scheduler]\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.avgIntervalNs);
-        oss << "  Avg Interval: " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.minIntervalNs);
-        oss << "  Min Interval: " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.maxIntervalNs);
-        oss << "  Max Interval: " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p50);
-        oss << "  P50:          " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p95);
-        oss << "  P95:          " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p99);
-        oss << "  P99:          " << buf << " ns\n";
-        std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p999);
-        oss << "  P999:         " << buf << " ns\n";
-    }
+void appendScheduler(std::ostringstream& oss, const BenchmarkResult& result){
+    if(result.scheduler.iterations <= 0) return;
+    char buf[64];
+    oss << "\n[Scheduler]\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.avgIntervalNs);
+    oss << "  Avg Interval: " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.minIntervalNs);
+    oss << "  Min Interval: " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.maxIntervalNs);
+    oss << "  Max Interval: " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p50);
+    oss << "  P50:          " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p95);
+    oss << "  P95:          " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p99);
+    oss << "  P99:          " << buf << " ns\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.scheduler.p999);
+    oss << "  P999:         " << buf << " ns\n";
+}
 
-    if(!result.scaling.workerScaling.empty() || !result.scaling.actorScaling.empty()){
-        auto printSeries = [&](const char* label, const std::vector<ScalePoint>& pts){
-            if(pts.empty()) return;
-            double baseTp = pts.front().msgsPerSec;
-            oss << "\n[" << label << "] (baseline = " << pts.front().param << ")\n";
-            for(auto& q : pts){
-                double speedup = (baseTp > 0) ? (q.msgsPerSec / baseTp) : 0.0;
-                double eff = speedup / static_cast<double>(q.param);
-                std::snprintf(buf, sizeof(buf), "%.0f", q.msgsPerSec);
-                oss << "  " << std::setw(4) << q.param << " " << label << ": "
-                    << std::right << std::setw(12) << buf << " m/s";
-                std::snprintf(buf, sizeof(buf), "%.2fx", speedup);
-                oss << " | speedup " << buf;
-                std::snprintf(buf, sizeof(buf), "%.1f%%", eff * 100.0);
-                oss << " | eff " << buf << "\n";
-            }
-        };
-        printSeries("workers", result.scaling.workerScaling);
-        printSeries("actors", result.scaling.actorScaling);
+void appendScaling(std::ostringstream& oss, const BenchmarkResult& result){
+    if(result.scaling.workerScaling.empty() && result.scaling.actorScaling.empty()) return;
+    char buf[64];
 
-        oss << "\n[Verification] (P=Produced A=Accepted D=Dropped Pr=Processed R=Remaining)\n";
-        auto printVerif = [&](char tag, const ScalePoint& q){
-            bool ok = (q.produced == q.accepted + q.dropped)
-                   && (q.accepted == q.processed + q.remaining)
-                   && (q.remaining == 0);
-            oss << "  " << tag << "=" << std::left << std::setw(6) << q.param << std::right
-                << "P=" << q.produced
-                << " A=" << q.accepted
-                << " D=" << q.dropped
-                << " Pr=" << q.processed
-                << " R=" << q.remaining
-                << (ok ? "  OK" : "  FAIL") << "\n";
-        };
-        for(auto& q : result.scaling.workerScaling) printVerif('w', q);
-        for(auto& q : result.scaling.actorScaling) printVerif('a', q);
-    }
-
-    if(!result.actorSnaps.empty()){
-        oss << "\n[Actors]\n";
-        oss << std::left
-            << std::setw(16) << "Name"
-            << std::right
-            << std::setw(12) << "Mailbox"
-            << std::setw(12) << "Processed"
-            << "\n";
-        oss << std::string(40, '-') << "\n";
-        for(auto& a : result.actorSnaps){
-            oss << std::left
-                << std::setw(16) << a.name
-                << std::right
-                << std::setw(12) << a.mailboxCapacity
-                << std::setw(12) << a.msgProcessed
-                << "\n";
+    auto printSeries = [&](const char* label, const std::vector<ScalePoint>& pts){
+        if(pts.empty()) return;
+        double baseTp = pts.front().msgsPerSec;
+        oss << "\n[" << label << "] (baseline = " << pts.front().param << ")\n";
+        for(auto& q : pts){
+            double speedup = (baseTp > 0) ? (q.msgsPerSec / baseTp) : 0.0;
+            double eff = speedup / static_cast<double>(q.param);
+            std::snprintf(buf, sizeof(buf), "%.0f", q.msgsPerSec);
+            oss << "  " << std::setw(4) << q.param << " " << label << ": "
+                << std::right << std::setw(12) << buf << " m/s";
+            std::snprintf(buf, sizeof(buf), "%.2fx", speedup);
+            oss << " | speedup " << buf;
+            std::snprintf(buf, sizeof(buf), "%.1f%%", eff * 100.0);
+            oss << " | eff " << buf << "\n";
         }
+    };
+    printSeries("workers", result.scaling.workerScaling);
+    printSeries("actors", result.scaling.actorScaling);
+
+    oss << "\n[Verification] (P=Produced A=Accepted D=Dropped Pr=Processed R=Remaining)\n";
+    auto printVerif = [&](char tag, const ScalePoint& q){
+        bool ok = (q.produced == q.accepted + q.dropped)
+               && (q.accepted == q.processed + q.remaining)
+               && (q.remaining == 0);
+        oss << "  " << tag << "=" << std::left << std::setw(6) << q.param << std::right
+            << "P=" << q.produced
+            << " A=" << q.accepted
+            << " D=" << q.dropped
+            << " Pr=" << q.processed
+            << " R=" << q.remaining
+            << (ok ? "  OK" : "  FAIL") << "\n";
+    };
+    for(auto& q : result.scaling.workerScaling) printVerif('w', q);
+    for(auto& q : result.scaling.actorScaling) printVerif('a', q);
+}
+
+void appendActorTable(std::ostringstream& oss, const BenchmarkResult& result){
+    if(result.actorSnaps.empty()) return;
+    oss << "\n[Actors]\n";
+    oss << std::left
+        << std::setw(16) << "Name"
+        << std::right
+        << std::setw(12) << "Mailbox"
+        << std::setw(12) << "Processed"
+        << "\n";
+    oss << std::string(40, '-') << "\n";
+    for(auto& a : result.actorSnaps){
+        oss << std::left
+            << std::setw(16) << a.name
+            << std::right
+            << std::setw(12) << a.mailboxCapacity
+            << std::setw(12) << a.msgProcessed
+            << "\n";
     }
+}
+
+std::string formatResult(const BenchmarkResult& result){
+    if(!result.success) return "error: " + result.errorMsg + "\n";
+
+    std::ostringstream oss;
+    appendHeader(oss, result);
+    appendConfig(oss, result);
+    appendHeadlineMetrics(oss, result);
+    appendLatencyDistribution(oss, result);
+    appendBackpressure(oss, result);
+    appendScheduler(oss, result);
+    appendScaling(oss, result);
+    appendActorTable(oss, result);
     return oss.str();
 }
 

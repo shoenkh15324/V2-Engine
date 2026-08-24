@@ -1,6 +1,8 @@
 #include "bench_scaling.hpp"
 #include "benchmark.hpp"
 #include "bench_throughput.hpp"
+#include "bench/src/bench_common.hpp"
+#include "bench/src/bench_load.hpp"
 #include "core/actor_system/actor_system.hpp"
 #include "core/perf/metrics/metrics.hpp"
 #include "bench/src/event_loop_factory.hpp"
@@ -10,9 +12,8 @@
 #include <atomic>
 #include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
-
-static constexpr uint64_t kSpinWaitTimeoutNs = 10000000000ULL; // 10초
 
 ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
     ScalingParams p;
@@ -26,6 +27,7 @@ ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
             else if(k == "scale-max") p.scaleMax = std::stoi(v);
             else if(k == "busy-steal-us") p.busyStealUs = std::stoi(v);
             else if(k == "idle-steal-us") p.idleStealUs = std::stoi(v);
+            else if(k == "producers") p.producers = std::stoi(v);
         }catch(const std::exception&){
         }
     }
@@ -35,6 +37,7 @@ ScalingParams ScalingParams::parse(const IBenchmark::Args& args){
     if(p.maxbatch < 1) p.maxbatch = 1;
     if(p.warmup < 0) p.warmup = 0;
     if(p.scaleMax < 1) p.scaleMax = 1;
+    if(p.producers < 1) p.producers = 1;
     return p;
 }
 
@@ -50,8 +53,6 @@ struct RunOutcome{
     uint64_t remaining{0};
 };
 
-// config 하나당 새 ActorSystem으로 독립 측정.
-// collectMetrics=false: 성능 실측(Phase A). true: 카운터 수집(Phase B).
 RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool collectMetrics, const ScalingParams& p){
     RunOutcome out;
     V2_METRICS()->setEnabled(collectMetrics);
@@ -65,29 +66,21 @@ RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool c
     auto sys = createDefaultActorSystem(sysCfg, bench::makeDefaultEventLoop());
     std::vector<BenchActor*> acts;
     for(int i = 0; i < actors; i++){
-        std::string nm = "bench_" + std::to_string(i);
         size_t mbSize = static_cast<size_t>(iterations / actors) + 256;
-        acts.push_back(sys->createActor<BenchActor>(nm, mbSize));
+        acts.push_back(sys->createActor<BenchActor>("bench_" + std::to_string(i), mbSize));
     }
     if(collectMetrics) V2_METRICS()->reset();
 
     sys->start();
-    auto st = Time::now();
-    for(int i = 0; i < iterations; i++){
-        acts[i % actors]->receiveMsg(Message::make(Tick{}));
-    }
-    auto waitStart = Time::now();
-    uint64_t totalHandled = 0;
-    while(totalHandled < static_cast<uint64_t>(iterations)){
-        totalHandled = 0;
-        for(auto* a : acts) totalHandled += a->processed();
-        if(Time::toNs(Time::now() - waitStart) > kSpinWaitTimeoutNs) break;
-    }
-    auto et = Time::now();
+    auto start = bench::publishMessages(acts, p.producers, iterations);
 
-    out.completed = (totalHandled >= static_cast<uint64_t>(iterations));
-    out.elapsedNs = Time::toNs(et - st);
-    out.handled = totalHandled;
+    auto waitStart = Time::now();
+    out.completed = bench::waitForTotal([&]{ return bench::totalProcessed(acts); },
+                                        static_cast<uint64_t>(iterations), waitStart);
+    auto end = Time::now();
+
+    out.elapsedNs = Time::toNs(end - start);
+    out.handled = bench::totalProcessed(acts);
 
     sys->stop();
 
@@ -104,6 +97,58 @@ RunOutcome runOnce(int workers, int actors, int iterations, int maxbatch, bool c
     }
 
     return out;
+}
+
+// config 하나 = Phase A(성능, metrics off) + Phase B(검증 재실행, metrics on).
+// 보존 검증(P=A+D, A=Pr+R, R=0) 실패 시 오류 문자열 반환.
+std::string measurePoint(const ScalingParams& p, int workers, int actors, ScalePoint& pt){
+    pt.produced = static_cast<uint64_t>(p.iterations);
+
+    RunOutcome perf = runOnce(workers, actors, p.iterations, p.maxbatch, false, p);
+    if(!perf.completed){
+        return "incomplete(perf): handled=" + std::to_string(perf.handled)
+             + "/" + std::to_string(pt.produced);
+    }
+    pt.elapsedNs = perf.elapsedNs;
+    pt.msgsPerSec = (perf.elapsedNs > 0)
+        ? (static_cast<double>(pt.produced) * 1e9 / static_cast<double>(perf.elapsedNs))
+        : 0.0;
+
+    RunOutcome verif = runOnce(workers, actors, p.iterations, p.maxbatch, true, p);
+    pt.accepted = verif.accepted;
+    pt.dropped = verif.dropped;
+    pt.processed = verif.processed;
+    pt.remaining = verif.remaining;
+
+    if(!verif.completed){
+        return "incomplete(verify): handled=" + std::to_string(verif.handled)
+             + "/" + std::to_string(pt.produced);
+    }
+    if(pt.produced != pt.accepted + pt.dropped){
+        return "P!=A+D: P=" + std::to_string(pt.produced)
+             + " A=" + std::to_string(pt.accepted)
+             + " D=" + std::to_string(pt.dropped);
+    }
+    if(pt.accepted != pt.processed + pt.remaining || pt.remaining != 0){
+        return "A!=Pr+R: A=" + std::to_string(pt.accepted)
+             + " Pr=" + std::to_string(pt.processed)
+             + " R=" + std::to_string(pt.remaining);
+    }
+    return "";
+}
+
+std::vector<ScalePoint> sweep(const ScalingParams& p, bool sweepWorkers){
+    std::vector<ScalePoint> points;
+    for(int v = 1; v <= p.scaleMax; v *= 2){
+        ScalePoint pt;
+        pt.param = v;
+        int workers = sweepWorkers ? v : p.workers;
+        int actors  = sweepWorkers ? p.actors : v;
+        std::string err = measurePoint(p, workers, actors, pt);
+        if(!err.empty()) break;   // 호출자가 축 라벨과 함께 보고
+        points.push_back(std::move(pt));
+    }
+    return points;
 }
 
 } // namespace
@@ -127,65 +172,26 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
         runOnce(p.workers, p.actors, std::min(p.iterations, 10000), p.maxbatch, false, p);
     }
 
-    // config 하나 = Phase A(성능, metrics off) + Phase B(검증 재실행, metrics on)
-    auto measure = [&](int workers, int actors, ScalePoint& pt) -> std::string{
-        pt.produced = static_cast<uint64_t>(p.iterations);
-
-        RunOutcome perf = runOnce(workers, actors, p.iterations, p.maxbatch, false, p);
-        if(!perf.completed){
-            return "incomplete(perf): handled=" + std::to_string(perf.handled)
-                 + "/" + std::to_string(pt.produced);
-        }
-        pt.elapsedNs = perf.elapsedNs;
-        pt.msgsPerSec = (perf.elapsedNs > 0)
-            ? (static_cast<double>(pt.produced) * 1e9 / static_cast<double>(perf.elapsedNs))
-            : 0.0;
-
-        RunOutcome verif = runOnce(workers, actors, p.iterations, p.maxbatch, true, p);
-        pt.accepted = verif.accepted;
-        pt.dropped = verif.dropped;
-        pt.processed = verif.processed;
-        pt.remaining = verif.remaining;
-
-        if(!verif.completed){
-            return "incomplete(verify): handled=" + std::to_string(verif.handled)
-                 + "/" + std::to_string(pt.produced);
-        }
-        if(pt.produced != pt.accepted + pt.dropped){
-            return "P!=A+D: P=" + std::to_string(pt.produced)
-                 + " A=" + std::to_string(pt.accepted)
-                 + " D=" + std::to_string(pt.dropped);
-        }
-        if(pt.accepted != pt.processed + pt.remaining || pt.remaining != 0){
-            return "A!=Pr+R: A=" + std::to_string(pt.accepted)
-                 + " Pr=" + std::to_string(pt.processed)
-                 + " R=" + std::to_string(pt.remaining);
-        }
-        return "";
-    };
-
-    std::vector<ScalePoint> workerPoints;
+    std::vector<ScalePoint> wPts, aPts;
     for(int w = 1; w <= p.scaleMax; w *= 2){
         ScalePoint pt;
         pt.param = w;
-        std::string err = measure(w, p.actors, pt);
+        std::string err = measurePoint(p, w, p.actors, pt);
         if(!err.empty()) return fail("scaling failed at w=" + std::to_string(w) + ": " + err);
-        workerPoints.push_back(std::move(pt));
+        wPts.push_back(std::move(pt));
     }
-
-    std::vector<ScalePoint> actorPoints;
     for(int a = 1; a <= p.scaleMax; a *= 2){
         ScalePoint pt;
         pt.param = a;
-        std::string err = measure(p.workers, a, pt);
+        std::string err = measurePoint(p, p.workers, a, pt);
         if(!err.empty()) return fail("scaling failed at a=" + std::to_string(a) + ": " + err);
-        actorPoints.push_back(std::move(pt));
+        aPts.push_back(std::move(pt));
     }
 
     // 요약은 Phase A 실측 합산만 사용 — Total Time/Throughput/Iterations 상호 일치 (#1)
     uint64_t totalMsgs = 0, totalNs = 0;
-    for(auto& q : workerPoints){ totalMsgs += q.produced; totalNs += q.elapsedNs; }
-    for(auto& q : actorPoints){ totalMsgs += q.produced; totalNs += q.elapsedNs; }
+    for(auto& q : wPts){ totalMsgs += q.produced; totalNs += q.elapsedNs; }
+    for(auto& q : aPts){ totalMsgs += q.produced; totalNs += q.elapsedNs; }
 
     BenchmarkResult res;
     res.benchmarkName = name();
@@ -196,8 +202,8 @@ BenchmarkResult ScalingBenchmark::run(const Args& args){
     res.throughput.msgsPerSec = (totalNs > 0)
         ? (static_cast<double>(totalMsgs) * 1e9 / static_cast<double>(totalNs))
         : 0.0;
-    res.scaling.workerScaling = std::move(workerPoints);
-    res.scaling.actorScaling = std::move(actorPoints);
+    res.scaling.workerScaling = std::move(wPts);
+    res.scaling.actorScaling = std::move(aPts);
 
     V2_METRICS()->setEnabled(wasMetricsEnabled);
     return res;

@@ -29,6 +29,7 @@ struct ScalingParams{
     int scaleMax = 64;
     int busyStealUs = -1;    // -1이면 엔진 기본값 사용
     int idleStealUs = -1;
+    int producers = 1;       // 부하 발행 스레드 수 (모든 스윕 포인트에 고정 적용)
 
     static ScalingParams parse(const IBenchmark::Args& args);
 };

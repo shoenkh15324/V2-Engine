@@ -17,6 +17,9 @@ struct ThroughputParams{
     int iterations = 100000; // 충분한 측정 시간 확보 (#6)
     int maxbatch = 32;
     int warmup = 0;
+    int producers = 1;
+    int parkSpinNs = -1;
+    int tokenGraceNs = -1;
     size_t mailbox = 0;
 
     static ThroughputParams parse(const IBenchmark::Args& args);
