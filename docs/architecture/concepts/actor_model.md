@@ -1,50 +1,50 @@
-# Actor Model
+# 액터 모델
 
 ---
 
-## Table of Contents
+## 목차
 
-- [Overview](#overview)
-- [Design Philosophy](#design-philosophy)
-- [Architecture](#architecture)
-- [Core Classes](#core-classes)
+- [개요](#개요)
+- [설계 철학](#설계-철학)
+- [아키텍처](#아키텍처)
+- [핵심 클래스](#핵심-클래스)
   - [Actor](#actor)
   - [ActorSystem](#actorsystem)
   - [ActorHandle](#actorhandle)
   - [ActorRegistry](#actorregistry)
   - [ActorRuntime](#actorruntime)
-- [Lifecycle](#lifecycle)
-- [Communication](#communication)
-  - [Message Sending](#message-sending)
-  - [Type-Safe Dispatch](#type-safe-dispatch)
-  - [Timers](#timers)
-- [Fault Tolerance](#fault-tolerance)
-- [Ownership & Hierarchy](#ownership--hierarchy)
-- [Summary](#summary)
+- [ 생명주기](#-생명주기)
+- [통신](#통신)
+  - [메시지 전송](#메시지-전송)
+  - [타입 안전 디스패치](#타입-안전-디스패치)
+  - [타이머](#타이머)
+- [결함 내성](#결함-내성)
+- [소유권과 계층](#소유권과-계층)
+- [요약](#요약)
 
 ---
 
-## Overview
+## 개요
 
-V² Engine adopts a flat, isolated actor model for structuring long-running system daemons. Every component in the system — from CLI command handling to OS signal processing — is an independent actor that owns its state and communicates exclusively through asynchronous message passing.
+V² Engine은 긴 시간 실행되는 시스템 데몬 구조화를 위해 평면적이고 격리된 액터 모델을 채택합니다. 시스템 내의 모든 구성 요소 — CLI 명령 처리부터 OS 시그널 처리까지 — 는 각각 독립적인 액터이며, 자체 상태를 소유하고 비동기 메시지 전송을 통해서만 통신합니다.
 
-Unlike game engine actor models (e.g., Unreal Engine's actor-component hierarchy), V² Engine actors are **self-contained peers** with no parent-child relationships and no spatial or transform system. This is a pure message-passing framework optimized for system-level services.
-
----
-
-## Design Philosophy
-
-| Principle | Description |
-|-----------|-------------|
-| **Actor isolation** | Each actor owns a private mailbox and processes messages sequentially. No shared state between actors. |
-| **Lock-free hot path** | Mailboxes and dispatch queues use lock-free data structures. No mutex contention on the message delivery path. |
-| **Cooperative scheduling** | Actors process messages in configurable batches (default: 32) then yield. No preemption. |
-| **Compile-time safety** | The `dispatch()` template uses C++20 `requires` expressions to statically verify message handler coverage. |
-| **Generation-based references** | `ActorHandle` uses generation counters to safely detect stale references without `shared_ptr` overhead. |
+게임 엔진 액터 모델(예: Unreal Engine의 액터-컴포넌트 계층)과 달리, V² Engine의 액터는 부모-자식 관계나 공간·변환 시스템이 없는 **독립적인 피어**입니다. 시스템 수준 서비스에 최적화된 순수 메시지 전송 프레임워크입니다.
 
 ---
 
-## Architecture
+## 설계 철학
+
+| 원칙 | 설명 |
+|------|------|
+| **액터 격리** | 각 액터는 전용 메일박스를 소유하며 메시지를 순차적으로 처리합니다. 액터 간 공유 상태가 없습니다. |
+| **핫 패스 락프리** | 메일박스와 디스패치 큐는 락프리 데이터 구조를 사용합니다. 메시지 전달 경로에서 뮤텍스 경쟁이 없습니다. |
+| **협력 스케줄링** | 액터는 설정 가능한 배치(기본값: 32)로 메시지 처리 후 양보합니다. 선점은 없습니다. |
+| **컴파일 타임 안전성** | `dispatch()` 템플릿은 C++20 `requires` 표현식을 사용하여 메시지 핸들러 커버리를 정적으로 검증합니다. |
+| **세대 기반 참조** | `ActorHandle`은 세대 카운터를 사용하여 `shared_ptr` 오버헤드 없이 만료된 참조를 안전하게 감지합니다. |
+
+---
+
+## 아키텍처
 
 ```
 ActorSystem
@@ -59,17 +59,17 @@ ActorSystem
   └── EventLoop (epoll)
 ```
 
-**Ownership chain:** `ActorSystem` owns `Worker` threads and `ActorRuntime` instances. Each `ActorRuntime` wraps one `Actor` and one `Mailbox`. The `ActorRegistry` holds raw pointers for lookup (generation-checked). The `Supervisor` handles failures with configurable restart policies.
+**소유 체인:** `ActorSystem`은 `Worker` 스레드와 `ActorRuntime` 인스턴스를 소유합니다. 각 `ActorRuntime`은 하나의 `Actor`와 하나의 `Mailbox`를 래핑합니다. `ActorRegistry`는 조회용 원시 포인터를 보유합니다(세대 검증 포함). `Supervisor`는 설정 가능한 재시작 정책으로 결함을 처리합니다.
 
 ---
 
-## Core Classes
+## 핵심 클래스
 
 ### Actor
 
-**File:** `src/core/actor_system/actor/actor.hpp:20`
+**파일:** `src/core/actor_system/actor/actor.hpp:20`
 
-Abstract base class for all actors. Defines the lifecycle interface and message-sending API.
+모든 액터의 추상 기본 클래스. 생명주기 인터페이스와 메시지 전송 API를 정의합니다.
 
 ```cpp
 class Actor {
@@ -104,23 +104,23 @@ public:
 };
 ```
 
-**State enum:**
+**상태 열거형:**
 
-| State | Value | Description |
-|-------|-------|-------------|
-| `Closed` | 0 | Inactive, not processing messages |
-| `Closing` | 1 | Transitioning to closed |
-| `Opening` | 2 | Transitioning to open |
-| `Opened` | 3 | Active, processing messages |
-| `Inherited` | 4 | Special state for forwarding |
+| 상태 | 값 | 설명 |
+|------|---|------|
+| `Closed` | 0 | 비활성, 메시지 처리 없음 |
+| `Closing` | 1 | 종료 중 전이 |
+| `Opening` | 2 | 개시 중 전이 |
+| `Opened` | 3 | 활성, 메시지 처리 중 |
+| `Inherited` | 4 | 포워딩을 위한 특수 상태 |
 
 ---
 
 ### ActorSystem
 
-**File:** `src/core/actor_system/actor_system.hpp:50`
+**파일:** `src/core/actor_system/actor_system.hpp:50`
 
-Top-level system that owns the runtime. Creates actors, manages worker threads, and coordinates the event loop.
+런타임을 소유하는 최상위 시스템. 액터를 생성하고, 워커 스레드를 관리하며, 이벤트 루프를 조율합니다.
 
 ```cpp
 class ActorSystem {
@@ -137,18 +137,18 @@ public:
 };
 ```
 
-**Creation flow:**
-1. Allocates unique ID via `nextActorId_++`
-2. Constructs actor via `std::make_unique<T>(name, id, args...)`
-3. Creates `Mailbox` + `ActorRuntime`, registers in `ActorRegistry`
+**생성 흐름:**
+1. `nextActorId_++`로 고유 ID 할당
+2. `std::make_unique<T>(name, id, args...)`로 액터 생성
+3. `Mailbox` + `ActorRuntime` 생성, `ActorRegistry`에 등록
 
 ---
 
 ### ActorHandle
 
-**File:** `src/core/actor_system/actor/actor_handle.hpp:8`
+**파일:** `src/core/actor_system/actor/actor_handle.hpp:8`
 
-Generation-aware weak reference to an actor. Prevents use-after-free when actor IDs are recycled.
+액터에 대한 세대 인식 약한 참조. 액터 ID가 재활용될 때 use-after-free를 방지합니다.
 
 ```cpp
 struct ActorHandle {
@@ -160,15 +160,15 @@ struct ActorHandle {
 };
 ```
 
-**How it works:** When an actor is removed from the registry, the generation counter for that ID slot is incremented. Any subsequent `handle.get()` call checks the generation and returns `nullptr` if the handle is stale. This eliminates the need for `shared_ptr` while remaining safe against dangling references.
+**동작 원리:** 액터가 레지스트리에서 제거되면 해당 ID 슬롯의 세대 카운터가 증가합니다. 이후의 `handle.get()` 호출은 세대를 확인하고, 만료된 핸들인 경우 `nullptr`을 반환합니다. 이를 통해 `shared_ptr` 없이도댕글링 참조에 안전합니다.
 
 ---
 
 ### ActorRegistry
 
-**File:** `src/core/actor_system/actor/actor_registry.hpp:10`
+**파일:** `src/core/actor_system/actor/actor_registry.hpp:10`
 
-Thread-safe registry with dual indexing (by name and by ID).
+이중 인덱싱(이름과 ID)을 지원하는 스레드 안전 레지스트리.
 
 ```cpp
 class ActorRegistry {
@@ -188,9 +188,9 @@ public:
 
 ### ActorRuntime
 
-**File:** `src/core/actor_system/runtime/actor_runtime/actor_runtime.hpp:19`
+**파일:** `src/core/actor_system/runtime/actor_runtime/actor_runtime.hpp:19`
 
-Wraps an `Actor` and its `Mailbox`. Implements batch processing and integrates with the scheduler and supervisor.
+`Actor`와 그 `Mailbox`를 래핑합니다. 배치 처리를 구현하고 스케줄러·슈퍼바이저와 통합됩니다.
 
 ```cpp
 class ActorRuntime : public IActorRuntime {
@@ -203,113 +203,113 @@ public:
 };
 ```
 
-**Batch processing (`run`):**
-1. Worker acquires `ActorRuntime*` from the dispatcher
-2. Calls `processBatch(maxBatch)` — pops messages from mailbox
-3. Checks `tryConsumeLifecycle()` first for system messages (`ActorEnableRequest`, `ActorDisableRequest`, `ActorRestartRequest`)
-4. Calls `actor->handle(msg)` for application messages
-5. If exception: notifies `Supervisor::onActorFailed()`
-6. If mailbox not empty after batch: re-dispatches (work-conserving)
+**배치 처리 (`run`):**
+1. 워커가 디스패처에서 `ActorRuntime*`을 획득
+2. `processBatch(maxBatch)` 호출 — 메일박스에서 메시지 팝
+3. 시스템 메시지(`ActorEnableRequest`, `ActorDisableRequest`, `ActorRestartRequest`)를 위해 `tryConsumeLifecycle()`을 먼저 확인
+4. 애플리케이션 메시지의 경우 `actor->handle(msg)` 호출
+5. 예외 발생 시: `Supervisor::onActorFailed()`에 알림
+6. 배치 후 메일박스가 비어있지 않으면: 재디스패치(워크 컨저빙)
 
 ---
 
-## Lifecycle
+## 생명주기
 
-### State Machine
+### 상태 머신
 
 ```
 Closed → Opening → Opened → Closing → Closed
 ```
 
-### Startup Sequence
+### 기동 시퀀스
 
-1. `ActorSystem::start()` is called
-2. `WorkDispatcher`, `EventLoop`, `Scheduler` are started
-3. For each registered actor: `actor->open()` is called (state → `Opened`)
-4. `Worker` threads are started
+1. `ActorSystem::start()` 호출
+2. `WorkDispatcher`, `EventLoop`, `Scheduler` 기동
+3. 등록된 각 액터에 대해: `actor->open()` 호출 (상태 → `Opened`)
+4. `Worker` 스레드 기동
 
-### Runtime Processing
+### 런타임 처리
 
-Messages are processed cooperatively in batches:
+메시지는 배치 단위로 협력적으로 처리됩니다:
 
 ```
-semaphore → own queue pop → run(batch=32) → re-dispatch if non-empty
+sema → own queue pop → run(batch=32) → empty 아니면 재디스패치
 ```
 
-Actors yield after their batch, ensuring fairness across actors.
+액터는 배치 후 양보하여 액터 간 공정성을 보장합니다.
 
-### Shutdown Sequence
+### 종료 시퀀스
 
-1. `ActorSystem::stop()` is called
-2. `Scheduler` and `EventLoop` are stopped
-3. `WorkDispatcher::beginDrain()` — workers finish pending work then exit
-4. All `Worker` threads are stopped
-5. For each registered actor: `actor->close()` is called (state → `Closed`)
+1. `ActorSystem::stop()` 호출
+2. `Scheduler`와 `EventLoop` 중지
+3. `WorkDispatcher::beginDrain()` — 워커가 미처리 작업을 마치고 종료
+4. 모든 `Worker` 스레드 중지
+5. 등록된 각 액터에 대해: `actor->close()` 호출 (상태 → `Closed`)
 
-### Destruction
+### 소멸
 
 `ActorRuntime::~ActorRuntime()`:
-1. Cancels all timers associated with this actor
-2. Removes actor from registry (generation incremented, making stale handles invalid)
+1. 이 액터와 연결된 모든 타이머 취소
+2. 레지스트리에서 액터 제거(세대 증가 → 만료된 핸들 무효화)
 
-### Runtime Enable/Disable
+### 런타임 활성화/비활성화
 
-| Message | Behavior |
-|---------|----------|
-| `ActorEnableRequest` | Calls `actor->open()` if state is `Closed` |
-| `ActorDisableRequest` | Calls `actor->close()` if state is `Opened` AND actor is not essential |
+| 메시지 | 동작 |
+|--------|------|
+| `ActorEnableRequest` | 상태가 `Closed`이면 `actor->open()` 호출 |
+| `ActorDisableRequest` | 상태가 `Opened`이고 액터가 essential이 아니면 `actor->close()` 호출 |
 
-Essential actors (`setEssential(true)`) cannot be disabled via messages.
+essential 액터(`setEssential(true)`)는 메시지로 비활성화할 수 없습니다.
 
 ---
 
-## Communication
+## 통신
 
-### Message Sending
+### 메시지 전송
 
-All sending is **asynchronous and non-blocking** for the sender.
+모든 전송은 발신자에게 **비동기적이고 논블로킹**입니다.
 
-| Method | Target Resolution | Timing |
-|--------|-------------------|--------|
-| `sendMsg(name, msg)` | Registry lookup by name | Immediate |
-| `sendMsg(id, msg)` | Registry lookup by ID | Immediate |
-| `sendMsgAfter(name, msg, delayMs)` | Registry lookup by name | Delayed via Scheduler |
-| `sendMsgAfter(id, msg, delayMs)` | Registry lookup by ID | Delayed via Scheduler |
+| 메서드 | 대상 해석 | 타이밍 |
+|--------|-----------|--------|
+| `sendMsg(name, msg)` | 이름으로 레지스트리 조회 | 즉시 |
+| `sendMsg(id, msg)` | ID로 레지스트리 조회 | 즉시 |
+| `sendMsgAfter(name, msg, delayMs)` | 이름으로 레지스트리 조회 | 스케줄러 경유 지연 |
+| `sendMsgAfter(id, msg, delayMs)` | ID로 레지스트리 조회 | 스케줄러 경유 지연 |
 
-**Message flow:**
+**메시지 흐름:**
 
 ```
-Sender Actor
+발신 액터
   → sendMsg("target", msg)
-  → Runtime resolves ActorHandle (name → id via registry)
-  → Runtime enqueues into target's Mailbox (lock-free MPSC push)
-  → Runtime notifies WorkDispatcher (dispatch)
-  → WorkDispatcher pushes ActorRuntime* to target worker's queue
-  → Worker acquires (semaphore wake or steal)
-  → ActorRuntime::run(maxBatch) processes messages
-  → Actor::handle(msg) is called
+  → 런타임이 ActorHandle 해석 (registry 경유 name → id)
+  → 런타임이 대상 메일박스에 큐잉 (락프리 MPSC push)
+  → 런타임이 WorkDispatcher에 알림 (dispatch)
+  → WorkDispatcher가 대상 워커 큐에 ActorRuntime* 푸시
+  → 워커가 획득 (세마포어 웨이크 또는 스틸)
+  → ActorRuntime::run(maxBatch)로 메시지 처리
+  → Actor::handle(msg) 호출
 ```
 
-### Type-Safe Dispatch
+### 타입 안전 디스패치
 
-The `dispatch()` template method provides compile-time verified message routing using C++20 `requires` expressions:
+`dispatch()` 템플릿 메서드는 C++20 `requires` 표현식을 사용하여 컴파일 타임 검증된 메시지 라우팅을 제공합니다:
 
 ```cpp
-// Define message tuple for this actor type
+// 이 액터 타입에 대한 메시지 튜플 정의
 using CmdActorMessages = std::tuple<CmdRequest, PmuDataUpdate, WifiScanResult, ...>;
 
 void CmdActor::handle(const Message& msg) {
     Actor::dispatch(*this, msg, CmdActorMessages{});  // compile-time checked
 }
 
-// Overloaded handlers for each concrete type
+// 각 구체 타입에 대한 오버로드 핸들러
 void CmdActor::handle(const CmdRequest& m) { ... }
 void CmdActor::handle(const PmuDataUpdate& m) { ... }
 ```
 
-If a message type appears in the tuple but lacks a corresponding `handle(T)` overload, the code fails to compile — catching missing handlers at build time rather than runtime.
+메시지 타입이 튜플에 나타나지만 해당 `handle(T)` 오버로드가 없으면 코드가 컴파일되지 않습니다 — 런타임이 아닌 빌드 타임에 누락된 핸들러를 캐치합니다.
 
-### Timers
+### 타이머
 
 ```cpp
 int  startTimer(Message msg, uint64_t delayMs, bool repeating);
@@ -317,35 +317,35 @@ void cancelTimer(int timerId);
 void cancelAllTimers();
 ```
 
-- Timer callbacks clone the message and enqueue it into the target actor's mailbox
-- `ActorRuntime::~ActorRuntime()` automatically cancels all timers
+- 타이머 콜백은 메시지를 복제하여 대상 액터의 메일박스에 큐잉합니다
+- `ActorRuntime::~ActorRuntime()`은 모든 타이머를 자동 취소합니다
 
 ---
 
-## Fault Tolerance
+## 결함 내성
 
-### Supervisor
+### 슈퍼바이저
 
-**File:** `src/core/actor_system/runtime/supervisor/supervisor.hpp:30`
+**파일:** `src/core/actor_system/runtime/supervisor/supervisor.hpp:30`
 
-| Strategy | Behavior |
-|----------|----------|
-| `OneForOne` | Restart only the failed actor (up to `maxRestarts`) |
-| `OneForAll` | Broadcast `ActorRestartRequest` to ALL actors |
-| `None` | Permanent shutdown of the failed actor |
+| 전략 | 동작 |
+|------|------|
+| `OneForOne` | 결함이 발생한 액터만 재시작 (`maxRestarts`까지) |
+| `OneForAll` | 모든 액터에 `ActorRestartRequest` 브로드캐스트 |
+| `None` | 결함이 발생한 액터를 영구 종료 |
 
-### Failure Handling Flow
+### 결함 처리 흐름
 
-When `onActorFailed()` is called during message processing:
+메시지 처리 중 `onActorFailed()`가 호출되면:
 
-1. **Dead Letter**: The failed message + all remaining mailbox messages are moved to `DeadLetterQueue`
-2. **Strategy Application**:
-   - `OneForOne`: `runtime->tryRestart(reason, limit)` with atomic CAS on restart counter
-   - `OneForAll`: Broadcasts `ActorRestartRequest` to all actors
-   - `None`: Calls `runtime->shutdown()` permanently
-3. **Budget Check**: If max restarts exceeded, actor is permanently shut down
+1. **데드 레터**: 결함 메시지 + 남은 모든 메일박스 메시지가 `DeadLetterQueue`로 이동
+2. **전략 적용**:
+   - `OneForOne`: 재시작 카운터의 원자 CAS로 `runtime->tryRestart(reason, limit)`
+   - `OneForAll`: 모든 액터에 `ActorRestartRequest` 브로드캐스트
+   - `None`: `runtime->shutdown()`으로 영구 종료
+3. **예산 검사**: 최대 재시작 횟수 초과 시 액터가 영구 종료됩니다
 
-### Per-Actor Policy Override
+### 액터별 정책 오버라이드
 
 ```cpp
 supervisor->setStrategy(actorId, RestartStrategy::None);  // disable restart for specific actor
@@ -354,9 +354,9 @@ supervisor->setDefaultStrategy(RestartStrategy::OneForAll); // system-wide defau
 
 ---
 
-## Ownership & Hierarchy
+## 소유권과 계층
 
-V² Engine actors are **flat peers** — there is no parent-child hierarchy.
+V² Engine의 액터는 **평면 피어**입니다 — 부모-자식 계층이 없습니다.
 
 ```
 ActorSystem
@@ -366,24 +366,24 @@ ActorSystem
   └── ...
 ```
 
-Each actor is:
-- Registered in a single global `ActorRegistry`
-- Independent of all other actors
-- Communicating exclusively through asynchronous messages
+각 액터는:
+- 단일 글로벌 `ActorRegistry`에 등록됨
+- 다른 모든 액터로부터 독립적
+- 비동기 메시지를 통해서만 통신
 
-This flat design simplifies reasoning about actor state and eliminates the complexity of hierarchical lifecycle management. Dependencies between actors are expressed through message protocols, not ownership.
+이 평면 설계는 액터 상태에 대한 추론을 단순화하고 계층적 생명주기 관리의 복잡성을 제거합니다. 액터 간 의존성은 소유권이 아닌 메시지 프로토콜로 표현됩니다.
 
 ---
 
-## Summary
+## 요약
 
-| Aspect | Detail |
-|--------|--------|
-| **Base class** | `Actor` — abstract, 3 pure virtual methods (`open`, `close`, `handle`) |
-| **Identification** | Name (string) + ID (uint64_t), with generation-based safe handles |
-| **Mailbox** | Lock-free MPSC queue, one per actor |
-| **Scheduling** | Cooperative batch processing (default batch = 32) |
-| **Message dispatch** | Compile-time verified via `dispatch()` + `requires` expressions |
-| **Fault tolerance** | Supervisor with OneForOne / OneForAll / None strategies |
-| **Hierarchy** | Flat — no parent-child relationships |
-| **Thread safety** | All hot-path operations are lock-free; no mutex contention |
+| 항목 | 설명 |
+|------|------|
+| **기본 클래스** | `Actor` — 추상, 순수 가상 메서드 3개 (`open`, `close`, `handle`) |
+| **식별** | 이름(string) + ID(uint64_t), 세대 기반 안전 핸들 |
+| **메일박스** | 락프리 MPSC 큐, 액터당 1개 |
+| **스케줄링** | 협력 배치 처리 (기본 배치 = 32) |
+| **메시지 디스패치** | `dispatch()` + `requires` 표현식으로 컴파일 타임 검증 |
+| **결함 내성** | OneForOne / OneForAll / None 전략을 지원하는 슈퍼바이저 |
+| **계층** | 평면 — 부모-자식 관계 없음 |
+| **스레드 안전성** | 핫 패스 연산 모두 락프리; 뮤텍스 경쟁 없음 |

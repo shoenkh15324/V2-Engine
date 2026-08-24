@@ -1,26 +1,26 @@
-# Messaging
+# 메시지 시스템
 
 ---
 
-## Table of Contents
+## 목차
 
-- [Overview](#overview)
-- [Design Principles](#design-principles)
-- [Message Class](#message-class)
-  - [Storage Layout](#storage-layout)
-  - [Storage Modes](#storage-modes)
-  - [Type-Erased Construction](#type-erased-construction)
-  - [Move Semantics](#move-semantics)
-  - [Cloning](#cloning)
+- [개요](#개요)
+- [설계 원칙](#설계-원칙)
+- [Message 클래스](#message-클래스)
+  - [저장 레이아웃](#저장-레이아웃)
+  - [저장 모드](#저장-모드)
+  - [타입 소거 생성](#타입-소거-생성)
+  - [이동 시맨틱스](#이동-시맨틱스)
+  - [복제](#복제)
 - [MessageOps Vtable](#messageops-vtable)
-- [MessageId & Traits](#messageid--traits)
-- [Type-Safe Dispatch](#type-safe-dispatch)
-  - [Visit Pattern](#visit-pattern)
-  - [Compile-Time Handler Verification](#compile-time-handler-verification)
-  - [Dead Letter Handling](#dead-letter-handling)
-- [Core Messages](#core-messages)
-- [Message Catalog](#message-catalog)
-  - [Core Lifecycle](#core-lifecycle)
+- [MessageId & 트레이트](#messageid--트레이트)
+- [타입 안전 디스패치](#타입-안전-디스패치)
+  - [방문 패턴](#방문-패턴)
+  - [컴파일 타임 핸들러 검증](#컴파일-타임-핸들러-검증)
+  - [데드 레터 처리](#데드-레터-처리)
+- [핵심 메시지](#핵심-메시지)
+- [메시지 카탈로그](#메시지-카탈로그)
+  - [핵심 생명주기](#핵심-생명주기)
   - [Tick](#tick)
   - [Command (Cmd)](#command-cmd)
   - [IPC](#ipc)
@@ -30,43 +30,43 @@
   - [Wi-Fi](#wi-fi)
   - [Device Manager (PMU)](#device-manager-pmu)
   - [System Manager](#system-manager)
-- [Communication Patterns](#communication-patterns)
-  - [Request-Response](#request-response)
-  - [Pub-Sub (Retained-Latest)](#pub-sub-retained-latest)
-  - [Timer-Driven Periodic](#timer-driven-periodic)
-  - [Delayed Message Delivery](#delayed-message-delivery)
-  - [Lifecycle Messages (System-Intercepted)](#lifecycle-messages-system-intercepted)
-  - [Event Loop Bridge](#event-loop-bridge)
-- [Message Flow (End-to-End)](#message-flow-end-to-end)
-- [Summary](#summary)
+- [통신 패턴](#통신-패턴)
+  - [요청-응답](#요청-응답)
+  - [Pub-Sub (최신 유지)](#pub-sub-최신-유지)
+  - [타이머 기반 주기](#타이머-기반-주기)
+  - [지연 메시지 전달](#지연-메시지-전달)
+  - [생명주기 메시지 (시스템 가로채기)](#생명주기-메시지-시스템-가로채기)
+  - [이벤트 루프 브릿지](#이벤트-루프-브릿지)
+- [메시지 흐름 (End-to-End)](#메시지-흐름-end-to-end)
+- [요약](#요약)
 
 ---
 
-## Overview
+## 개요
 
-V² Engine uses a **type-erased, SBO-optimized, move-only** message system as the universal communication mechanism between actors. Every interaction — from CLI command handling to timer-driven heartbeats — flows through typed message structs that are wrapped into a uniform `Message` container.
+V² Engine은 액터 간 범용 통신 메커니즘으로 **타입 소거·SBO 최적화·이동 전용** 메시지 시스템을 사용합니다. CLI 명령 처리부터 타이머 기반 하트비트까지 모든 상호작용은 유니폼 `Message` 컨테이너로 래핑된 타입화된 메시지 구조체를 통해 흐릅니다.
 
-The system is designed for **zero-heap-allocation on the hot path**: messages ≤ 64 bytes are stored inline within the `Message` object itself. Combined with the lock-free MPSC mailbox, this achieves **7.1M msgs/sec** throughput and **P50 = 378 ns** latency.
-
----
-
-## Design Principles
-
-| Principle | Description |
-|-----------|-------------|
-| **Type erasure with zero overhead** | `Message` wraps any payload type without virtual dispatch. A compile-time vtable (`MessageOps`) replaces RTTI. |
-| **Small Buffer Optimization (SBO)** | Messages ≤ 64 bytes are stored inline — no heap allocation. Covers most message types in the system. |
-| **Move-only** | Messages are moved, never copied. `clone()` is available explicitly for timer callbacks that need duplicates. |
-| **Compile-time safety** | `dispatch()` uses C++20 `requires` expressions to verify at build time that all message types have handlers. |
-| **Uniform discriminator** | Every payload type declares `static constexpr MessageId kId` — a single `uint32_t` enum used for runtime routing. |
+이 시스템은 **핫 패스에서 힙 할당 제로**를 목표로 설계되었습니다: 64바이트 이하의 메시지는 `Message` 객체 자체에 인라인 저장됩니다. 락프리 MPSC 메일박스와 결합하여 **7.1M msgs/sec** 쓰루풋과 **P50 = 378 ns** 레이턴시를 달성합니다.
 
 ---
 
-## Message Class
+## 설계 원칙
 
-**File:** `src/core/actor_system/messages/message.hpp`
+| 원칙 | 설명 |
+|------|------|
+| **제로 오버헤드 타입 소거** | `Message`는 가상 디스패치 없이 어떤 페이로드 타입이든 래핑합니다. 컴파일 타임 vtable(`MessageOps`)이 RTTI를 대체합니다. |
+| **Small Buffer Optimization (SBO)** | 64바이트 이하 메시지는 인라인 저장 — 힙 할당 없음. 시스템 내 대부분의 메시지 타입을 커버합니다. |
+| **이동 전용** | 메시지는 복사되지 않고 이동됩니다. `clone()`은 중복이 필요한 타이머 콜백을 위해 명시적으로 제공됩니다. |
+| **컴파일 타임 안전성** | `dispatch()`는 C++20 `requires` 표현식을 사용하여 모든 메시지 타입에 핸들러가 있는지 빌드 타임에 검증합니다. |
+| **유니폼 판별자** | 모든 페이로드 타입은 `static constexpr MessageId kId`를 선언합니다 — 런타임 라우팅에 사용되는 단일 `uint32_t` 열거형입니다. |
 
-### Storage Layout
+---
+
+## Message 클래스
+
+**파일:** `src/core/actor_system/messages/message.hpp`
+
+### 저장 레이아웃
 
 ```
 Message (72 bytes) {
@@ -81,15 +81,15 @@ Message (72 bytes) {
 }
 ```
 
-### Storage Modes
+### 저장 모드
 
-| Mode | Condition | Allocation | Deallocation |
-|------|-----------|------------|--------------|
-| `Empty` | Default-constructed or moved-from | None | None |
-| `Inline` | `sizeof(T) ≤ 64` AND `alignof(T) ≤ alignof(max_align_t)` AND `nothrow_move_constructible` | Placement-new into inline buffer | Destructor called in-place |
-| `Pool` | All other types | `defaultMemoryPool().allocate()` | `allocator_->deallocate()` via vtable |
+| 모드 | 조건 | 할당 | 해제 |
+|------|------|------|------|
+| `Empty` | 기본 생성 또는 이동된 후 | 없음 | 없음 |
+| `Inline` | `sizeof(T) ≤ 64` AND `alignof(T) ≤ alignof(max_align_t)` AND `nothrow_move_constructible` | 인라인 버퍼에 placement-new | 소멸자 직접 호출 |
+| `Pool` | 그 외 모든 타입 | `defaultMemoryPool().allocate()` | vtable 경유 `allocator_->deallocate()` |
 
-**Decision logic in `make<T>()`:**
+**`make<T>()`의 판정 로직:**
 
 ```cpp
 if constexpr (sizeof(DT) <= kInlineSize
@@ -101,7 +101,7 @@ if constexpr (sizeof(DT) <= kInlineSize
 }
 ```
 
-### Type-Erased Construction
+### 타입 소거 생성
 
 ```cpp
 template<typename T>
@@ -124,14 +124,14 @@ static Message make(T&& value) {
 }
 ```
 
-**Requirements on every payload type `T`:**
-- Must have `static constexpr MessageId kId`
-- Must be move-constructible (inline requires `nothrow`)
-- Copy-constructibility is optional (enables `clone()`)
+**모든 페이로드 타입 `T`에 대한 요구사항:**
+- `static constexpr MessageId kId`가 있어야 합니다
+- 이동 생성 가능해야 합니다 (인라인은 `nothrow` 필요)
+- 복사 생성은 선택적입니다 (`clone()` 활성화)
 
-### Move Semantics
+### 이동 시맨틱스
 
-Move is implemented via the vtable's `move` function pointer, which placement-move-constructs the element into the destination and destroys the source:
+이동은 vtable의 `move` 함수 포인터를 통해 구현되며, 대상에 요소를 placement-move-construct하고 소스를 파괴합니다:
 
 ```cpp
 // Inline move
@@ -141,31 +141,31 @@ ops_->move(storage_.inlineData, other.storage_.inlineData);
 storage_.ptr = other.storage_.ptr;
 ```
 
-After move, the source is reset to `Empty`.
+이동 후 소스는 `Empty`로 리셋됩니다.
 
-### Cloning
+### 복제
 
 ```cpp
 Message clone() const;
 ```
 
-| Source Mode | Copyable | Result |
-|-------------|----------|--------|
-| `Empty` | — | Empty message |
-| `Inline` | Yes | `cloneConstruct` — placement-new copy into destination inline buffer |
-| `Inline` | No | Empty message (clone not supported) |
-| `Pool` | Yes | `cloneAllocate` — allocate from pool + copy-construct |
-| `Pool` | No | Empty message (clone not supported) |
+| 소스 모드 | 복사 가능 | 결과 |
+|-----------|-----------|------|
+| `Empty` | — | 빈 메시지 |
+| `Inline` | 예 | `cloneConstruct` — 대상 인라인 버퍼에 placement-new 복사 |
+| `Inline` | 아니오 | 빈 메시지 (복제 불가) |
+| `Pool` | 예 | `cloneAllocate` — 풀에서 할당 + 복사 생성 |
+| `Pool` | 아니오 | 빈 메시지 (복제 불가) |
 
-Cloning is used primarily by the timer system, which needs to deliver the same message to multiple actors or repeatedly.
+복제는 주로 동일한 메시지를 여러 액터에 전달하거나 반복적으로 전달해야 하는 타이머 시스템에서 사용됩니다.
 
 ---
 
 ## MessageOps Vtable
 
-**File:** `src/core/actor_system/messages/message.hpp:132-187`
+**파일:** `src/core/actor_system/messages/message.hpp:132-187`
 
-A compile-time function pointer table that replaces RTTI/virtual dispatch:
+RTTI/가상 디스패치를 대체하는 컴파일 타임 함수 포인터 테이블:
 
 ```cpp
 struct MessageOps {
@@ -176,7 +176,7 @@ struct MessageOps {
 };
 ```
 
-Generated per-type via `opsFor<T>()`:
+`opsFor<T>()`를 통해 타입별로 생성됩니다:
 
 ```cpp
 template<typename T>
@@ -187,13 +187,13 @@ static const MessageOps* opsFor() {
 }
 ```
 
-Each concrete type gets exactly one `static constexpr MessageOps` instance — zero runtime overhead for vtable lookup.
+각 구체 타입은 정확히 하나의 `static constexpr MessageOps` 인스턴스를 갖습니다 — vtable 조회에 런타임 오버헤드 제로.
 
 ---
 
-## MessageId & Traits
+## MessageId & 트레이트
 
-**File:** `src/core/actor_system/messages/message_traits.hpp`
+**파일:** `src/core/actor_system/messages/message_traits.hpp`
 
 ```cpp
 enum class MessageId : uint32_t {
@@ -229,20 +229,20 @@ enum class MessageId : uint32_t {
 };
 ```
 
-**37 message types** across 10 subsystems.
+10개 서브시스템에 걸친 **37개 메시지 타입**.
 
-**Trait contract** — every message struct must:
-1. Declare `static constexpr MessageId kId`
-2. Be move-constructible
-3. Optionally be copy-constructible (enables `clone()`)
+**트레이트 계약** — 모든 메시지 구조체는 다음을 만족해야 합니다:
+1. `static constexpr MessageId kId` 선언
+2. 이동 생성 가능
+3. 선택적으로 복사 생성 가능 (`clone()` 활성화)
 
 ---
 
-## Type-Safe Dispatch
+## 타입 안전 디스패치
 
-### Visit Pattern
+### 방문 패턴
 
-**File:** `src/core/actor_system/messages/message.hpp:99-110`
+**파일:** `src/core/actor_system/messages/message.hpp:99-110`
 
 ```cpp
 template<typename Tuple, typename Visitor>
@@ -259,11 +259,11 @@ bool visit(Visitor&& v) const {
 }
 ```
 
-The visit pattern takes a `std::tuple<T1, T2, ...>` listing the types an actor handles, and uses a fold expression to try each type in order. The first match invokes the visitor with the correctly-typed reference.
+방문 패턴은 액터가 처리하는 타입을 나열하는 `std::tuple<T1, T2, ...>`을 인자로 받아, 폴드 표현식을 사용하여 각 타입을 순서대로 시도합니다. 첫 번째 일치가 올바르게 타입화된 참조로 방문자를 호출합니다.
 
-### Compile-Time Handler Verification
+### 컴파일 타임 핸들러 검증
 
-**File:** `src/core/actor_system/actor/actor.hpp:36-48`
+**파일:** `src/core/actor_system/actor/actor.hpp:36-48`
 
 ```cpp
 template<class ActorT, typename Tuple>
@@ -282,26 +282,26 @@ void dispatch(ActorT& self, const Message& msg, Tuple) {
 }
 ```
 
-The `static_assert` uses C++20 `requires` expressions to verify **at compile time** that the actor has a `handle(const T&)` overload for every type in the tuple. A missing handler is a build error, not a runtime bug.
+`static_assert`는 C++20 `requires` 표현식을 사용하여 **컴파일 타임에** 해당 액터가 튜플의 모든 타입에 대한 `handle(const T&)` 오버로드를 가지고 있음을 검증합니다. 핸들러 누락은 런타임 버그가 아닌 빌드 에러입니다.
 
-**Usage in actors:**
+**액터에서의 사용:**
 
 ```cpp
-// Declare which messages this actor handles
+// 이 액터가 처리할 메시지 선언
 using CmdActorMessages = std::tuple<CmdRequest, PmuDataUpdate, WifiScanResult, ...>;
 
 void CmdActor::handle(const Message& msg) {
     Actor::dispatch(*this, msg, CmdActorMessages{});  // compile-time checked
 }
 
-// Typed handlers
+// 타입화된 핸들러
 void CmdActor::handle(const CmdRequest& m) { ... }
 void CmdActor::handle(const PmuDataUpdate& m) { ... }
 ```
 
-### Dead Letter Handling
+### 데드 레터 처리
 
-Unmatched messages (no `visit` match) fall through to `handleUnknown()`:
+일치하지 않는 메시지(`visit` 미매칭)는 `handleUnknown()`으로 전달됩니다:
 
 ```cpp
 void Actor::handleUnknown(const Message& msg) {
@@ -312,56 +312,56 @@ void Actor::handleUnknown(const Message& msg) {
 
 ---
 
-## Core Messages
+## 핵심 메시지
 
-**File:** `src/core/actor_system/messages/core_messages.hpp`
+**파일:** `src/core/actor_system/messages/core_messages.hpp`
 
-System-level messages intercepted by `ActorRuntime::tryConsumeLifecycle()` before reaching the actor's `handle()`:
+`ActorRuntime::tryConsumeLifecycle()`에 의해 액터의 `handle()`에 도달하기 전에 가로채지는 시스템 수준 메시지:
 
-| Message | kId | Fields | Behavior |
-|---------|-----|--------|----------|
-| `SignalNotify` | `SignalNotify` | `int signum` | POSIX signal forwarded from event loop |
-| `ActorEnableRequest` | `ActorEnableRequest` | (none) | Opens a `Closed` actor |
-| `ActorDisableRequest` | `ActorDisableRequest` | (none) | Closes an `Opened` actor (non-essential only) |
-| `ActorRestartRequest` | `ActorRestartRequest` | `std::string reason` | Close + reopen (supervisor-driven) |
+| 메시지 | kId | 필드 | 동작 |
+|--------|-----|------|------|
+| `SignalNotify` | `SignalNotify` | `int signum` | 이벤트 루프에서 전달된 POSIX 시그널 |
+| `ActorEnableRequest` | `ActorEnableRequest` | (없음) | `Closed` 액터를 개시 |
+| `ActorDisableRequest` | `ActorDisableRequest` | (없음) | `Opened` 액터를 종료 (essential 아닌 경우만) |
+| `ActorRestartRequest` | `ActorRestartRequest` | `std::string reason` | 종료 + 재개시 (슈퍼바이저 주도) |
 
 ---
 
-## Message Catalog
+## 메시지 카탈로그
 
-### Core Lifecycle
+### 핵심 생명주기
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
 | `SignalNotify` | `SignalNotify` | `int signum` | `SystemManagerActor` (event loop → signal pipe) |
-| `ActorEnableRequest` | `ActorEnableRequest` | — | `CmdActor`, system |
-| `ActorDisableRequest` | `ActorDisableRequest` | — | `CmdActor`, system |
+| `ActorEnableRequest` | `ActorEnableRequest` | — | `CmdActor`, 시스템 |
+| `ActorDisableRequest` | `ActorDisableRequest` | — | `CmdActor`, 시스템 |
 | `ActorRestartRequest` | `ActorRestartRequest` | `std::string reason` | `Supervisor` |
 
 ### Tick
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
-| `Tick` | `Tick` | — | `TickActor` (periodic timer) |
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
+| `Tick` | `Tick` | — | `TickActor` (주기 타이머) |
 
 ### Command (Cmd)
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
 | `CmdRequest` | `CmdRequest` | `ConnHandle conn`, `std::string cmd` | `IpcServerActor` |
 | `CmdResponse` | `CmdResponse` | `ConnHandle conn`, `std::string result`, `bool closeOnSend` | `CmdActor` |
 
 ### IPC
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
 | `IpcNewConnection` | `IpcNewConnection` | `ConnHandle conn` | `IpcServerActor` (epoll) |
 | `IpcDataReceived` | `IpcDataReceived` | `ConnHandle conn` | `IpcServerActor` (epoll) |
 
 ### Monitor
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
 | `MonitorNewConnection` | `MonitorNewConnection` | `ConnHandle conn` | `MonitorBridgeActor` |
 | `MonitorClientDisconnected` | `MonitorClientDisconnected` | `ConnHandle conn` | `MonitorBridgeActor` |
 | `MonitorSubscribe` | `MonitorSubscribe` | `std::string subscriber` | `MonitorBridgeActor` |
@@ -370,8 +370,8 @@ System-level messages intercepted by `ActorRuntime::tryConsumeLifecycle()` befor
 
 ### D-Bus
 
-| Message | kId | Fields |
-|---------|-----|--------|
+| 메시지 | kId | 필드 |
+|--------|-----|------|
 | `DbusRegisterMethod` | `DbusRegisterMethod` | `objectPath`, `interfaceName`, `methodName`, `ownerActorName` |
 | `DbusUnregisterMethod` | `DbusUnregisterMethod` | `objectPath`, `interfaceName`, `methodName` |
 | `DbusRegisterResult` | `DbusRegisterResult` | `methodKey`, `bool success`, `errorMsg` |
@@ -384,14 +384,14 @@ System-level messages intercepted by `ActorRuntime::tryConsumeLifecycle()` befor
 
 ### Network Manager
 
-| Message | kId | Fields |
-|---------|-----|--------|
+| 메시지 | kId | 필드 |
+|--------|-----|------|
 | `NmStatusRequest` | `NmStatusRequest` | — |
 
 ### Wi-Fi
 
-| Message | kId | Fields |
-|---------|-----|--------|
+| 메시지 | kId | 필드 |
+|--------|-----|------|
 | `WifiScanRequest` | `WifiScanRequest` | — |
 | `WifiScanResult` | `WifiScanResult` | `std::vector<WifiApInfo> accessPoints` |
 | `WifiConnectRequest` | `WifiConnectRequest` | `std::string ssid`, `std::string password` |
@@ -403,8 +403,8 @@ System-level messages intercepted by `ActorRuntime::tryConsumeLifecycle()` befor
 
 ### Device Manager (PMU)
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
 | `PmuDataTick` | `PmuDataTick` | — | `DeviceManagerActor` (timer) |
 | `PmuDataSubscribe` | `PmuDataSubscribe` | `std::string subscriber` | `MonitorActor` |
 | `PmuDataUnsubscribe` | `PmuDataUnsubscribe` | `std::string subscriber` | `MonitorActor` |
@@ -412,8 +412,8 @@ System-level messages intercepted by `ActorRuntime::tryConsumeLifecycle()` befor
 
 ### System Manager
 
-| Message | kId | Fields | Source |
-|---------|-----|--------|--------|
+| 메시지 | kId | 필드 | 소스 |
+|--------|-----|------|------|
 | `SysDataTick` | `SysDataTick` | — | `SystemManagerActor` (timer) |
 | `SysDataSubscribe` | `SysDataSubscribe` | `std::string subscriber` | `MonitorActor` |
 | `SysDataUnsubscribe` | `SysDataUnsubscribe` | `std::string subscriber` | `MonitorActor` |
@@ -421,11 +421,11 @@ System-level messages intercepted by `ActorRuntime::tryConsumeLifecycle()` befor
 
 ---
 
-## Communication Patterns
+## 통신 패턴
 
-### Request-Response
+### 요청-응답
 
-Asynchronous request followed by a response message sent back to the requester:
+요청자에게 응답 메시지를 비동기적으로 전송하는 패턴:
 
 ```
 CmdActor                    NetworkManagerActor
@@ -436,11 +436,11 @@ CmdActor                    NetworkManagerActor
     │                              │
 ```
 
-The response is sent by name — no callback or future needed. The requesting actor identifies itself via fields in the request message (e.g., `ConnHandle conn`).
+응답은 이름으로 전송됩니다 — 콜백이나 퓨처가 필요 없습니다. 요청 액터는 요청 메시지의 필드를 통해 자신을 식별합니다 (예: `ConnHandle conn`).
 
-### Pub-Sub (Retained-Latest)
+### Pub-Sub (최신 유지)
 
-Subscription-based data delivery where the latest value is retained:
+최신 값을 유지하는 구독 기반 데이터 전달:
 
 ```
 MonitorActor          SystemManagerActor
@@ -453,11 +453,11 @@ MonitorActor          SystemManagerActor
     ├── SysDataUnsubscribe>│  (deregister)
 ```
 
-Subscribers are identified by actor name. The producer pushes updates to all registered subscribers. Data collection starts when the first subscriber connects and stops when the last disconnects (demand cascade).
+구독자는 액터 이름으로 식별됩니다. 프로듀서는 등록된 모든 구독자에게 업데이트를 푸시합니다. 데이터 수집은 첫 번째 구독자가 연결될 때 시작되고 마지막 구독자가 연결 해제될 때 중지됩니다 (수요 캐스케이드).
 
-### Timer-Driven Periodic
+### 타이머 기반 주기
 
-Actor registers a timer that periodically enqueues a message into its own mailbox:
+액터가 자체 메일박스에 주기적으로 메시지를 큐잉하는 타이머를 등록합니다:
 
 ```cpp
 void TickActor::open() {
@@ -469,19 +469,19 @@ void TickActor::handle(const Tick& t) {
 }
 ```
 
-### Delayed Message Delivery
+### 지연 메시지 전달
 
-Send a message to another actor after a specified delay:
+지정된 지연 후 다른 액터에게 메시지를 전송합니다:
 
 ```cpp
 sendMsgAfter("target_actor", MyMessage{...}, 5000);  // 5 seconds delay
 ```
 
-Uses the `Scheduler` to clone the message and enqueue it into the target's mailbox after the delay.
+`Scheduler`를 사용하여 메시지를 복제하고 지연 후 대상의 메일박스에 큐잉합니다.
 
-### Lifecycle Messages (System-Intercepted)
+### 생명주기 메시지 (시스템 가로채기)
 
-`ActorEnableRequest`, `ActorDisableRequest`, and `ActorRestartRequest` are consumed by `ActorRuntime::tryConsumeLifecycle()` before reaching the actor:
+`ActorEnableRequest`, `ActorDisableRequest`, `ActorRestartRequest`는 액터에 도달하기 전에 `ActorRuntime::tryConsumeLifecycle()`에 의해 소비됩니다:
 
 ```cpp
 bool ActorRuntime::tryConsumeLifecycle(const Message& msg) {
@@ -501,9 +501,9 @@ bool ActorRuntime::tryConsumeLifecycle(const Message& msg) {
 }
 ```
 
-### Event Loop Bridge
+### 이벤트 루프 브릿지
 
-External I/O events (POSIX signals, socket data) are injected as messages into actor mailboxes via the event loop:
+외부 I/O 이벤트(POSIX 시그널, 소켓 데이터)는 이벤트 루프를 통해 액터 메일박스에 메시지로 주입됩니다:
 
 ```cpp
 // SystemManagerActor subscribes to signal pipe fd
@@ -515,44 +515,44 @@ eventLoop_->subscribe(signalFd, [this]() {
 
 ---
 
-## Message Flow (End-to-End)
+## 메시지 흐름 (End-to-End)
 
 ```
-1. Creation     Message::make(payload)          — type-erased, inline/pool decision
+1. 생성        Message::make(payload)          — 타입 소거, 인라인/풀 판정
        ↓
-2. Sending      actor->sendMsg("target", msg)   — template wraps Message::make()
+2. 전송        actor->sendMsg("target", msg)   — 템플릿이 Message::make() 래핑
        ↓
-3. Routing      Registry lookup by name → Actor*
+3. 라우팅      이름으로 레지스트리 조회 → Actor*
        ↓
-4. Enqueue      target->receiveMsg(msg)         — runtime_->enqueue(msg)
+4. 큐잉        target->receiveMsg(msg)         — runtime_->enqueue(msg)
        ↓
-5. Mailbox      MPSC lock-free push             — non-blocking, drop on full
+5. 메일박스    MPSC 락프리 push                — 논블로킹, 가득 차면 드롭
        ↓
-6. Dispatch     scheduled_ gate → WorkDispatcher — one-shot dispatch per actor
+6. 디스패치    inFlight 슬롯 게이트 → WorkDispatcher — 액터당 토큰 1개 (dedup 내장)
        ↓
-7. Acquire      Worker pops ActorRuntime*       — semaphore wake or steal
+7. 획득        워커가 ActorRuntime* 팝         — 세마포어 웨이크 또는 스틸
        ↓
-8. Batch        ActorRuntime::run(maxBatch)     — pop ≤32 messages
+8. 배치        ActorRuntime::run(maxBatch)     — ≤32개 메시지 팝
        ↓
-9. Lifecycle    tryConsumeLifecycle()            — intercept system messages
+9. 생명주기    tryConsumeLifecycle()            — 시스템 메시지 가로채기
        ↓
-10. Handle      actor->handle(msg)              — dispatch() → visit → typed handler
+10. 핸들링     actor->handle(msg)              — dispatch() → visit → 타입화된 핸들러
        ↓
-11. Dead Letter handleUnknown()                  — unmatched → log + metrics
+11. 데드 레터  handleUnknown()                  — 미매칭 → 로그 + 메트릭
 ```
 
 ---
 
-## Summary
+## 요약
 
-| Aspect | Detail |
-|--------|--------|
-| **Container** | `Message` — 72 bytes, type-erased, move-only |
-| **SBO threshold** | 64 bytes inline (zero heap for most messages) |
-| **Vtable** | `MessageOps` — compile-time generated, per-type `static constexpr` |
-| **Discriminator** | `MessageId` enum (`uint32_t`) — 37 types across 10 subsystems |
-| **Dispatch** | `visit<Tuple>()` fold expression + `static_assert` handler verification |
-| **Clone** | Explicit `clone()` — inline copy or pool alloc, disabled for non-copyable types |
-| **Patterns** | Request-response, pub-sub, timer-driven, delayed, lifecycle-intercepted, event-loop bridge |
-| **Throughput** | 7.1M msgs/sec (SBO + lock-free mailbox) |
-| **Latency** | P50 = 378 ns, P99 = 641 ns |
+| 항목 | 설명 |
+|------|------|
+| **컨테이너** | `Message` — 72바이트, 타입 소거, 이동 전용 |
+| **SBO 임계값** | 64바이트 인라인 (대부분 메시지에 힙 할당 제로) |
+| **Vtable** | `MessageOps` — 컴파일 타임 생성, 타입별 `static constexpr` |
+| **판별자** | `MessageId` 열거형 (`uint32_t`) — 10개 서브시스템에 37개 타입 |
+| **디스패치** | `visit<Tuple>()` 폴드 표현식 + `static_assert` 핸들러 검증 |
+| **복제** | 명시적 `clone()` — 인라인 복사 또는 풀 할당, 복사 불가 타입은 비활성화 |
+| **패턴** | 요청-응답, pub-sub, 타이머 기반, 지연, 생명주기 가로채기, 이벤트 루프 브릿지 |
+| **쓰루풋** | 7.1M msgs/sec (SBO + 락프리 메일박스) |
+| **레이턴시** | P50 = 378 ns, P99 = 641 ns |
