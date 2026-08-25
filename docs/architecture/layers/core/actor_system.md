@@ -23,7 +23,6 @@
   - [메일박스 가득 참 — 드롭 정책](#메일박스-가득-참--드롭-정책)
   - [processBatch — 예외를 슈퍼바이저로](#processbatch--예외를-슈퍼바이저로)
   - [performRestart — 절반쯤 죽은 액터 되살리기](#performrestart--절반쯤-죽은-액터-되살리기)
-- [요약](#요약)
 
 ---
 
@@ -33,10 +32,8 @@
 
 `ActorSystem`은 두 가지 역할을 동시에 합니다:
 
-1. **조립체(composition)** — 슈퍼바이저, 디스패처, 스케줄러, 레지스트리,
-   데드 레터 큐, 워커들을 한데 묶고 서로를 연결합니다.
-2. **수명 관리자(lifecycle owner)** — 모든 하위 컴포넌트와 액터의
-   시작/종료 순서를 책임집니다.
+1. **조립체(composition)** — 슈퍼바이저, 디스패처, 스케줄러, 레지스트리, 데드 레터 큐, 워커들을 한데 묶고 서로를 연결합니다.
+2. **수명 관리자(lifecycle owner)** — 모든 하위 컴포넌트와 액터의 시작/종료 순서를 책임집니다.
 
 특별한 점은 **코어 안에서도 의존성 주입이 적용된다**는 것입니다.
 `ActorSystem`은 구체 클래스를 직접 만들지 않고, `ActorSystemDeps` 구조체로
@@ -56,7 +53,7 @@
 | `actor/actor_registry.cpp` | 이름/ID 조회 + 세대 검증 | [registry_handle.md](registry_handle.md) |
 | `actor/actor_handle.cpp` | 만료 감지 참조 | [registry_handle.md](registry_handle.md) |
 | `messages/` | Message 본체 + 40개 ID | [concepts/messaging.md](../../concepts/messaging.md) |
-| `runtime/actor_runtime.cpp` | 배치 처리, 재시작, 타이머 위임 | **이 문서** §견고성 |
+| `runtime/actor_runtime.cpp` | 배치 처리, 재시작, 타이머 위임 | **이 문서** |
 | `runtime/dispatcher/` | 실행 토큰, 작업 스틸링, 워커 | [concepts/work_dispatch.md](../../concepts/work_dispatch.md), [concurrency.md](../../concepts/concurrency.md) |
 | `runtime/mailbox/mailbox.hpp` | MPSC 큐 얇은 래퍼 (21줄) | 알고리즘은 [concurrency.md](../../concepts/concurrency.md) |
 | `runtime/scheduler.cpp` | 액터 타이머 연결 | [scheduler.md](scheduler.md) |
@@ -144,14 +141,9 @@ void ActorSystem::start(){
 
 순서의 의미:
 
-- **워커를 마지막에** 띄웁니다. `open()` 중에 다른 액터로 메시지를 보내면
-  메일박스엔 쌓이지만, 워커가 없으니 아무도 처리하지 않습니다 — 워커가
-  뜨는 순간 일괄 처리됩니다. 액터들이 "완전히 준비된 상태에서" 일을
-  받기 시작한다는 보장이 됩니다.
-- **개별 `open()` 실패는 치명적이지 않습니다.** 에러 로그를 남기고 다음 액터로
-  넘어갑니다. 한 액터 초기화 실패로 데몬 전체가 안 뜨는 것을 막습니다.
-- 전체 기동 중 **예외가 튀면** catch해서 `stop()`으로 절반쯤 켜진 시스템을
-  깔끔히 끈 뒤 예외를 다시 던집니다(rollback).
+- **워커를 마지막에** 띄웁니다. `open()` 중에 다른 액터로 메시지를 보내면 메일박스엔 쌓이지만, 워커가 없으니 아무도 처리하지 않습니다 — 워커가 뜨는 순간 일괄 처리됩니다. 액터들이 "완전히 준비된 상태에서" 일을 받기 시작한다는 보장이 됩니다.
+- **개별 `open()` 실패는 치명적이지 않습니다.** 에러 로그를 남기고 다음 액터로 넘어갑니다. 한 액터 초기화 실패로 데몬 전체가 안 뜨는 것을 막습니다.
+- 전체 기동 중 **예외가 튀면** catch해서 `stop()`으로 절반쯤 켜진 시스템을 깔끔히 끈 뒤 예외를 다시 던집니다(rollback).
 
 ### run()과 requestStop()
 
@@ -186,11 +178,8 @@ void ActorSystem::stop(){
 (①②③), 이미 들어온 작업은 끝까지 처리하게 한 뒤(④), 마지막에 액터를
 닫는다(⑥).**
 
-- ③ `beginDrain()`과 ④의 관계 — 드레인 프로토콜 상세는
-  [동시성 문서 §드레인](../../concepts/concurrency.md). `pendingWork_`가
-  0이 될 때까지 워커가 버티므로, 메일박스에 밀린 메시지가 조용히 버려지지 않습니다.
-- 소멸자(~ActorSystem)도 `stop()` + `registry_->clear()`를 호출하므로,
-  stop을 깜빡해도 안전합니다.
+- ③ `beginDrain()`과 ④의 관계 — 드레인 프로토콜 상세는 [동시성 문서 §드레인](../../concepts/concurrency.md). `pendingWork_`가 0이 될 때까지 워커가 버티므로, 메일박스에 밀린 메시지가 조용히 버려지지 않습니다.
+- 소멸자(~ActorSystem)도 `stop()` + `registry_->clear()`를 호출하므로, stop을 깜빡해도 안전합니다.
 
 ---
 
@@ -282,18 +271,3 @@ try{
 참고: OneForAll 브로드캐스트로 인한 재시작(`tryConsumeLifecycle`의
 `ActorRestartRequest` 처리)은 Closed 상태의 액터를 건너뛰고 Opened 액터만
 재시작합니다 — 종료 중인 시스템을 다시 켜는 사고를 막는 가드입니다.
-
----
-
-## 요약
-
-| 항목 | 설명 |
-|------|------|
-| **역할** | 컴포넌트 조립 + 전체 수명 관리 |
-| **조립** | `createDefaultActorSystem()`이 포트 구현체를 만들어 `ActorSystemDeps`로 주입 |
-| **기동 순서** | 디스패처 → 이벤트 루프 → 스케줄러 → 액터 open() → 워커 (워커가 마지막) |
-| **종료 순서** | 타이머/I/O 차단 → 드레인 → 워커 join → 액터 close (유입 차단 먼저) |
-| **open 실패** | 로그 후 계속 — 단일 액터 실패가 시스템 기동을 막지 않음 |
-| **메일박스 가득** | 블로킹 없이 드롭+경고+메트릭 (가용성 우선) |
-| **핸들러 예외** | 슈퍼바이저 보고 후 배치 중단 — 실패는 해당 액터에만 격리 |
-| **재시작 실패** | close/open 각각 방어, open 실패 시 재보고 → 예산으로 수렴 |

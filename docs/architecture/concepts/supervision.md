@@ -7,6 +7,7 @@
 
 ## 목차
 
+- [요약 (세 문장)](#요약-세-문장)
 - [개요](#개요)
 - [핵심 아이디어 — 현장 감독자](#핵심-아이디어--현장-감독자)
 - [구성 요소](#구성-요소)
@@ -23,7 +24,14 @@
 - [정책 설정 API](#정책-설정-api)
 - [통계 조회](#통계-조회)
 - [설정](#설정)
-- [요약](#요약)
+
+---
+
+## 요약 (세 문장)
+
+1. 액터 핸들러의 예외는 그 액터 안에 격리되고, **Supervisor**가 정책(OneForOne/OneForAll/None)에 따라 재시작 또는 영구 종료를 결정합니다.
+2. 재시작 예산(`maxRestarts`, 기본 5)을 소진하면 그 액터는 영구 종료됩니다 — 무한 좀비 루프를 막는 안전판입니다.
+3. 실패 메시지와 메일박스 잔량은 전부 **DeadLetterQueue**에 보존되므로, 어떤 메시지가 처리 못 됐는지 나중에 추적할 수 있습니다.
 
 ---
 
@@ -233,12 +241,8 @@ OneForAll의 콜백은 외부 예외가 튀어나올 수 있어 `try/catch`로 �
 
 예산 검사는 두 전략이 서로 다른 방식으로 카운트합니다:
 
-- **OneForOne**: `ActorRuntime::restartCount_`(원자 변수)를 CAS 루프로 증가.
-  여러 워커가 동시에 같은 액터의 실패를 보고해도 정확히 예산 회수만큼만 재시작이
-  통과됩니다. 상세는 [Concurrency](concurrency.md)의 "재시작 카운터 CAS 루프" 참고.
-- **OneForAll**: Supervisor 내부 `oneForAllRestartCount_`(뮤텍스 보호)를 액터별로 추적.
-  브로드캐스트 재시작은 각 액터의 `restartCount()`를 올리지 않아, OneForOne 예산과
-  섞이지 않습니다.
+- **OneForOne**: `ActorRuntime::restartCount_`(원자 변수)를 CAS 루프로 증가. 여러 워커가 동시에 같은 액터의 실패를 보고해도 정확히 예산 회수만큼만 재시작이 통과됩니다. 상세는 [Concurrency](concurrency.md)의 "재시작 카운터 CAS 루프" 참고.
+- **OneForAll**: Supervisor 내부 `oneForAllRestartCount_`(뮤텍스 보호)를 액터별로 추적. 브로드캐스트 재시작은 각 액터의 `restartCount()`를 올리지 않아, OneForOne 예산과 섞이지 않습니다.
 
 `removePolicy(actorId)`로 액터별 정책을 지우면 OneForAll 카운터도 함께 초기화됩니다.
 
@@ -257,7 +261,7 @@ OneForAll의 콜백은 외부 예외가 튀어나올 수 있어 `try/catch`로 �
 | 실제 재시작 | 해당 액터의 홈 워커에서 수행 — 워커 간 충돌 구조적으로 없음 |
 | 정책 설정 | 뮤텍스로 보호되지만 `start()` 이전 단일 스레드 설정 권장 |
 
-핵심 통찰: **재시작이 필요한 액터는 언제나 자기 홈 워커 위에 있다**([액터 친화성](concurrency.md))는
+핵심 통찰: **재시작이 필요한 액터는 언제나 자기 홈 워커 위에 있다**([액터 어피니티](concurrency.md))는
 점입니다. 덕분에 Supervisor는 복잡한 락 없이도 "두 워커가 같은 액터를 동시에 재시작하는"
 레이스를 신경 쓰지 않아 됩니다.
 
@@ -283,8 +287,7 @@ sup->setRestartAll([&]{ return system.broadcastRestart(); });
 
 운영 팁:
 
-- 필수 서비스(SystemManager 등)는 `setEssential(true)`로 메시지 비활성화부터 막고
-  ([Actor Model](actor_model.md)), 정책은 기본값(OneForOne)에 두는 것이 안전합니다.
+- 필수 서비스(SystemManager 등)는 `setEssential(true)`로 메시지 비활성화부터 막고 ([Actor Model](actor_model.md)), 정책은 기본값(OneForOne)에 두는 것이 안전합니다.
 - 실험적/부가 기능 액터는 `None`으로 바꿔 실패 시 조용히 물러나게 하는 편이 낫습니다.
 
 ---
@@ -312,18 +315,3 @@ sup->deadLetterCount();      // 현재 데드 레터 큐에 쌓인 수
 | `supervisor_max_restarts` | 5 | 재시작 예산. 초과 시 영구 종료 |
 | `supervisor_default_strategy` | `"OneForOne"` | 시스템 기본 전략 |
 | `dead_letter_queue_capacity` | 128 | 데드 레터 큐 용량. 넘치면 드롭+경고 |
-
----
-
-## 요약
-
-| 항목 | 설명 |
-|------|------|
-| **패턴 계열** | Erlang/OTP 스타일 슈퍼비전 (평면 구조 변형) |
-| **감독 범위** | 단일 글로벌 Supervisor가 모든 액터 감독 |
-| **전략** | OneForOne(기본) / OneForAll / None + 액터별 오버라이드 |
-| **재시작 예산** | maxRestarts(기본 5). 초과 시 영구 종료 |
-| **유실 방지** | 실패 메시지 + 메일박스 잔량 전체를 DeadLetterQueue로 이관 |
-| **데드 레터 큐** | 락프리 MPSC, 기본 용량 128, 가득 차면 드롭+경고 |
-| **동시성** | 워커 어디서든 보고 가능; 재시작은 홈 워커에서 — 레이스 없음 |
-| **결합도** | ISupervised 최소 인터페이스로 ActorRuntime과 느슨하게 결합 |

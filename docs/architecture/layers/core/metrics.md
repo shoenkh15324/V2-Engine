@@ -19,7 +19,6 @@
 - [접근자 패턴 — V2_METRICS()](#접근자-패턴--v2_metrics)
 - [저오버헤드 설계](#저오버헤드-설계)
 - [벤치마크와의 연계](#벤치마크와의-연계)
-- [요약](#요약)
 
 ---
 
@@ -68,7 +67,7 @@ V² Engine의 메트릭 시스템은 그래서 **운영 경로에 항상 붙어 
 | `messages` | 처리한 총 메시지 수 | `Worker::runLoop` |
 
 busy/idle 비율은 건강 진단의 핵심입니다. idle이 비정상적으로 크면
-"깨우기 비용" 문제([work_dispatch.md §7](../../concepts/work_dispatch.md))를 의심합니다.
+"wakeup 비용" 문제([work_dispatch.md §7](../../concepts/work_dispatch.md))를 의심합니다.
 
 ### DispatcherMetrics — 디스패처 전역
 
@@ -217,23 +216,9 @@ V2_DIAG=1 ./build/Bench/v2_bench_cli throughput --workers 4 --actors 16 ...
 |-----------|------|-------------|
 | avgBatch | `DispatcherMetrics` + 토큰 사이클 | maxBatch=32에 가까울수록 좋음 |
 | busyMs | `WorkerMetrics.busyTimeNs` | — |
-| idleMs | `WorkerMetrics.idleTimeNs` | 작을수록 좋음 (크면 깨우기 비용 의심) |
+| idleMs | `WorkerMetrics.idleTimeNs` | 작을수록 좋음 (크면 wakeup 비용 의심) |
 | dedup | `DispatcherMetrics.deduplicated` | 트래픽 몰림 정도의 자연 스케일 |
 
-판별 규칙도 그대로: **idleMs↑ = 깨우기 문제 / busyMs↑ + 낮은 처리량 = 캐시·라우팅 문제.**
+판별 규칙도 그대로: **idleMs↑ = wakeup 문제 / busyMs↑ + 낮은 처리량 = 캐시·라우팅 문제.**
 
 더 많은 결과표는 [벤치마크 문서](../../../benchmark/README.md)를 참고하세요.
-
----
-
-## 요약
-
-| 항목 | 설명 |
-|------|------|
-| **구조** | 세 그룹 — ActorMetrics(액터별 7종) / WorkerMetrics(워커별 4종) / DispatcherMetrics(전역 6종) |
-| **기록 방식** | relaxed fetch_add, fire-and-forget, enabled_ 게이트 |
-| **거짓 공유 방지** | 카운터마다 `alignas(kCacheLine)` |
-| **조회** | `snapshot()` — 평범한 구조체 복사본 반환 |
-| **접근** | `V2_METRICS()` 글로벌 교체 패턴 + fallback 인스턴스 |
-| **활성화** | `enable_metrics` 설정 키 (main_app이 조립 시 주입) |
-| **소비자** | 벤치마크 `[Diag]` 블록, TUI, 로그 |

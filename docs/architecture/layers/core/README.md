@@ -15,7 +15,6 @@ V² Engine의 심장부인 **코어 계층**의 전체 지도. 무엇이 어디 
 - [빌드 구조](#빌드-구조)
 - [의존성 규칙](#의존성-규칙)
 - [포트 정의 — 외부 세계와의 약속](#포트-정의--외부-세계와의-약속)
-- [요약](#요약)
 
 ---
 
@@ -120,14 +119,10 @@ find_package(Threads REQUIRED)
 target_link_libraries(v2_core PUBLIC Threads::Threads)
 ```
 
-- **OBJECT 라이브러리** — 최종 실행 파일(v2_main, v2_cli, v2_tui)에 직접 합쳐집니다.
-  별도 .so/.a를 만들지 않아 링크 오버헤드가 없습니다.
-- **유일한 의존성 `Threads::Threads`** — `std::thread`, `std::counting_semaphore` 같은
-  C++20 스레드 기능을 위한 플랫폼 링크 옵션(-pthread) 확보용입니다.
-- **include 경로** — `src/`가 public include 루트라서 어디서든
-  `#include "core/common/log/log.hpp"` 형태로 임포트합니다.
-- 상위 `CMakeLists.txt`가 FetchContent로 가져오는 FTXUI/nlohmann-json/sdbus-c++는
-  **전부 인프라·애플리케이션 계층 전용**이며 코어 타깃에는 들어가지 않습니다.
+- **OBJECT 라이브러리** — 최종 실행 파일(v2_main, v2_cli, v2_tui)에 직접 합쳐집니다. 별도 .so/.a를 만들지 않아 링크 오버헤드가 없습니다.
+- **유일한 의존성 `Threads::Threads`** — `std::thread`, `std::counting_semaphore` 같은 C++20 스레드 기능을 위한 플랫폼 링크 옵션(-pthread) 확보용입니다.
+- **include 경로** — `src/`가 public include 루트라서 어디서든 `#include "core/common/log/log.hpp"` 형태로 임포트합니다.
+- 상위 `CMakeLists.txt`가 FetchContent로 가져오는 FTXUI/nlohmann-json/sdbus-c++는 **전부 인프라·애플리케이션 계층 전용**이며 코어 타깃에는 들어가지 않습니다.
 
 ---
 
@@ -153,23 +148,10 @@ target_link_libraries(v2_core PUBLIC Threads::Threads)
 
 | 포트 | 위치 | 역할 | 구현체 (인프라) |
 |------|------|------|------------------|
-| `IEventLoop` | `actor_system/runtime/dispatcher/io/i_event_loop.hpp` | fd 감시·작업 게시 | `EventLoopEpoll` |
+| `IEventLoop` | `actor_system/runtime/dispatcher/io/i_event_loop.hpp` | fd 감시·작업 post | `EventLoopEpoll` |
 | `ITimer` | `common/timer/i_timer.hpp` | 타이머 등록·만료 알림 | `LinuxTimer` (timerfd) / `Timer` (std 폴백) |
 | `IMemoryAllocator` | `common/memory/i_memory_allocator.hpp` | 할당/해제·통계 | `MemoryPool` (내장) 또는 외부 교체 |
 
 `ActorSystemDeps` 구조체(`actor_system.hpp:37`)가 이런 의존성을 한 곳에 모아
 `createDefaultActorSystem()`으로 주입합니다 — 조립은 애플리케이션 계층의
 몫이라는 [육각형 아키텍처](../../concepts/infrastructure.md) 원칙입니다.
-
----
-
-## 요약
-
-| 항목 | 설명 |
-|------|------|
-| **정체** | 외부 의존성 제로의 자체 완결형 C++20 서브프로젝트 |
-| **구성** | actor_system(프레임워크 본체) + common(유틸) + perf(metrics) |
-| **빌드** | `v2_core` OBJECT 라이브러리, `Threads::Threads`만 링크 |
-| **금지** | 시스템 콜, 서드파티, 상위 계층 include |
-| **포트** | IEventLoop, ITimer, IMemoryAllocator — 인프라가 구현 |
-| **심층 문서** | mechanisms → [concepts/](../../concepts/README.md), 유틸/메트릭 → 이 폴더 |

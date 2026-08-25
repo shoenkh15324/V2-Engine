@@ -23,7 +23,6 @@
   - [Result 반환 코드](#result-반환-코드)
   - [V2_ASSERT / V2_PANIC / V2_UNREACHABLE](#v2_assert--v2_panic--v2_unreachable)
 - [RingBuffer — 바이트 원형 버퍼](#ringbuffer--바이트-원형-버퍼)
-- [요약](#요약)
 
 ---
 
@@ -33,8 +32,7 @@
 저수준 도구 상자입니다. 특징은 두 가지입니다:
 
 1. **전부 코어 안에 자급자족** — 외부 라이브러리 없이 C++20 표준만 사용합니다.
-2. **전역 상태는 "교체 가능한 포인터" 하나뿐** — 활성 로거(`gLogger`)와 활성
-   메트릭스([metrics.md](metrics.md))만 글로벌이고, 나머지는 값으로 전달됩니다.
+2. **전역 상태는 "교체 가능한 포인터" 하나뿐** — 활성 로거(`gLogger`)와 활성 메트릭스([metrics.md](metrics.md))만 글로벌이고, 나머지는 값으로 전달됩니다.
 
 ---
 
@@ -95,10 +93,8 @@ log() 호출
 
 - **thread_local 버퍼**: 스레드별로 따로 모으므로 누적 단계에는 경쟁이 없습니다.
 - **배치 플러시**: 여러 줄을 한 번의 write로 몰아씁니다.
-- **`flushBuffer()`**: 수동 플러시. `V2_LOG_FATAL`과 소멸자는 버려질 로그가
-  없도록 즉시 플러시를 강제합니다.
-- **`logBlock(text)`**: assert 리포트처럼 "반드시 지금, 통째로" 출력해야 할 때
-  쓰는 우회로입니다.
+- **`flushBuffer()`**: 수동 플러시. `V2_LOG_FATAL`과 소멸자는 버려질 로그가 없도록 즉시 플러시를 강제합니다.
+- **`logBlock(text)`**: assert 리포트처럼 "반드시 지금, 통째로" 출력해야 할 때 쓰는 우회로입니다.
 
 파일 출력 추가:
 
@@ -298,22 +294,5 @@ push 4B:
 
 주의점:
 
-- **단일 스레드 전용**입니다. head/tail이 평범한 `size_t`(원자 변수 아님)라서
-  멀티 스레드에서 쓰려면 별도 잠금이 필요합니다. 락프리 MPSC/MPMC 큐
-  ([동시성 문서](../../concepts/concurrency.md))와 역할이 다릅니다 —
-  이쪽은 *객체(Message)*, RingBuffer는 *날 바이트*용입니다.
+- **단일 스레드 전용**입니다. head/tail이 평범한 `size_t`(원자 변수 아님)라서 멀티 스레드에서 쓰려면 별도 잠금이 필요합니다. 락프리 MPSC/MPMC 큐 ([동시성 문서](../../concepts/concurrency.md))와 역할이 다릅니다 — 이쪽은 *객체(Message)*, RingBuffer는 *날 바이트*용입니다.
 - 실패 시 데이터 손실 없이 `Fail`을 반환하는 백프레셔 스타일입니다.
-
----
-
-## 요약
-
-| 구성요소 | 핵심 설계 | 주의점 |
-|----------|-----------|--------|
-| **Logger** | thread_local 배치 버퍼 + 글로벌 교체 패턴, `std::format` 매크로 | FATAL/logBlock만 즉시 출력 |
-| **Time/Sleep** | 측정=steady_clock, 표시=system_clock으로 분리 | 측정에 system_clock 금지 |
-| **ServiceContainer** | bind/resolve, Lifetime 2종, static_assert 검증 | 미등록 resolve는 예외 |
-| **Config** | 플랫폼 매크로 감지, 기본값 완비된 RuntimeConfig | JSON 해석은 인프라 담당 |
-| **Result** | 복구 가능 = 코드 반환 (Ok=0, 실패=음수) | 예외 대신 관례 준수 |
-| **V2_ASSERT** | 불변식 위반 시 즉시 abort; 릴리즈에선 제거 | 사용자 입력에는 부적합 |
-| **RingBuffer** | 분할 memcpy wrap-around, 단일 스레드 전용 | 멀티스레드엔 락프리 큐 사용 |

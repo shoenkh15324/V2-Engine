@@ -7,6 +7,7 @@ epoll·소켓·timerfd 같은 운영체제 기능을 액터 코어에 연결하�
 
 ## 목차
 
+- [요약 (세 문장)](#요약-세-문장)
 - [개요 — 포트와 어댑터](#개요--포트와-어댑터)
 - [왜 분리하는가](#왜-분리하는가)
 - [포트 — 코어가 정의한 인터페이스](#포트--코어가-정의한-인터페이스)
@@ -19,7 +20,14 @@ epoll·소켓·timerfd 같은 운영체제 기능을 액터 코어에 연결하�
 - [HAL — 하드웨어 추상화](#hal--하드웨어-추상화)
 - [조립 — main_app에서의 배선](#조립--main_app에서의-배선)
 - [계층 규칙](#계층-규칙)
-- [요약](#요약)
+
+---
+
+## 요약 (세 문장)
+
+1. 인프라 계층은 **시스템 콜과 서드파티 라이브러리를 만질 수 있는 유일한 곳**이며, 코어가 선언한 포트(`IEventLoop`, `ITimer` 등)를 어댑터로 구현합니다.
+2. epoll 이벤트 루프, timerfd 타이머, self-pipe 시그널, 유닉스 도메인 소켓 같은 OS 연동이 전부 이 계층에 갇혀 있습니다.
+3. 어떤 구현체를 꽂을지는 애플리케이션 계층의 조립(`main_app.cpp`)에서 결정되고 — 코어는 구현이 무엇인지 끝까지 모릅니다.
 
 ---
 
@@ -49,12 +57,9 @@ V² Engine은 **육각형 아키텍처**(헥사고널, 또는 포트-앤드-어�
 
 ## 왜 분리하는가
 
-1. **테스트**: OS 없이도 코어 로직을 검증할 수 있습니다. 느린 실제 epoll 대신 가짜
-   이벤트 루프(Mock)를 꽂으면 밀리초 단위로 시간을 조작하는 테스트가 가능합니다.
-2. **이식성**: 라즈베리파이(aarch64)에서는 진짜 PMU 드라이버, x86 개발 머신에서는 Mock을
-   꽂는 식으로 플랫폼별 차이를 한 곳에 모읍니다.
-3. **명확한 경계**: "시스템 콜을 부를 수 있는 곳은 오직 인프라뿐"이라는 규칙 하나로
-   코어 전체가 순수 C++20(+스레드 라이브러리)으로 유지됩니다.
+1. **테스트**: OS 없이도 코어 로직을 검증할 수 있습니다. 느린 실제 epoll 대신 가짜 이벤트 루프(Mock)를 꽂으면 밀리초 단위로 시간을 조작하는 테스트가 가능합니다.
+2. **이식성**: 라즈베리파이(aarch64)에서는 진짜 PMU 드라이버, x86 개발 머신에서는 Mock을 꽂는 식으로 플랫폼별 차이를 한 곳에 모읍니다.
+3. **명확한 경계**: "시스템 콜을 부를 수 있는 곳은 오직 인프라뿐"이라는 규칙 하나로 코어 전체가 순수 C++20(+스레드 라이브러리)으로 유지됩니다.
 
 ---
 
@@ -64,7 +69,7 @@ V² Engine은 **육각형 아키텍처**(헥사고널, 또는 포트-앤드-어�
 
 | 포트 | 파일 | 하는 일 |
 |------|------|---------|
-| `IEventLoop` | `src/core/actor_system/runtime/dispatcher/io/i_event_loop.hpp` | fd 감시 시작/정지, 작업 게시(post), 핸들러 등록(subscribe/unsubscribe) |
+| `IEventLoop` | `src/core/actor_system/runtime/dispatcher/io/i_event_loop.hpp` | fd 감시 시작/정지, 작업 post, 핸들러 등록(subscribe/unsubscribe) |
 | `ITimer` | `src/core/common/timer/i_timer.hpp` | 타이머 등록(add/cancel/clear), 만료 콜백 실행(handleTimerEvent) |
 | `IMemoryAllocator` | `src/core/common/memory/i_memory_allocator.hpp` | 메모리 할당/해제 + 사용량 통계 |
 
@@ -139,10 +144,10 @@ void EventLoopEpoll::run(){
 
 핸들러 안에서 액터 메일박스로 메시지를 넣으면, 외부 세계와 액터 세계가 연결됩니다.
 
-### 다른 스레드 깨우기 — eventfd
+### 다른 스레드 깨우기 (wakeup) — eventfd
 
-`epoll_wait`에 잠들어 있는 동안 누군가 `post()`를 하면 어떻게 될까요? 여기서
-**eventfd**가 씁니다. eventfd는 "깨우기 전용 미니 파이프" 같은 fd로, 이 루프에
+`epoll_wait`로 대기 중일 때 누군가 `post()`를 하면 어떻게 될까요? 여기서
+**eventfd**가 씁니다. eventfd는 "wakeup 전용 미니 파이프" 같은 fd로, 이 루프에
 미리 등록되어 있습니다:
 
 ```cpp
@@ -159,7 +164,7 @@ void EventLoopEpoll::post(std::function<void()> op){
 잠자던 루프를 깨웁니다. `stop()`도 같은 원리입니다 — `running_=false` 후 eventfd에
 써서 루프가 즉시 빠져나오게 합니다.
 
-### 스레드 친화성 감지
+### 스레드 어피니티 감지 (thread affinity)
 
 `subscribe()`는 **지금 이벤트 루프 스레드에서 불렸는지** 스스로 판단합니다:
 
@@ -278,13 +283,9 @@ RuntimeConfig cfg = RuntimeConfig::loadFromFile(V2_CONFIG_DIR "/v2_main.json");
 if(j.contains("worker_count")) cfg.workerCount = j["worker_count"];
 ```
 
-- 파일이 없거나 파싱에 실패해도 **예외 없이 기본값**으로 진행합니다(데몬이 설정 때문에
-  죽지 않게 함).
+- 파일이 없거나 파싱에 실패해도 **예외 없이 기본값**으로 진행합니다(데몬이 설정 때문에 죽지 않게 함).
 - 키가 없으면 해당 필드는 C++ 기본값을 유지합니다.
-- 읽는 키의 전체 목록: 엔진(`worker_count`, `park_spin_ns` 등), 메일박스, 디스패처,
-  슈퍼바이저, 메모리(`memory_slab_size` 등), Tick/Monitor/IPC/D-Bus 활성화 여부 등 —
-  [작업 분배](work_dispatch.md)·[Memory](memory.md)·[Supervision](supervision.md) 문서의
-  "설정" 절에서 각각 다룹니다.
+- 읽는 키의 전체 목록: 엔진(`worker_count`, `park_spin_ns` 등), 메일박스, 디스패처, 슈퍼바이저, 메모리(`memory_slab_size` 등), Tick/Monitor/IPC/D-Bus 활성화 여부 등 — [작업 분배](work_dispatch.md)·[Memory](memory.md)·[Supervision](supervision.md) 문서의 "설정" 절에서 각각 다룹니다.
 
 플랫폼 전용 키(epoll, IPC, D-Bus)는 `#if V2_PLATFORM_LINUX`로 감싸여 있습니다.
 
@@ -371,19 +372,3 @@ MainApp::open()
 | 플랫폼 코드는 `V2_PLATFORM_*` 매크로로 감싼다 | macOS/Windows 빌드 호환 |
 | 어댑터는 실패를 코드 반환값(int Ok/Fail)으로 보고 | 예외를 코어 경계 너머로 던지지 않음 |
 | fd 소유는 RAII로 | 소멸자에서 확실히 close |
-
----
-
-## 요약
-
-| 항목 | 설명 |
-|------|------|
-| **패턴** | 육각형 아키텍처(포트-앤드-어댑터), 의존성 역전 |
-| **포트** | `IEventLoop`, `ITimer`, `IMemoryAllocator` (+HAL 인터페이스들) |
-| **이벤트 루프** | `EventLoopEpoll` — 단일 스레드, epoll_wait + eventfd 깨우기, post 큐는 락프리 MPSC |
-| **타이머** | `LinuxTimer`(timerfd, 기본) / `Timer`(std 스레드, 폴백) — 최소힙 스케줄링 공유 |
-| **시그널** | `SignalHandler` — self-pipe 트릭으로 async-signal-safe 처리 |
-| **전송** | `UdsServer/UdsClient` — CLI 명령·TUI 피드용 유닉스 도메인 소켓 |
-| **설정** | JSON → `RuntimeConfig`, 실패 시 기본값으로 관대하게 |
-| **HAL** | PMU(vcgencmd)/Sys(procfs)/I2C + Mock — aarch64 여부로 자동 선택 |
-| **배선 위치** | 애플리케이션 계층 `main_app.cpp` — 코어는 인프라를 모른 채 주입받음 |

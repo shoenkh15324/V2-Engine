@@ -1,5 +1,7 @@
 # 동시성
 
+락프리 큐·작업 스틸링·메모리 오더링으로 메시지 핫 패스에서 뮤텍스를 제거하는 원리를 처음 읽는 사람도 따라올 수 있게 정리한 문서.
+
 ---
 
 ## 목차
@@ -17,7 +19,7 @@
   - [세마포어 기반 웨이크업](#세마포어-기반-웨이크업)
   - [뮤텍스 사용 경계](#뮤텍스-사용-경계)
 - [작업 분배](#작업-분배)
-  - [액터 친화성](#액터-친화성)
+  - [액터 어피니티 (actor affinity)](#액터-어피니티-actor-affinity)
   - [부하 인식 디스패치](#부하-인식-디스패치)
   - [작업 스틸링](#작업-스틸링)
   - [적응형 백오프](#적응형-백오프)
@@ -30,12 +32,11 @@
 - [메모리 오더링 참조](#메모리-오더링-참조)
 - [이벤트 루프 통합](#이벤트-루프-통합)
   - [스레드 간 포스팅](#스레드-간-포스팅)
-  - [스레드 친화성 인식](#스레드-친화성-인식)
+  - [스레드 어피니티 감지](#스레드-어피니티-감지)
 - [스레드 로컬 저장소](#스레드-로컬-저장소)
   - [TCMalloc 스타일 메모리 캐시](#tcmalloc-스타일-메모리-캐시)
   - [워커 전용 백오프 상태](#워커-전용-백오프-상태)
 - [백프레셔 & 흐름 제어](#백프레셔--흐름-제어)
-- [요약](#요약)
 
 ---
 
@@ -43,7 +44,7 @@
 
 1. 메시지 경로(큐잉 → 디스패치 → 획득 → 처리)에는 **락이 전혀 없습니다** — 락프리 큐와 원자 연산만 사용합니다.
 2. 각 액터는 **한 번에 한 워커에서만** 실행됩니다 — 메일박스가 단일 소비자 큐이고 실행 토큰이 중복 발행을 막기 때문입니다.
-3. 놀고 있는 워커는 **스핀 → 세마포어 대기 → 작업 스틸링** 순서로 일거리를 찾습니다 — 깨우기 비용을 줄이면서 동시에 놀지도 않습니다.
+3. 놀고 있는 워커는 **스핀 → 세마포어 대기 → 작업 스틸링** 순서로 일거리를 찾습니다 — wakeup 비용을 줄이면서 동시에 놀지도 않습니다.
 
 ---
 
@@ -51,7 +52,7 @@
 
 > 📌 실행 토큰 생명주기·inFlight 슬롯·finalize 정산·스핀 티어의 상세 설계와 도입 배경은 [작업 분배](work_dispatch.md) 문서를 참고하세요. 이 문서는 동시성 프리미티브 관점을 다룹니다.
 
-V² Engine은 세 가지 기둥 위에 구축된 액터 기반 동시성 모델을 사용합니다: **락프리 데이터 구조**, **작업 스틸링 워커 풀**, **액터 친화성**. 스레드 안전성은 공유 상태 락이 아닌 락프리 큐를 통한 메시지 전달을 통해 달성됩니다. 락은 메시지 핫 패스 외부의 인프라 구성 요소로 제한됩니다.
+V² Engine은 세 가지 기둥 위에 구축된 액터 기반 동시성 모델을 사용합니다: **락프리 데이터 구조**, **작업 스틸링 워커 풀**, **액터 어피니티(actor affinity)**. 스레드 안전성은 공유 상태 락이 아닌 락프리 큐를 통한 메시지 전달을 통해 달성됩니다. 락은 메시지 핫 패스 외부의 인프라 구성 요소로 제한됩니다.
 
 ---
 
@@ -73,10 +74,22 @@ V² Engine은 세 가지 기둥 위에 구축된 액터 기반 동시성 모델�
 V² Engine의 선택 기준은 단순합니다: **증명 가능한 한 가장 싼 오더링을 쓴다.**
 
 - 그냥 세기만 하면 → `relaxed`
-- "내가 쓴 데이터를 상대에게 보여준다"(큐 슬롯 게시 등) → `release` 쓰기 + `acquire` 읽기
+- "내가 쓴 데이터를 상대에게 보여준다"(큐 슬롯 publish 등) → `release` 쓰기 + `acquire` 읽기
 - 슬롯 소유권을 원자적으로 교환(RMW) → `acq_rel`
 
 뒤쪽의 [메모리 오더링 참조](#메모리-오더링-참조) 표는 "각 위치에서 어떤 등급을 골랐는지, 왜 충분한지"의 목록입니다. 마지막으로 **CAS**(`compare_exchange`)는 "값이 예상과 같으면 바꾸고, 아니면 실패 보고"하는 원자 조건부 교환으로, 재시도 루프와 함께 쓰면 "경쟁자가 여러 있어도 딱 한 명만 이긴다" 로직이 됩니다.
+
+> 📖 **전문 용어 미니 사전** — 이 문서 뒤쪽에서 계속 등장하는 용어들
+>
+> | 용어 | 뜻 |
+> |------|-----|
+> | **CAS** (Compare-And-Swap) | "값이 예상과 같으면 새 값으로 교환, 아니면 실패 보고"하는 원자 연산(`compare_exchange`). 재시도 루프와 함께 쓰면 경쟁자가 여럿이어도 정확히 한 명만 이긴다 |
+> | **RMW** (Read-Modify-Write) | 읽기 → 수정 → 쓰기를 한 덩어리로 수행하는 원자 연산. `fetch_add`, `exchange`, CAS가 모두 RMW다 |
+> | **TOCTOU** (Time-Of-Check-To-Time-Of-Use) | 검사(check)와 사용(use) *사이의 간극*에 상태가 바뀌어 생기는 버그 — "검사할 땐 괜찮았는데 쓸 때는 이미 늦은" race |
+> | **lost wakeup** | 일이 생겼는데 깨우는 신호를 놓쳐 소비자가 영원히 대기하는 버그 |
+> | **happens-before** | "A에서 쓴 결과를 B가 반드시 본다"는 메모리 모델의 보증 관계. `release` 쓰기 + `acquire` 읽기 짝이 만든다 |
+> | **수정 순서** (modification order) | 하나의 원자 변수에 가해진 모든 수정(RMW 포함)은 전역적으로 일관된 순서를 갖는다는 C++ 표준의 보증 |
+> | **fence** (배리어) | 컴파일러·CPU의 명령 재배치를 제한하는 경계선. `seq_cst` fence가 최강이지만 가장 비싸다 |
 
 ---
 
@@ -138,7 +151,7 @@ bool push(T&& msg) noexcept {
 |------|------|---------------|------|
 | (1) | `slot.sequence` 읽기 | `acquire` | 이 슬롯의 최신 상태를 봄 |
 | (2) | `tail_`에 CAS | `relaxed` | 경쟁 해결만; 데이터 의존성 없음 |
-| (3) | `slot.sequence` 쓰기 | `release` | placement-new를 소비자에게 게시 |
+| (3) | `slot.sequence` 쓰기 | `release` | placement-new 결과를 소비자에게 publish |
 
 **Pop (단일 소비자 전용):**
 
@@ -162,7 +175,7 @@ bool pop(T& out) noexcept {
 
 | 단계 | 연산 | 메모리 오더링 | 근거 |
 |------|------|---------------|------|
-| (4) | `slot.sequence` 읽기 | `acquire` | 게시된 요소를 읽음 |
+| (4) | `slot.sequence` 읽기 | `acquire` | publish된 요소를 읽음 |
 | (5) | `head_` 쓰기 | `relaxed` | 안전 — 단일 소비자, 데이터 의존성 없음 |
 | (6) | `slot.sequence` 쓰기 | `release` | 프로듀서를 위해 슬롯 재활용 |
 
@@ -289,7 +302,7 @@ void Worker::runLoop() {
 | 연산 | 위치 | 효과 |
 |------|------|------|
 | `semas_[workerId]->release()` | `enqueueEntry()` | 새 작업이 디스패치될 때 대상 워커를 깨움 |
-| `semas_[workerId]->try_acquire_for()` | `acquire()` | 워커가 타임아웃과 함께 슬리프, 시그널이나 타임아웃 시 깨어남 — **스핀 티어가 먼저 실행** |
+| `semas_[workerId]->try_acquire_for()` | `acquire()` | 워커가 타임아웃과 함께 sleep, 시그널이나 타임아웃 시 wake — **스핀 티어가 먼저 실행** |
 | `semas_[victim]->try_acquire()` | `trySteal()` | 다른 워커 큐에서 팝할 때 세마포어 토큰을 스틸 |
 | `semas_[i]->release()` (전체) | `beginDrain()`, `retirePendingWork()` | 종료를 위해 모든 워커를 깨움 |
 
@@ -316,7 +329,7 @@ void Worker::runLoop() {
 
 ## 작업 분배
 
-### 액터 친화성
+### 액터 어피니티 (actor affinity)
 
 각 액터는 결정적으로 "홈" 워커에 할당됩니다:
 
@@ -330,7 +343,7 @@ int WorkDispatcher::pickWorker(uint64_t actorId) {
 ```
 
 이를 통해:
-- **캐시 유연성** — 같은 액터의 메시지가 같은 워커에 의해 처리됨 (따뜻한 L1/L2)
+- **캐시 지역성(locality)** — 같은 액터의 메시지가 같은 워커에 의해 처리됨 (warm한 L1/L2 유지)
 - **최소 경쟁** — 홈 워커만 MPSC 메일박스에서 팝; 어떤 스레드든 push 가능
 
 ---
@@ -407,7 +420,7 @@ idleBackoff_[workerId] = 1;  // no work → idle
 
 ---
 
-### 드레인 프로토콜 (우아한 종료)
+### 드레인 프로토콜 (graceful shutdown)
 
 ```
 1. beginDrain()
@@ -505,7 +518,7 @@ bool ActorRuntime::tryRestart(const std::string& reason, int maxRestarts) {
 std::atomic<bool> stopped_{false};
 ```
 
-`processBatch()` 시작 부분에서만 확인되므로 `memory_order_relaxed`로 설정됩니다. relaxed 오더링은 충분합니다 — 실제 상태 전이(`actor_->close()`)가 자체 오더링을 제공하고, 이 플래그는 조언적(advisory) 성격입니다.
+`processBatch()` 시작 부분에서만 확인되므로 `memory_order_relaxed`로 설정됩니다. relaxed 오더링은 충분합니다 — 실제 상태 전이(`actor_->close()`)가 자체 오더링을 제공하고, 이 플래그는 advisory(참고용 힌트)일 뿐입니다.
 
 ---
 
@@ -514,19 +527,19 @@ std::atomic<bool> stopped_{false};
 | 위치 | 연산 | 오더링 | 근거 |
 |------|------|--------|------|
 | MPSC/MPMC `push` | `tail_`에 CAS | `relaxed` | 경쟁 해결만; 데이터 의존성 없음 |
-| MPSC/MPMC `push` | `slot.sequence` 쓰기 | `release` | placement-new를 소비자에게 게시 |
-| MPSC `pop` | `slot.sequence` 읽기 | `acquire` | 게시된 요소를 읽음 |
+| MPSC/MPMC `push` | `slot.sequence` 쓰기 | `release` | placement-new 결과를 소비자에게 publish |
+| MPSC `pop` | `slot.sequence` 읽기 | `acquire` | publish된 요소를 읽음 |
 | MPSC `pop` | `head_` 쓰기 | `relaxed` | 단일 소비자, 데이터 의존성 없음 |
 | MPMC `pop` | `head_`에 CAS | `relaxed` | 소비자 간 경쟁 해결 |
-| MPMC `pop` | `slot.sequence` 읽기 | `acquire` | 게시된 요소를 읽음 |
+| MPMC `pop` | `slot.sequence` 읽기 | `acquire` | publish된 요소를 읽음 |
 | MPMC `pop` | `slot.sequence` 쓰기 | `release` | 프로듀서를 위해 슬롯 재활용 |
-| `Worker::running_` | 쓰기/읽기 | `release`/`relaxed` | 전이 시 쓰기 펜스; 읽기는 조언적 |
+| `Worker::running_` | 쓰기/읽기 | `release`/`relaxed` | 전이 시 쓰기 펜스; 읽기는 advisory 힌트 |
 | `WorkDispatcher::running_`, `draining_` | 쓰기/읽기 | `release`/`relaxed` | 동일 패턴 |
 | `WorkDispatcher::pendingWork_` | `fetch_add` | `relaxed` | 증가는 단방향 |
 | `WorkDispatcher::pendingWork_` | `fetch_sub` | `acq_rel` | 워커와 드레인 동기화 — 감산 스레드가 이전 모든 쓰기를 봐야 함 |
 | `WorkDispatcher` inFlight 슬롯 | `exchange` (set/claim/release) | `acq_rel` | RMW 체인으로 dedup 정합 보장 — plain store 금지 (lost wakeup 방지) |
 | `ActorRuntime::restartCount_` | `compare_exchange_weak` | `relaxed` | 스핀 루프; 원자성만 충분 |
-| `ActorRuntime::stopped_` | 쓰기/읽기 | `relaxed` | 조언적 플래그; 실제 상태 전이가 오더링 제공 |
+| `ActorRuntime::stopped_` | 쓰기/읽기 | `relaxed` | advisory 플래그; 실제 상태 전이가 오더링 제공 |
 | 메트릭 `updatePeak` | `compare_exchange_weak` | `relaxed` | 최선 노력 피크 추적 |
 
 ---
@@ -561,7 +574,7 @@ void EventLoopEpoll::drainPendingOps() {
 
 ---
 
-### 스레드 친화성 인식
+### 스레드 어피니티 감지
 
 `subscribe()`와 `unsubscribe()`는 이벤트 루프 스레드에서 호출되었는지 감지합니다:
 
@@ -647,24 +660,8 @@ std::vector<uint8_t> idleBackoff_;  // indexed by worker ID
 
 | 메커니즘 | 동작 |
 |----------|------|
-| **세마포어 블로킹** | 유휴 시 워커가 `std::counting_semaphore`에서 슬리프; 프로듀서가 `release()`로 깨움 |
+| **세마포어 블로킹** | 유휴 시 워커가 `std::counting_semaphore`에서 sleep; 프로듀서가 `release()`로 wake |
 | **메일박스 가득 참** | 경고와 함께 메시지 드롭. 의도적 설계 — 전달 보장보다 가용성 우선 |
 | **디스패처 큐 가득 참** | `pendingActorList_`(뮤텍스 보호)로 폴백; 유휴 시간에 재시도 |
 | **적응형 작업 스틸링** | 활성(200μs) → 유휴(2000μs) 스틸 간격으로 전환하여 CPU 스핀 감소 |
 | **메일박스 용량** | 액터별 생성 시 설정 가능; 용량 부족 시 쓰루풋 저하 |
-
----
-
-## 요약
-
-| 항목 | 설명 |
-|------|------|
-| **큐 알고리즘** | Vyukov MPSC (메일박스) + Vyukov MPMC (작업 스틸링) |
-| **핫 패스 락** | 제로 — 모든 큐잉/디스패치/획득/run 연산이 락프리 |
-| **액터 격리** | 단일 소비자 메일박스 + inFlight 슬롯 게이트 = 액터 수준 락 불필요 |
-| **작업 분배** | 결정적 친화성 + 부하 인식 디스패치 + 적응형 작업 스틸링 |
-| **세마포어 웨이크업** | 워커별 `std::counting_semaphore` + 스핀-던-파크 계층(`parkSpinNs`) — 깨우기 비용 최소화 |
-| **메모리 오더링** | 최소화: `relaxed` 가능한 곳에, 데이터 게시에 `acquire`/`release`, 슬롯 게이트는 `acq_rel` exchange만 사용 (`seq_cst` 0회) |
-| **스레드 로컬 할당** | TCMalloc 스타일 3계층 할당자로 할당자 경쟁 제거 |
-| **거짓 공유 방지** | 핫 패스 원자 모두 `kCacheLine`(64 또는 128바이트)으로 정렬 |
-| **백프레셔** | 가득 차면 드롭(메일박스) + 폴백 큐(디스패처) + 적응형 백오프(스틸링) |
