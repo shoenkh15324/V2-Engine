@@ -4,7 +4,9 @@
 
 ## 목차
 
+- [요약 (세 문장)](#요약-세-문장)
 - [개요](#개요)
+- [메모리 오더링 입문 (표를 읽기 전에)](#메모리-오더링-입문-표를-읽기-전에)
 - [설계 원칙](#설계-원칙)
 - [락프리 데이터 구조](#락프리-데이터-구조)
   - [MPSC 큐](#mpsc-큐-멀티-프로듀서-단일-소비자)
@@ -37,12 +39,44 @@
 
 ---
 
+## 요약 (세 문장)
+
+1. 메시지 경로(큐잉 → 디스패치 → 획득 → 처리)에는 **락이 전혀 없습니다** — 락프리 큐와 원자 연산만 사용합니다.
+2. 각 액터는 **한 번에 한 워커에서만** 실행됩니다 — 메일박스가 단일 소비자 큐이고 실행 토큰이 중복 발행을 막기 때문입니다.
+3. 놀고 있는 워커는 **스핀 → 세마포어 대기 → 작업 스틸링** 순서로 일거리를 찾습니다 — 깨우기 비용을 줄이면서 동시에 놀지도 않습니다.
+
+---
+
 ## 개요
 
-> 📌 실행 토큰 생명주기·inFlight 슬롯·finalize 정산·스핀 티어의 상세 설계와 도입 배경은
-> [Scheduling](scheduling.md) 문서를 참고하세요. 이 문서는 동시성 프리미티브 관점을 다룹니다.
+> 📌 실행 토큰 생명주기·inFlight 슬롯·finalize 정산·스핀 티어의 상세 설계와 도입 배경은 [작업 분배](work_dispatch.md) 문서를 참고하세요. 이 문서는 동시성 프리미티브 관점을 다룹니다.
 
 V² Engine은 세 가지 기둥 위에 구축된 액터 기반 동시성 모델을 사용합니다: **락프리 데이터 구조**, **작업 스틸링 워커 풀**, **액터 친화성**. 스레드 안전성은 공유 상태 락이 아닌 락프리 큐를 통한 메시지 전달을 통해 달성됩니다. 락은 메시지 핫 패스 외부의 인프라 구성 요소로 제한됩니다.
+
+---
+
+## 메모리 오더링 입문 (표를 읽기 전에)
+
+이 문서 뒤쪽 표들에 `relaxed`, `acquire`, `release` 같은 용어가 계속 나옵니다. 처음이라면 이 절만 읽고 넘어와도 표를 해석할 수 있습니다.
+
+**원자 변수(`std::atomic`)란?** 여러 스레드가 동시에 건드려도 연산이 잘리지 않는 변수입니다. 평범한 `count_++`는 "읽기 → 더하기 → 쓰기" 세 단계 사이에 다른 스레드가 끼어들 수 있지만, 원자 변수의 연산은 한 덩어리로 처리됩니다.
+
+그런데 원자 변수에도 남는 문제가 하나 있습니다 — **순서**입니다. 스레드 A가 "데이터를 쓴 *뒤에* 플래그를 올렸다"고 해도, 스레드 B가 플래그를 보고 데이터를 읽으면 아직 옛날 값일 수 있습니다. CPU와 컴파일러가 성능을 위해 명령을 재배치하기 때문입니다. **메모리 오더링**은 "이 순서만큼은 지켜달라"는 약속의 강도를 고르는 것입니다:
+
+| 오더링 | 강도 | 순한 비유 |
+|--------|------|-----------|
+| `relaxed` | 약함 — 값 자체만 안전 | 혼자 채우는 **카운터** — 몇 번인지는 정확하지만, 다른 데이터와의 순서는 보장 안 함 |
+| `release`(쓰기) + `acquire`(읽기) | 중간 — **짝**으로 동작 | **택배 발송**: 발신자가 박스를 봉인(release)하고 송장을 붙임 → 수신자가 송장을 확인(acquire)하면 박스 안 내용물이 *전부* 보임 |
+| `acq_rel` | 중간 — 교환 연산용 | exchange처럼 읽기+쓰기를 동시에 할 때 위 두 역할을 한 번에 수행 |
+| `seq_cst` | 강함 — 전역 일관 순서 | 번호표 시스템 — 모든 스레드가 완전히 같은 순서를 봄. 가장 정확하고 가장 비쌈 |
+
+V² Engine의 선택 기준은 단순합니다: **증명 가능한 한 가장 싼 오더링을 쓴다.**
+
+- 그냥 세기만 하면 → `relaxed`
+- "내가 쓴 데이터를 상대에게 보여준다"(큐 슬롯 게시 등) → `release` 쓰기 + `acquire` 읽기
+- 슬롯 소유권을 원자적으로 교환(RMW) → `acq_rel`
+
+뒤쪽의 [메모리 오더링 참조](#메모리-오더링-참조) 표는 "각 위치에서 어떤 등급을 골랐는지, 왜 충분한지"의 목록입니다. 마지막으로 **CAS**(`compare_exchange`)는 "값이 예상과 같으면 바꾸고, 아니면 실패 보고"하는 원자 조건부 교환으로, 재시도 루프와 함께 쓰면 "경쟁자가 여러 있어도 딱 한 명만 이긴다" 로직이 됩니다.
 
 ---
 
@@ -210,27 +244,36 @@ struct alignas(kCacheLine) AlignedAtomic {
 
 **워커 루프:**
 
-```
-┌─────────────────────────────────────────────┐
-│ while(running_ || draining_)                 │
-│   idleStartTime = now()                      │
-│   actorRuntime = dispatcher->acquire(id)    │  ← 스핀 → 세마포어 / 스틸
-│   idleEndTime = now()                        │
-│                                              │
-│   if(!actorRuntime):                         │
-│     drainPendedActor()                       │  ← 폴백 큐 재시도
-│     if draining && pendingWork==0: break     │
-│     continue                                 │
-│                                              │
-│   busyStartTime = now()                      │
-│   processed = actorRuntime->run(maxBatch)    │  ← 메시지 배치 처리;
-│   busyEndTime = now()                        │    run() 내부 finalize()가
-│   recordMetrics(...)                         │    토큰 정산/회계까지 전담
-└─────────────────────────────────────────────┘
+```cpp
+void Worker::runLoop() {
+    // running_이 꺼져도 드레인 중이면 남은 작업을 마저 처리한다
+    while(running_.load(std::memory_order_relaxed) || workDispatcher_->isDraining()) {
+        auto idleStartTime = Time::now();
+        ActorRuntime* actorRuntime = workDispatcher_->acquire(id_);   // 스핀 → 세마포어 / 스틸
+        auto idleEndTime = Time::now();
+
+        if(!actorRuntime) {
+            workDispatcher_->drainPendedActor();                      // 폴백 큐 재시도
+            if(workDispatcher_->isDraining() && (workDispatcher_->pendingWork() == 0))
+                break;                                                // 남은 일 없음 → 종료
+            if(!running_.load(std::memory_order_relaxed))
+                break;
+            continue;
+        }
+
+        auto busyStartTime = Time::now();
+        int processed = actorRuntime->run(maxBatch_);                 // 메시지 배치 처리
+        auto busyEndTime = Time::now();                               // (run() 내부 finalize()가 토큰 정산/회계까지 전담)
+
+        uint64_t gapIdleNs = Time::toNs(idleEndTime - idleStartTime);
+        uint64_t gapBusyNs = Time::toNs(busyEndTime - busyStartTime);
+        V2_METRICS()->recordBatch(id_, processed, gapBusyNs, gapIdleNs);  // 유휴/활성 시간 기록
+    }
+}
 ```
 
 핵심 특성:
-- 워커는 유휴 시 `std::counting_semaphore`에서 블로킹되지만, 시스템 콜 없이 짧은 간극을 흡수하는 유계 스핀 윈도우(`parkSpinNs`, 기본 3μs) **이후에만** 차단됨 (스핀-던-파크, [Scheduling §7](scheduling.md))
+- 워커는 유휴 시 `std::counting_semaphore`에서 블로킹되지만, 시스템 콜 없이 짧은 간극을 흡수하는 유계 스핀 윈도우(`parkSpinNs`, 기본 3μs) **이후에만** 차단됨 (스핀-던-파크, [작업 분배 §7](work_dispatch.md))
 - 배치 처리(`maxBatch=32`)로 디스패치 오버헤드를 경감
 - 협력 스케줄링 — 액터가 배치 후 양보
 - 메트릭이 워커별 유휴/활성 시간을 추적
@@ -404,7 +447,7 @@ Worker 2: pop(토큰) → run() → handle(msg1) → handle(msg2)
 ### In-Flight 슬롯 (Deduplication Gate)
 
 **파일:** `src/core/actor_system/runtime/dispatcher/work_dispatcher.hpp` (`InFlightSlot`, `kMaxActors=1024`)
-**상세 설계:** [Scheduling](scheduling.md) §4~6
+**상세 설계:** [작업 분배](work_dispatch.md) §4~6
 
 액터별 "실행 토큰이 살아있음" 플래그. 캐시라인 정렬된 슬롯 배열에 담기며 **모든 연산이 `exchange`(RMW, acq_rel)**입니다.
 

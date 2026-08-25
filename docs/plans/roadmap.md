@@ -271,7 +271,7 @@ Lookup 전용으로 축소, enableActor/disableActor는 IActorRuntime으로 이�
 ## superseded sketch (참고용)
 
 > 아래 섹션은 4-5 최초 설계 스케치입니다. 현재 코드와 다를 수 있으므로 참고용으로만 보관합니다.
-> 현행 설계는 [Scheduling](concepts/scheduling.md) 문서를 따릅니다.
+> 현행 설계는 [작업 분배 (Work Dispatch)](../architecture/concepts/work_dispatch.md) 문서를 따릅니다.
 
 <details>
 <summary>4-5 최초 스케치 펼치기</summary>

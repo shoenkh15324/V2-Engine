@@ -208,7 +208,7 @@ void handle(const Message& msg) override {
 
 - `sizeof(T) ≤ 64` AND `alignof(T) ≤ alignof(max_align_t)` → **인라인** 저장 (힙 제로)
 - 그 외 → `defaultMemoryPool()`(또는 주입된 `IMemoryAllocator*`) 경유 할당자 할당
-- 11개 카테고리에 걸친 39개 `MessageId` 값 (시그널, 생명주기, 틱, 명령, IPC, 모니터, D-Bus, 네트워크, Wi-Fi, PMU 데이터, 시스템 데이터)
+- 11개 카테고리에 걸친 40개 `MessageId` 값 (시그널, 생명주기, 틱, 명령, IPC, 모니터, D-Bus, 네트워크, Wi-Fi, PMU 데이터, 시스템 데이터)
 
 ### 메모리 모델
 

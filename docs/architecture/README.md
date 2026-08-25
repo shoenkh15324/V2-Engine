@@ -82,7 +82,7 @@ V² Engine은 리눅스에서 장시간 실행되는 시스템 데몬을 위해 
 
 ## 계층 아키텍처
 
-### 코어 계층 (`src/core/`
+### 코어 계층 (`src/core/`)
 
 엔진의 독립적인 핵심. **외부 의존성 제로**의 자체 완결적 C++20 서브프로젝트 — `Threads::Threads`만 링크합니다.
 
@@ -99,7 +99,7 @@ V² Engine은 리눅스에서 장시간 실행되는 시스템 데몬을 위해 
 - `common/` — 컨테이너, 메모리, 타이머, 로깅
 - `perf/metrics/` — 성능 메트릭
 
-→ [코어 계층 상세](layers/core.md) 참고
+→ [코어 계층 상세](layers/core/README.md) 참고
 
 ---
 
@@ -195,7 +195,7 @@ Message (72 bytes) {
 - `sizeof(T) ≤ 64` 및 적절한 정렬 → **인라인** (힙 제로)
 - 그 외 → `MemoryPool` 할당
 
-11개 카테고리에 걸친 39개 메시지 타입 (시그널, 생명주기, 틱, 명령, IPC, 모니터, D-Bus, 네트워크, Wi-Fi, PMU 데이터, 시스템 데이터).
+11개 카테고리에 걸친 40개 메시지 타입 (시그널, 생명주기, 틱, 명령, IPC, 모니터, D-Bus, 네트워크, Wi-Fi, PMU 데이터, 시스템 데이터).
 
 → [메시지 시스템](concepts/messaging.md) 참고
 
@@ -247,7 +247,7 @@ Central Slab (mutex-guarded, per size-class)
 세마포어 → 자체 큐 팝 → 비어있으면 스틸 → run(batch) → 비어있지 않으면 재디스패치
 ```
 
-→ [스케줄링](concepts/scheduling.md) 참고
+→ [작업 분배](concepts/work_dispatch.md) 참고
 
 ---
 
@@ -327,7 +327,7 @@ sequenceDiagram
 - 협력 스케줄링 — 액터가 배치 후 양보
 - 모든 스레드 간 연산에 락프리 큐 사용 — **핫 패스에 뮤텍스 경쟁 없음**
 
-→ [스케줄링](concepts/scheduling.md) 참고
+→ [작업 분배](concepts/work_dispatch.md) 참고
 
 ---
 

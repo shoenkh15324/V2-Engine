@@ -1,4 +1,4 @@
-# Scheduling & Work Distribution
+# 작업 분배 (Work Dispatch)
 
 V² Engine이 어떻게 액터에게 실행 기회를 분배하는지, 그리고 그 과정에서
 어떤 성능 문제를 만났고 어떻게 해결했는지를 처음 읽는 사람도 따라올 수 있게 정리한 문서.
