@@ -1,7 +1,6 @@
 # 작업 분배 (Work Dispatch)
 
-V² Engine이 어떻게 액터에게 실행 기회를 분배하는지, 그리고 그 과정에서
-어떤 성능 문제를 만났고 어떻게 해결했는지를 처음 읽는 사람도 따라올 수 있게 정리한 문서.
+V² Engine이 어떻게 액터에게 실행 기회를 분배하는지, 그리고 그 과정에서 어떤 성능 문제를 만났고 어떻게 해결했는지를 처음 읽는 사람도 따라올 수 있게 정리한 문서.
 
 ---
 
@@ -184,9 +183,7 @@ sequenceDiagram
 
 ### 왜 fence 없이 가능한가 (깊이 알고 싶은 사람용)
 
-슬롯 연산이 전부 `exchange`(read-modify-write, acq_rel)이기 때문입니다. 같은 원자 변수에 대한 RMW들은
-전역적으로 순서가 정해지고, 그 수정 순서가 곧 인과 순서(happens-before 체인)가 됩니다.
-그래서 옛 설계(`scheduled_` flag + seq_cst fence 4회/메시지)와 같은 보장을 훨씬 싼 가격에 얻습니다.
+슬롯 연산이 전부 `exchange`(read-modify-write, acq_rel)이기 때문입니다. 같은 원자 변수에 대한 RMW들은 전역적으로 순서가 정해지고, 그 수정 순서가 곧 인과 순서(happens-before 체인)가 됩니다. 그래서 옛 설계(`scheduled_` flag + seq_cst fence 4회/메시지)와 같은 보장을 훨씬 싼 가격에 얻습니다.
 **주의: 슬롯에 plain `store()`를 쓰면 RMW 체인이 끊겨 유실 창이 생깁니다. exchange만 사용할 것.**
 
 ---
@@ -203,8 +200,7 @@ sequenceDiagram
 OS 웨이크 1회       ~7μs     (futex sleep/wake, 커널 스케줄링)  ← 70배 이격
 ```
 
-소비자가 생산 속도를 앞서면(트리클 레짐) 메일박스가 항상 얕아져 배치가 1~2개로 붕괴하고,
-토큰이 매번 죽고 태어나면서 **작업 시간보다 sleep/wake 비용이 더 커집니다.**
+소비자가 생산 속도를 앞서면(트리클 레짐) 메일박스가 항상 얕아져 배치가 1~2개로 붕괴하고, 토큰이 매번 죽고 태어나면서 **작업 시간보다 sleep/wake 비용이 더 커집니다.**
 
 - 실측 예 (w=4, a=16): 평균 배치 18.5개 → 1.41개, 워커 유휴율 0.4% → **94%.**
 - 사이클 8.6μs 중 7.4μs가 sleep/wake 비용.
@@ -219,11 +215,9 @@ futex 자체는 잘못이 아닙니다 — 진짜 오랫동안 놀 때는 잠들
 | **A** | `acquire()` — 세마포어 대기 직전 | 새로 발행된 토큰을 syscall 없이 즉시 포획 | `parkSpinNs` (기본 3μs) |
 | **B** | `finalize()` 초입 — 슬롯 반납 **전** | 빈 메일박스에 다음 메시지 도착을 짧게 대기 → 기존 토큰이 그대로 재사용 | `tokenGraceNs` (기본 5μs) |
 
-Site B가 특히 깔끔한 이유: **releaseInFlight 이전에** 기다리므로 lost-wakeup 프로토콜과 충돌할 여지가
-원천적으로 없습니다. 백로그가 이미 있으면 즉시 탈출하므로 바쁜 레짐에서 비용 0.
+Site B가 특히 깔끔한 이유: **releaseInFlight 이전에** 기다리므로 lost-wakeup 프로토콜과 충돌할 여지가 원천적으로 없습니다. 백로그가 이미 있으면 즉시 탈출하므로 바쁜 레짐에서 비용 0.
 
-두 스핀 모두 조기 탈출 조건(`running_`/`stopped_`/`draining_`)을 가져 종료 경로를 막지 않습니다.
-스핀 프리미티브는 포터블(`cpuRelax`: x86 pause / ARM yield / fallback fence).
+두 스핀 모두 조기 탈출 조건(`running_`/`stopped_`/`draining_`)을 가져 종료 경로를 막지 않습니다. 스핀 프리미티브는 포터블(`cpuRelax`: x86 pause / ARM yield / fallback fence).
 
 ### 7.3 튜닝
 
@@ -242,8 +236,7 @@ json 설정 키: `park_spin_ns`, `token_grace_ns` (`config/v2_main.json`).
 토큰 소멸 시   −1   (finalize의 retirePendingWork)
 ```
 
-**불변식**: "+1 = 토큰의 워커 큐 진입", "−1 = finalize의 은퇴". 이 짝이 어긋나면
-드레인이 영원히 끝나지 않거나 조기 종료됩니다. 회귀 테스트: `FinalizeRetiresExactlyOnce`.
+**불변식**: "+1 = 토큰의 워커 큐 진입", "−1 = finalize의 은퇴". 이 짝이 어긋나면 드레인이 영원히 끝나지 않거나 조기 종료됩니다. 회귀 테스트: `FinalizeRetiresExactlyOnce`.
 
 ---
 

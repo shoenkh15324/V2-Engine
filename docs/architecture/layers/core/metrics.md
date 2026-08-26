@@ -1,8 +1,7 @@
 # 성능 메트릭 (`src/core/perf/metrics/`)
 
 엔진 내부에서 무슨 일이 벌어지는지 **숫자로** 보여주는 메트릭 시스템.
-카운터가 어떻게 설계됐고, 누가 언제 기록하고, 어떻게 읽는지 처음 읽는
-사람도 따라올 수 있게 정리한 문서.
+카운터가 어떻게 설계됐고, 누가 언제 기록하고, 어떻게 읽는지 처음 읽는 사람도 따라올 수 있게 정리한 문서.
 
 ---
 
@@ -24,16 +23,12 @@
 
 ## 개요 — 왜 메트릭인가
 
-> 📌 이 철학이 가장 잘 드러난 실화가
-> [작업 분배 문서 §9](../../concepts/work_dispatch.md)의 "스케일링 붕괴 진단기"입니다.
+> 📌 이 철학이 가장 잘 드러난 실화가 [작업 분배 문서](../../concepts/work_dispatch.md)의 "스케일링 붕괴 진단기"입니다.
 > "추측으로 고치지 말고, 카운터를 달아 원인을 숫자로 고정한 뒤 고친다."
 
-고성능 동시성 코드의 버그는 겉으로 멀쩡해 보이지만 숫자로는 명확합니다.
-"워커를 늘렸는데 왜 느려지지?" 같은 질문에 답하려면 평소부터
-유휴 시간, 배치 크기, 중복 거절 횟수 같은 지표가 기록되어 있어야 합니다.
+고성능 동시성 코드의 버그는 겉으로 멀쩡해 보이지만 숫자로는 명확합니다. "워커를 늘렸는데 왜 느려지지?" 같은 질문에 답하려면 평소부터 유휴 시간, 배치 크기, 중복 거절 횟수 같은 지표가 기록되어 있어야 합니다.
 
-V² Engine의 메트릭 시스템은 그래서 **운영 경로에 항상 붙어 있지만**
-(비활성화 가능), 활성화돼도 핫 패스를 거의 느리게 만들지 않도록 설계되었습니다.
+V² Engine의 메트릭 시스템은 그래서 **운영 경로에 항상 붙어 있지만**(비활성화 가능), 활성화돼도 핫 패스를 거의 느리게 만들지 않도록 설계되었습니다.
 
 ---
 
@@ -67,7 +62,7 @@ V² Engine의 메트릭 시스템은 그래서 **운영 경로에 항상 붙어 
 | `messages` | 처리한 총 메시지 수 | `Worker::runLoop` |
 
 busy/idle 비율은 건강 진단의 핵심입니다. idle이 비정상적으로 크면
-"wakeup 비용" 문제([work_dispatch.md §7](../../concepts/work_dispatch.md))를 의심합니다.
+"wakeup 비용" 문제([work_dispatch.md](../../concepts/work_dispatch.md))를 의심합니다.
 
 ### DispatcherMetrics — 디스패처 전역
 
@@ -79,9 +74,7 @@ busy/idle 비율은 건강 진단의 핵심입니다. idle이 비정상적으로
 | `stealCount` / `stealFailCount` | 작업 스틸링 성공/실패 수 | `WorkDispatcher::trySteal` |
 | `readyQueuePeak` | 준비 큐 최대 깊이 | `recordDispatch` |
 
-`deduplicated`가 크다는 건 같은 액터로 트래픽 몰림이 심하다는 뜻 —
-토큰 dedup 게이트([work_dispatch.md §5](../../concepts/work_dispatch.md))가
-그만큼 일하고 있다는 자연 스케일의 신호입니다.
+`deduplicated`가 크다는 건 같은 액터로 트래픽 몰림이 심하다는 뜻 — 토큰 dedup 게이트([work_dispatch.md](../../concepts/work_dispatch.md))가 그만큼 일하고 있다는 자연 스케일의 신호입니다.
 
 ---
 
@@ -97,11 +90,7 @@ struct ActorMetrics{
 };
 ```
 
-카운터 하나가 수정될 때마다 그 변수가 사는 64바이트(캐시 라인) 통째로
-해당 코어의 L1 캐시에 독점됩니다. 카운터들을 빈틈없이 붙여두면 서로 다른
-스레드가 *다른* 카운터를 건드려도 같은 캐시 라인을 두고 싸우는
-**거짓 공유(false sharing)**가 생깁니다. 한 줄당 캐시 라인을 독점시켜 원천 차단하는 것입니다.
-(`kCacheLine`의 값 결정은 [동시성 문서](../../concepts/concurrency.md) 참고.)
+카운터 하나가 수정될 때마다 그 변수가 사는 64바이트(캐시 라인) 통째로 해당 코어의 L1 캐시에 독점됩니다. 카운터들을 빈틈없이 붙여두면 서로 다른 스레드가 *다른* 카운터를 건드려도 같은 캐시 라인을 두고 싸우는 **거짓 공유(false sharing)**가 생깁니다. 한 줄당 캐시 라인을 독점시켜 원천 차단하는 것입니다. (`kCacheLine`의 값 결정은 [동시성 문서](../../concepts/concurrency.md) 참고.)
 
 ---
 
@@ -125,8 +114,7 @@ struct ActorMetrics{
 미매칭 메시지      Actor::handleUnknown ────► recordDeadLetter(id)
 ```
 
-기록은 전부 **fire-and-forget**입니다. fetch_add 한 방이면 끝나고, 아무도
-이 값을 기다리지 않습니다. 조회는 별도의 `snapshot()` 호출로만 이뤄집니다.
+기록은 전부 **fire-and-forget**입니다. fetch_add 한 방이면 끝나고, 아무도 이 값을 기다리지 않습니다. 조회는 별도의 `snapshot()` 호출로만 이뤄집니다.
 
 ---
 
@@ -154,9 +142,7 @@ public:
 };
 ```
 
-`Snapshot`은 원자 변수를 relaxed로 읽어 평범한 구조체에 담아 돌려줍니다.
-로그 출력, TUI, 벤치마크 드라이버가 모두 이 스냅샷만 소비합니다 —
-원자 변수가 밖으로 새어나가지 않습니다.
+`Snapshot`은 원자 변수를 relaxed로 읽어 평범한 구조체에 담아 돌려줍니다. 로그 출력, TUI, 벤치마크 드라이버가 모두 이 스냅샷만 소비합니다 — 원자 변수가 밖으로 새어나가지 않습니다.
 
 ---
 
@@ -170,20 +156,18 @@ void setActiveMetrics(Metrics* m);     // 조립 루트가 기동 초기에 1회
 #define V2_METRICS() (&activeMetrics())
 ```
 
-호출부는 어디서든 `V2_METRICS()->recordEnqueue(...)` 한 줄입니다.
-설정은 `main_app.cpp:81-82`에서:
+호출부는 어디서든 `V2_METRICS()->recordEnqueue(...)` 한 줄입니다. 설정은 `main_app.cpp:81-82`에서:
 
 ```cpp
 setActiveMetrics(&metrics_);
 metrics_.setEnabled(cfg_.enableMetrics);   // config/v2_main.json의 enable_metrics
 ```
 
-아무도 설정하지 않으면 fallback 인스턴스가 받아주므로, 코어 단독 유닛 테스트
-(v2_core_smoke 등)에서도 메트릭 코드가 안전하게 동작합니다.
+아무도 설정하지 않으면 fallback 인스턴스가 받아주므로, 코어 단독 유닛 테스트 (v2_core_smoke 등)에서도 메트릭 코드가 안전하게 동작합니다.
 
 ---
 
-## 저오버헤드 설계
+## Low 오버헤드 설계
 
 메트릭이 "공짜"는 아니지만, 다음 장치들로 비용을 최소화합니다:
 

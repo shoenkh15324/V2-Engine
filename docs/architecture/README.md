@@ -179,17 +179,21 @@ OS별 또는 서드파티 구현으로 코어 포트를 구현하는 어댑터�
 메시지는 타입 소거·SBO 최적화·이동 전용 값입니다:
 
 ```
-Message (72 bytes) {
-    MessageId          id_;        // type identifier
-    StorageMode        mode_;      // Inline | Pool | Empty
-    const MessageOps*  ops_;       // vtable: destroy/move/clone
-    IMemoryAllocator*  allocator_;
-    union {                        // 64-byte inline buffer
+Message (96 bytes @ Linux x86-64/aarch64, alignof = 16) {
+    MessageId          id_;        // offset  0 · 4 B  — type identifier
+    StorageMode        mode_;      // offset  4 · 1 B  — Empty | Inline | Pool
+    /* padding 3 B */              // offset 5..8      — ops_ 포인터 정렬
+    const MessageOps*  ops_;       // offset  8 · 8 B  — vtable: destroy/move/clone
+    IMemoryAllocator*  allocator_; // offset 16 · 8 B  — pool allocator
+    /* padding 8 B */              // offset 24..32    — storage_ 16바이트 정렬
+    union {                        // offset 32 · 64 B — inline buffer
         std::byte      inline_[64];
         void*          ptr_;
-    };
+    } storage_;
 }
 ```
+
+> 필드 합계는 85B지만 패딩 11B(포인터 정렬 3B + `max_align_t` 16바이트 정렬용 8B)가 더해져 **96B**입니다. 상세 계산은 [메시지 시스템](concepts/messaging.md) 참고.
 
 **저장 전략:**
 - `sizeof(T) ≤ 64` 및 적절한 정렬 → **인라인** (힙 제로)

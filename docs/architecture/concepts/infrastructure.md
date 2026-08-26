@@ -1,7 +1,6 @@
 # 인프라 계층 (포트와 어댑터)
 
-epoll·소켓·timerfd 같은 운영체제 기능을 액터 코어에 연결하는 **인프라 계층**(`src/infra/`)을
-처음 읽는 사람도 따라올 수 있게 정리한 문서.
+epoll·소켓·timerfd 같은 운영체제 기능을 액터 코어에 연결하는 **인프라 계층**(`src/infra/`)을 처음 읽는 사람도 따라올 수 있게 정리한 문서.
 
 ---
 
@@ -48,18 +47,16 @@ V² Engine은 **육각형 아키텍처**(헥사고널, 또는 포트-앤드-어�
 인프라: "그 콘센트에 epoll 플러그를 꽂겠습니다."
 ```
 
-코어(`src/core/`)는 `epoll_wait`라는 단어조차 모릅니다. 코어는 "이벤트 루프다운 행동"
-(start/run/stop/post/subscribe)을 인터페이스로 선언할 뿐입니다. 리눅스 전용 지식은
-전부 인프라에 갇혀 있고, 인프라가 코어의 인터페이스를 **구현**합니다. 화살표가 안쪽을 향하므로
-이걸 **의존성 역전(dependency inversion)**이라 부릅니다.
+코어(`src/core/`)는 `epoll_wait`라는 단어조차 모릅니다. 코어는 "이벤트 루프다운 행동"(start/run/stop/post/subscribe)을 인터페이스로 선언할 뿐입니다.
+리눅스 전용 지식은 전부 인프라에 갇혀 있고, 인프라가 코어의 인터페이스를 **구현**합니다. 화살표가 안쪽을 향하므로 이걸 **의존성 역전(dependency inversion)**이라 부릅니다.
 
 ---
 
 ## 왜 분리하는가
 
 1. **테스트**: OS 없이도 코어 로직을 검증할 수 있습니다. 느린 실제 epoll 대신 가짜 이벤트 루프(Mock)를 꽂으면 밀리초 단위로 시간을 조작하는 테스트가 가능합니다.
-2. **이식성**: 라즈베리파이(aarch64)에서는 진짜 PMU 드라이버, x86 개발 머신에서는 Mock을 꽂는 식으로 플랫폼별 차이를 한 곳에 모읍니다.
-3. **명확한 경계**: "시스템 콜을 부를 수 있는 곳은 오직 인프라뿐"이라는 규칙 하나로 코어 전체가 순수 C++20(+스레드 라이브러리)으로 유지됩니다.
+2. **이식성**: 라즈베리파이(aarch64) 같은 진짜 PMU 드라이버, x86 개발 머신에서는 Mock을 꽂는 식으로 플랫폼별 차이를 한 곳에 모읍니다.
+3. **명확한 경계**: "시스템 콜을 부를 수 있는 곳은 오직 인프라뿐"이라는 규칙 하나로 코어 전체가 순수 C++20으로 유지됩니다.
 
 ---
 
@@ -87,8 +84,7 @@ public:
 };
 ```
 
-서비스 계층의 액터들은 이 인터페이스 포인터만 받아서 사용합니다. "내가 받은 게 epoll인지,
-테스트용 가짜인지" 전혀 모릅니다.
+서비스 계층의 액터들은 이 인터페이스 포인터만 받아서 사용합니다. "내가 받은 게 epoll인지, 테스트용 가짜인지" 전혀 모릅니다.
 
 ---
 
@@ -110,8 +106,7 @@ public:
 | UI | `v2_tui` 직접 사용 (FTXUI) | 터미널 렌더링 |
 | 테스트 지원 | `MockAllocator`, `MockTimeSource` 등 | Mock 교체용 어댑터 |
 
-> 참고: `infra/ui/ftxui_renderer.*`와 `infra/memory/memory_pool_allocator.*`는 현재
-> 빈 플레이스홀더입니다. UI는 당분간 `v2_tui`가 FTXUI를 직접 사용합니다.
+> 참고: `infra/ui/ftxui_renderer.*`와 `infra/memory/memory_pool_allocator.*`는 현재 빈 플레이스홀더입니다. UI는 당분간 `v2_tui`가 FTXUI를 직접 사용합니다.
 
 ---
 
@@ -119,8 +114,7 @@ public:
 
 **파일:** `src/infra/platform/linux/event_loop_epoll.hpp`, `.cpp`
 
-엔진의 모든 외부 이벤트(소켓 접속, 데이터 도착, 시그널, 타이머 만료)는 이 루프 하나로
-흘러들어옵니다. **단일 스레드**(스레드 이름 `v2-main`)에서 돕니다.
+엔진의 모든 외부 이벤트(소켓 접속, 데이터 도착, 시그널, 타이머 만료)는 이 루프 하나로 흘러들어옵니다. **단일 스레드**(스레드 이름 `v2-main`)에서 돕니다.
 
 ### 루프 구조
 
@@ -146,9 +140,7 @@ void EventLoopEpoll::run(){
 
 ### 다른 스레드 깨우기 (wakeup) — eventfd
 
-`epoll_wait`로 대기 중일 때 누군가 `post()`를 하면 어떻게 될까요? 여기서
-**eventfd**가 씁니다. eventfd는 "wakeup 전용 미니 파이프" 같은 fd로, 이 루프에
-미리 등록되어 있습니다:
+`epoll_wait`로 대기 중일 때 누군가 `post()`를 하면 어떻게 될까요? 여기서 **eventfd**가 씁니다. eventfd는 "wakeup 전용 미니 파이프" 같은 fd로, 이 루프에 미리 등록되어 있습니다:
 
 ```cpp
 void EventLoopEpoll::post(std::function<void()> op){
@@ -160,9 +152,8 @@ void EventLoopEpoll::post(std::function<void()> op){
 }
 ```
 
-작업은 락프리 MPSC 큐(`pendingOps_`, 용량 128)에 쌓고, eventfd 쓰기 한 번으로
-잠자던 루프를 깨웁니다. `stop()`도 같은 원리입니다 — `running_=false` 후 eventfd에
-써서 루프가 즉시 빠져나오게 합니다.
+작업은 락프리 MPSC 큐(`pendingOps_`)에 쌓고, eventfd 쓰기 한 번으로 잠자던 루프를 깨웁니다.
+`stop()`도 같은 원리입니다 — `running_=false` 후 eventfd에 써서 루프가 즉시 빠져나오게 합니다.
 
 ### 스레드 어피니티 감지 (thread affinity)
 
@@ -178,8 +169,7 @@ int EventLoopEpoll::subscribe(WatchedFd fd, Handler handler){
 }
 ```
 
-`epoll_ctl`은 같은 fd를 동시에 건드리면 위험하니, 워커 스레드에서 불렸다면
-작업을 큐에 넣어 루프 스레드에서 실행시킵니다. 호출자는 신경 쓸 필요가 없습니다.
+`epoll_ctl`은 같은 fd를 동시에 건드리면 위험하니, 워커 스레드에서 불렸다면 작업을 큐에 넣어 루프 스레드에서 실행시킵니다. 호출자는 신경 쓸 필요가 없습니다.
 
 ---
 
@@ -194,8 +184,7 @@ int EventLoopEpoll::subscribe(WatchedFd fd, Handler handler){
 | `Timer` (std 폴백) | 코어 | 자기 스레드 + 세마포어로 대기 | 어디서든 동작 (macOS/Windows 포함) |
 | `LinuxTimer` (기본) | 인프라 | **timerfd**를 이벤트 루프에 등록 | 전용 스레드 불필요, 루프와 자연 통합 |
 
-timerfd는 "타이머가 만료되면 읽을 수 있게 되는 특별한 파일"입니다. 따라서
-`LinuxTimer`는 만료 시점을 별도 스레드 없이 **epoll 이벤트**로 받습니다.
+timerfd는 "타이머가 만료되면 읽을 수 있게 되는 특별한 파일"입니다. 따라서 `LinuxTimer`는 만료 시점을 별도 스레드 없이 **epoll 이벤트**로 받습니다.
 
 공통 로직(`TimerBase`)은 만료 예정 타이머들을 **최소힙**으로 관리합니다:
 
@@ -219,8 +208,7 @@ struct TimerNode {
 **파일:** `src/infra/platform/linux/signal_handler.hpp`, `.cpp`
 
 Ctrl+C(SIGINT)나 종료 요청(SIGTERM) 같은 POSIX 시그널은 일반 코드처럼 다루면 안 됩니다.
-시그널 핸들러는 **언제든 스레드를 가로채서 실행**되므로, 거기서 할 수 있는 일이
-극도로 제한됩니다(로그 출력조차 위험).
+시그널 핸들러는 **언제든 스레드를 가로채서 실행**되므로, 거기서 할 수 있는 일이 극도로 제한됩니다(로그 출력조차 위험).
 
 해법은 유명한 **self-pipe 트릭**입니다:
 
@@ -233,17 +221,14 @@ Ctrl+C(SIGINT)나 종료 요청(SIGTERM) 같은 POSIX 시그널은 일반 코드
    dispatch(sig)로 일반 스레드 문맥에서 콜백들을 실행한다
 ```
 
-즉 위험한 시그널 문맥에서는 "우편함에 편지 투척"만 하고, 실제 처리는 평화로운
-이벤트 루프 스레드에서 합니다. `main_app.cpp`에서는 이렇게 연결됩니다:
+즉 위험한 시그널 문맥에서는 "우편함에 편지 투척"만 하고, 실제 처리는 이벤트 루프 스레드에서 합니다. `main_app.cpp`에서는 이렇게 연결됩니다:
 
 ```cpp
 SystemManagerActor::onSignal(SIGINT,  [this](int){ requestStop(); });
 SystemManagerActor::onSignal(SIGTERM, [this](int){ requestStop(); });
 ```
 
-세부 사항: 콜백은 시그널 번호별 배열(`std::array<std::vector<Callback>, 65>`)에 저장되고,
-`SIGKILL`/`SIGSTOP`은 커널이 무시를 허용하지 않으므로 설치를 거부합니다. write 실패 시
-errno를 보존해 원래 문맥을 오염시키지 않습니다.
+세부 사항: 콜백은 시그널 번호별 배열(`std::array<std::vector<Callback>, 65>`)에 저장되고, `SIGKILL`/`SIGSTOP`은 커널이 무시를 허용하지 않으므로 설치를 거부합니다. write 실패 시 errno를 보존해 원래 문맥을 오염시키지 않습니다.
 
 ---
 
@@ -266,9 +251,7 @@ v2_tui ──(connect monitor.sock)──► UdsServer(MonitorBridgeActor)
                                    액터 메시지로 변환
 ```
 
-두 클래스 모두 복사/이동 정책이 명확하고(`non-copyable, movable`), RAII로 fd를
-닫습니다. 소켓 데이터가 도착하면 epoll이 깨워주고, 서비스 액터가 그 내용을
-[Message](messaging.md)로 포장해 액터 세계로 가져옵니다.
+두 클래스 모두 복사/이동 정책이 명확하고(`non-copyable, movable`), RAII로 fd를 닫습니다. 소켓 데이터가 도착하면 epoll이 깨워주고, 서비스 액터가 그 내용을 [Message](messaging.md)로 포장해 액터 세계로 가져옵니다.
 
 ---
 
@@ -294,7 +277,6 @@ if(j.contains("worker_count")) cfg.workerCount = j["worker_count"];
 ## HAL — 하드웨어 추상화
 
 HAL(Hardware Abstraction Layer)은 센서·하드웨어 데이터를 읽는 어댑터 묶음입니다.
-목표 프로젝트가 라즈베리파이 계열이므로 실구현과 Mock이 나란히 있습니다:
 
 ### PMU (전력관리 칩)
 
@@ -306,15 +288,12 @@ class IPmu{                       // 포트
 class PmuRsp5 : public IPmu {};   // 어댑터 — Raspberry Pi 5
 ```
 
-`PmuRsp5`는 라즈베리파이5의 `vcgencmd` 유틸리티를 실행해 클럭/메모리/스로틀링/
-온도/전압/전류를 파싱합니다. 개발 PC(x86)에서는 `PmuMock`이 바인딩되어
-하드웨어 없이도 전체 파이프라인이 동작합니다.
+`PmuRsp5`는 라즈베리파이5의 `vcgencmd` 유틸리티를 실행해 클럭/메모리/스로틀링/온도/전압/전류를 파싱합니다. 개발 PC(x86)에서는 `PmuMock`이 바인딩되어 하드웨어 없이도 전체 파이프라인이 동작합니다.
 
 ### Sys (시스템 자원)
 
 `SysLinux`는 procfs(`/proc`)를 읽어 CPU 사용률·메모리 등을 수집합니다.
-CPU 사용률은 1초 윈도우의 샘플 두 개(`std::deque<CpuSample>`)로 계산하는
-식입니다.
+CPU 사용률은 1초 윈도우의 샘플 두 개(`std::deque<CpuSample>`)로 계산하는 식입니다.
 
 ### I2C
 
@@ -332,8 +311,7 @@ CPU 사용률은 1초 윈도우의 샘플 두 개(`std::deque<CpuSample>`)로 �
 #endif
 ```
 
-서비스 액터(`DeviceManagerActor` 등)는 `IPmu*`만 받으므로, 어느 쪽이 꽂혔는지
-전혀 모른 채 동일하게 동작합니다. 이것이 포트/어댑터 분리의 실질적 이득입니다.
+서비스 액터(`DeviceManagerActor` 등)는 `IPmu*`만 받으므로, 어느 쪽이 꽂혔는지 전혀 모른 채 동일하게 동작합니다. 이것이 포트/어댑터 분리의 실질적 이득입니다.
 
 ---
 
@@ -356,8 +334,7 @@ MainApp::open()
 ```
 
 마지막 줄이 핵심입니다. **코어(ActorSystem)는 생성자로 인프라 객체를 받습니다.**
-코어 코드 어디에도 `new EventLoopEpoll` 같은 문장이 없습니다. 이 한 줄의 배선만
-바꾸면 테스트에서 가짜 루프/타이머로 전체 시스템을 구동할 수 있습니다.
+코어 코드 어디에도 `new EventLoopEpoll` 같은 문장이 없습니다. 이 한 줄의 배선만 바꾸면 테스트에서 가짜 루프/타이머로 전체 시스템을 구동할 수 있습니다.
 
 ---
 

@@ -46,7 +46,7 @@
 
 ## 요약 (세 문장)
 
-1. 액터들이 주고받는 모든 데이터는 72바이트짜리 **`Message` 상자 하나**로 포장됩니다 — 큐가 여러 타입을 담을 수 있도록 타입을 감추는(타입 소거) 기법입니다.
+1. 액터들이 주고받는 모든 데이터는 96바이트짜리 **`Message` 상자 하나**로 포장됩니다 — 큐가 여러 타입을 담을 수 있도록 타입을 감추는(타입 소거) 기법입니다.
 2. 64바이트 이하 payload는 상자 안에 직접 들어가 힙 할당이 없습니다(SBO) — 이것이 초당 수백만 메시지의 원천입니다.
 3. 메시지는 복사되지 않고 **이동**합니다; 개발자는 `handle(const T&)` 오버로드만 만들면 되고, 누락은 컴파일 에러로 잡아줍니다.
 
@@ -89,17 +89,21 @@ V² Engine은 액터 간 범용 통신 메커니즘으로 **타입 소거·SBO �
 ### 저장 레이아웃
 
 ```
-Message (72 bytes) {
-    MessageId          id_;        // 4 bytes  — type discriminator
-    StorageMode        mode_;      // 1 byte   — Empty | Inline | Pool
-    const MessageOps*  ops_;       // 8 bytes  — vtable pointer
-    IMemoryAllocator*  allocator_; // 8 bytes  — pool allocator (for Pool mode)
-    union {                        // 64 bytes — inline buffer or heap pointer
+Message (96 bytes @ Linux x86-64/aarch64, alignof = 16) {
+    MessageId          id_;        // offset  0 · 4 B  — type discriminator
+    StorageMode        mode_;      // offset  4 · 1 B  — Empty | Inline | Pool
+    /* padding 3 B */              // offset 5..8      — ops_ 포인터 정렬용
+    const MessageOps*  ops_;       // offset  8 · 8 B  — vtable pointer
+    IMemoryAllocator*  allocator_; // offset 16 · 8 B  — pool allocator (for Pool mode)
+    /* padding 8 B */              // offset 24..32    — storage_의 16바이트 정렬용
+    union {                        // offset 32 · 64 B — inline buffer or heap pointer
         alignas(max_align_t) std::byte inlineData[64];
         void* ptr;
     } storage_;
 }
 ```
+
+왜 필드 합계(85B)보다 클까? **패딩이 두 군데** 있기 때문입니다. `ops_` 앞 3바이트는 포인터 정렬용이고, `storage_` 앞 8바이트는 `alignas(std::max_align_t)`(리눅스 기준 16) 때문입니다. 인라인 버퍼에 어떤 타입이든 placement-new 하려면 최대 정렬 요건을 만족해야 하므로, 이것은 의도된 비용입니다. (참고: `max_align_t`가 8인 MSVC 등에서는 88바이트가 되지만, 이 프로젝트의 타깃은 리눅스입니다.)
 
 ### 저장 모드
 
@@ -211,7 +215,7 @@ static const MessageOps* opsFor() {
 
 ---
 
-## MessageId & 트레이트
+## MessageId & Traits
 
 **파일:** `src/core/actor_system/messages/message_traits.hpp`
 

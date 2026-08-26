@@ -1,8 +1,6 @@
 # 코어 계층 (`src/core/`)
 
-V² Engine의 심장부인 **코어 계층**의 전체 지도. 무엇이 어디 있고, 어떤 규칙으로
-지켜지고, 각 주제를 어느 문서에서 깊게 읽을 수 있는지 처음 오신 분도 한눈에
-따라올 수 있게 정리한 문서.
+V² Engine의 심장부인 **코어 계층**의 전체 지도. 무엇이 어디 있고, 어떤 규칙으로 지켜지고, 각 주제를 어느 문서에서 깊게 읽을 수 있는지 처음 오신 분도 한눈에 따라올 수 있게 정리한 문서.
 
 ---
 
@@ -21,18 +19,15 @@ V² Engine의 심장부인 **코어 계층**의 전체 지도. 무엇이 어디 
 ## 개요
 
 코어 계층은 **외부 의존성이 제로인 자체 완결형 C++20 서브프로젝트**입니다.
-액터 프레임워크, 락프리 큐, 메모리 풀, 스케줄러, 슈퍼바이저 같은 엔진의
-모든 핵심 메커니즘이 여기 살고 있습니다.
+액터 프레임워크, 락프리 큐, 메모리 풀, 스케줄러, 슈퍼바이저 같은 엔진의 모든 핵심 메커니즘이 여기 살고 있습니다.
 
-"자체 완결형"의 의미:
+**자체 완결형**의 의미:
 
 - `epoll`, 소켓, timerfd 같은 **시스템 콜이 전혀 없습니다**
 - nlohmann/json, FTXUI 같은 **서드파티 라이브러리도 없습니다**
 - 유일하게 링크하는 것은 C++ 표준 스레드 라이브러리(`Threads::Threads`)뿐입니다
 
-덕분에 코어는 macOS·Windows에서도 빌드되고, OS 없는 환경과 동일한 조건으로
-단위 테스트할 수 있습니다. OS 의존 기능은 전부 [인프라 계층](../../concepts/infrastructure.md)이
-대신하며, 그 연결 규약은 아래 [포트 정의](#포트-정의--외부-세계와의-약속) 절에서 다룹니다.
+덕분에 코어는 macOS·Windows에서도 빌드되고, OS 없는 환경과 동일한 조건으로 단위 테스트할 수 있습니다. OS 의존 기능은 전부 [인프라 계층](../../concepts/infrastructure.md)이 대신하며, 그 연결 규약은 아래 [포트 정의](#포트-정의--외부-세계와의-약속) 절에서 다룹니다.
 
 ---
 
@@ -90,7 +85,7 @@ src/core/
 | 주제 | 문서 | 다루는 내용 |
 |------|------|-------------|
 | 액터 모델 | [actor_model.md](../../concepts/actor_model.md) | Actor 생명주기, ActorSystem, 세대 기반 ActorHandle, 타입 안전 dispatch |
-| 메시지 시스템 | [messaging.md](../../concepts/messaging.md) | 72바이트 Message 레이아웃, SBO, 40개 메시지 카탈로그, 통신 패턴 |
+| 메시지 시스템 | [messaging.md](../../concepts/messaging.md) | 96바이트 Message 레이아웃, SBO, 40개 메시지 카탈로그, 통신 패턴 |
 | 스케줄링 | [work_dispatch.md](../../concepts/work_dispatch.md) | 실행 토큰, inFlight 슬롯, finalize 정산, 스핀-던-파크, 성능 케이스 스터디 |
 | 동시성 | [concurrency.md](../../concepts/concurrency.md) | MPSC/MPMC 큐, 작업 스틸링, 메모리 오더링 전략 |
 | 메모리 관리 | [memory.md](../../concepts/memory.md) | 3계층 풀 할당자, SizeClass, Slab |
@@ -143,8 +138,7 @@ target_link_libraries(v2_core PUBLIC Threads::Threads)
 
 ## 포트 정의 — 외부 세계와의 약속
 
-코어는 OS 기능이 필요할 때 **포트**(순수 가상 인터페이스)를 선언하고, 실제 구현은
-인프라 계층에 맡깁니다. 코어 안에 사는 포트 목록:
+코어는 OS 기능이 필요할 때 **포트**(순수 가상 인터페이스)를 선언하고, 실제 구현은 인프라 계층에 맡깁니다. 코어 안에 사는 포트 목록:
 
 | 포트 | 위치 | 역할 | 구현체 (인프라) |
 |------|------|------|------------------|
@@ -152,6 +146,4 @@ target_link_libraries(v2_core PUBLIC Threads::Threads)
 | `ITimer` | `common/timer/i_timer.hpp` | 타이머 등록·만료 알림 | `LinuxTimer` (timerfd) / `Timer` (std 폴백) |
 | `IMemoryAllocator` | `common/memory/i_memory_allocator.hpp` | 할당/해제·통계 | `MemoryPool` (내장) 또는 외부 교체 |
 
-`ActorSystemDeps` 구조체(`actor_system.hpp:37`)가 이런 의존성을 한 곳에 모아
-`createDefaultActorSystem()`으로 주입합니다 — 조립은 애플리케이션 계층의
-몫이라는 [육각형 아키텍처](../../concepts/infrastructure.md) 원칙입니다.
+`ActorSystemDeps` 구조체(`actor_system.hpp:37`)가 이런 의존성을 한 곳에 모아 `createDefaultActorSystem()`으로 주입합니다 — 조립은 애플리케이션 계층의 몫이라는 [육각형 아키텍처](../../concepts/infrastructure.md) 원칙입니다.

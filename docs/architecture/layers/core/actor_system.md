@@ -1,12 +1,8 @@
 # 액터 시스템 — 조립과 생명주기
 
-`ActorSystem`이 의존성들을 어떻게 조립하고, 시스템 전체를 어떤 순서로
-켜고 끄는지, 그리고 `ActorRuntime`이 어떻게 실패에 견고하게 메시지를
-처리하는지 처음 읽는 사람도 따라올 수 있게 정리한 문서.
+`ActorSystem`이 의존성들을 어떻게 조립하고, 시스템 전체를 어떤 순서로 켜고 끄는지, 그리고 `ActorRuntime`이 어떻게 실패에 견고하게 메시지를 처리하는지 처음 읽는 사람도 따라올 수 있게 정리한 문서.
 
-> 액터의 개념과 API는 [액터 모델](../../concepts/actor_model.md)을,
-> 실행 토큰·디스패처 내부는 [작업 분배](../../concepts/work_dispatch.md)을 먼저
-> 보면 이해가 빠릅니다.
+> 액터의 개념과 API는 [액터 모델](../../concepts/actor_model.md)을, 실행 토큰·디스패처 내부는 [작업 분배](../../concepts/work_dispatch.md)을 먼저 보면 이해가 빠릅니다.
 
 ---
 
@@ -35,10 +31,7 @@
 1. **조립체(composition)** — 슈퍼바이저, 디스패처, 스케줄러, 레지스트리, 데드 레터 큐, 워커들을 한데 묶고 서로를 연결합니다.
 2. **수명 관리자(lifecycle owner)** — 모든 하위 컴포넌트와 액터의 시작/종료 순서를 책임집니다.
 
-특별한 점은 **코어 안에서도 의존성 주입이 적용된다**는 것입니다.
-`ActorSystem`은 구체 클래스를 직접 만들지 않고, `ActorSystemDeps` 구조체로
-인터페이스 포인터들을 받습니다. 진짜 구현체를 만들어 꽂아주는 건 팩토리 함수
-`createDefaultActorSystem()`입니다.
+특별한 점은 **코어 안에서도 의존성 주입이 적용된다**는 것입니다. `ActorSystem`은 구체 클래스를 직접 만들지 않고, `ActorSystemDeps` 구조체로 인터페이스 포인터들을 받습니다. 진짜 구현체를 만들어 꽂아주는 건 팩토리 함수 `createDefaultActorSystem()`입니다.
 
 ---
 
@@ -88,12 +81,9 @@ int highWatermark = (config.dispatcherHighWatermark > 0)
     : (config.dispatcherQueueCapacity * 7 / 10);   // 기본값 = 용량의 70%
 ```
 
-설정에서 따로 주지 않으면 큐 용량의 70%를 홈 워커 포화 판단선으로 삼습니다
-([부하 인식 디스패치](../../concepts/concurrency.md)에서 쓰이는 값).
+설정에서 따로 주지 않으면 큐 용량의 70%를 홈 워커 포화 판단선으로 삼습니다 ([부하 인식 디스패치](../../concepts/concurrency.md)에서 쓰이는 값).
 
-`Worker` 스레드는 생성자에서 미리 만들어지지만(`workers_.reserve` 후 push),
-**`start()` 전까지는 대기 상태**입니다. 객체 생성과 스레드 기동이 분리되어 있어
-조립 단계에서는 아무것도 달리지 않습니다.
+`Worker` 스레드는 생성자에서 미리 만들어지지만(`workers_.reserve` 후 push), **`start()` 전까지는 대기 상태**입니다. 객체 생성과 스레드 기동이 분리되어 있어 조립 단계에서는 아무것도 달리지 않습니다.
 
 ---
 
@@ -115,13 +105,9 @@ void ActorSystem::attachActor(std::unique_ptr<Actor> actor,
 }
 ```
 
-여기서 `Mailbox`는 락프리 MPSC 큐(`LockFreeMpscQueue<Message>`)를 감싼
-얇은 래퍼일 뿐입니다 — push/pop/count/clear 전부 큐에 위임합니다.
+여기서 `Mailbox`는 락프리 MPSC 큐(`LockFreeMpscQueue<Message>`)를 감싼 얇은 래퍼일 뿐입니다 — push/pop/count/clear 전부 큐에 위임합니다.
 
-`ActorRuntime` 생성자가 액터가 시스템과 통신하는 데 필요한 **7개 의존성**
-(디스패처, 스케줄러, 레지스트리, 이벤트 루프, 슈퍼바이저)을 포인터로 받아
-`actor_->setRuntime(this)`로 액터와 서로 연결합니다. 액터의 `sendMsg()`가
-동작할 수 있는 이유가 이 연결입니다.
+`ActorRuntime` 생성자가 액터가 시스템과 통신하는 데 필요한 **7개 의존성** (디스패처, 스케줄러, 레지스트리, 이벤트 루프, 슈퍼바이저)을 포인터로 받아 `actor_->setRuntime(this)`로 액터와 서로 연결합니다. 액터의 `sendMsg()`가 동작할 수 있는 이유가 이 연결입니다.
 
 ---
 
@@ -148,14 +134,15 @@ void ActorSystem::start(){
 ### run()과 requestStop()
 
 ```cpp
-void ActorSystem::run(){ if(eventLoop_) eventLoop_->run(); }
-       // 메인 스레드가 이벤트 루프에 블록 — 사실상 프로세스의 심장박동
-void ActorSystem::requestStop(){ if(eventLoop_) eventLoop_->stop(); }
-       // SIGINT/SIGTERM 핸들러에서 부름 — 루프를 깨워 종료 흐름 진입
+void ActorSystem::run(){            // 메인 스레드가 이벤트 루프에 블록 — 사실상 프로세스의 심장박동
+    if(eventLoop_) eventLoop_->run();
+} 
+void ActorSystem::requestStop(){    // SIGINT/SIGTERM 핸들러에서 부름 — 루프를 깨워 종료 흐름 진입
+    if(eventLoop_) eventLoop_->stop();
+}
 ```
 
-`run()`은 이벤트 루프([인프라](../../concepts/infrastructure.md))가
-`epoll_wait`에서 잠드는 것이 곧 프로세스 전체의 대기 상태입니다.
+`run()`은 이벤트 루프([인프라](../../concepts/infrastructure.md))가 `epoll_wait`에서 잠드는 것이 곧 프로세스 전체의 대기 상태입니다.
 
 ---
 
@@ -174,11 +161,9 @@ void ActorSystem::stop(){
 }
 ```
 
-기동의 역순이면서도 핵심 규칙이 있습니다: **새 작업 유입을 먼저 차단하고
-(①②③), 이미 들어온 작업은 끝까지 처리하게 한 뒤(④), 마지막에 액터를
-닫는다(⑥).**
+기동의 역순이면서도 핵심 규칙이 있습니다: **새 작업 유입을 먼저 차단하고 (①②③), 이미 들어온 작업은 끝까지 처리하게 한 뒤(④), 마지막에 액터를 닫는다(⑥).**
 
-- ③ `beginDrain()`과 ④의 관계 — 드레인 프로토콜 상세는 [동시성 문서 §드레인](../../concepts/concurrency.md). `pendingWork_`가 0이 될 때까지 워커가 버티므로, 메일박스에 밀린 메시지가 조용히 버려지지 않습니다.
+- ③ `beginDrain()`과 ④의 관계 — 드레인 프로토콜 상세는 [동시성 문서](../../concepts/concurrency.md). `pendingWork_`가 0이 될 때까지 워커가 버티므로, 메일박스에 밀린 메시지가 조용히 버려지지 않습니다.
 - 소멸자(~ActorSystem)도 `stop()` + `registry_->clear()`를 호출하므로, stop을 깜빡해도 안전합니다.
 
 ---
@@ -203,8 +188,7 @@ supervisor_->setRestartAll([this]() -> int {
 ```
 
 재시작도 특별한 명령이 아니라 **메시지**(`ActorRestartRequest`)로 이뤄집니다.
-각 액터는 자기 홈 워커에서 이 메시지를 받아 스스로 재시작하므로, 슈퍼바이저가
-다른 워커를 건드릴 일이 없습니다([supervision.md](../../concepts/supervision.md)).
+각 액터는 자기 홈 워커에서 이 메시지를 받아 스스로 재시작하므로, 슈퍼바이저가 다른 워커를 건드릴 일이 없습니다([supervision.md](../../concepts/supervision.md)).
 `forEachActor`의 스냅샷 동작은 [registry_handle.md](registry_handle.md)에서 다룹니다.
 
 ---
@@ -213,8 +197,7 @@ supervisor_->setRestartAll([this]() -> int {
 
 **파일:** `runtime/actor_runtime/actor_runtime.cpp`
 
-`ActorRuntime`은 액터를 감싸는 방탄 유리 케이스입니다. 액터 코드가 멋대로
-예외를 던져도 시스템이 버티도록 하는 장치들이 여기 있습니다.
+`ActorRuntime`은 액터를 감싸는 방탄 유리 케이스입니다. 액터 코드가 멋대로 예외를 던져도 시스템이 버티도록 하는 장치들이 여기 있습니다.
 
 ### 메일박스 가득 참 — 드롭 정책
 
@@ -230,8 +213,7 @@ void ActorRuntime::enqueue(Message msg){
 }
 ```
 
-느린 소비자 때문에 생산자(워커 전체!)가 멈추는 백프레셔 역류를 막기 위해,
-**전달 보장보다 가용성을 택해** 가득 찬 메일박스엔 드롭+경고를 선택합니다.
+느린 소비자 때문에 생산자(워커 전체!)가 멈추는 백프레셔 역류를 막기 위해, **전달 보장보다 가용성을 택해** 가득 찬 메일박스엔 드롭+경고를 선택합니다.
 드롭 수는 `dropped` 메트릭([metrics.md](metrics.md))으로 집계됩니다.
 
 ### processBatch — 예외를 슈퍼바이저로
@@ -246,10 +228,7 @@ try{
 }
 ```
 
-액터 핸들러의 예외는 **잡혀서 실패 메시지와 함께 슈퍼바이저에 보고**되고,
-현재 배치는 중단됩니다. 워커 스레드는 살아있으므로 다른 액터는 계속
-처리됩니다 — 실패의 격리. 슈퍼바이저가 그 뒤를 어떻게 처리하는지는
-[supervision.md](../../concepts/supervision.md)의 3단계 흐름입니다.
+액터 핸들러의 예외는 **잡혀서 실패 메시지와 함께 슈퍼바이저에 보고**되고, 현재 배치는 중단됩니다. 워커 스레드는 살아있으므로 다른 액터는 계속 처리됩니다 — 실패의 격리. 슈퍼바이저가 그 뒤를 어떻게 처리하는지는 [supervision.md](../../concepts/supervision.md)의 3단계 흐름입니다.
 
 ### performRestart — 절반쯤 죽은 액터 되살리기
 
@@ -263,11 +242,6 @@ try{
       → 슈퍼바이저의 예산(maxRestarts)이 재시작 루프를 끊어줌
 ```
 
-`close()` 실패 후 상태가 Closed가 아니면 open을 시도하지 않아,
-"깨진 상태에서 무작정 재가동"하는 최악의 경우를 피합니다. 재시작이
-연속 실패하면 슈퍼바이저의 재시작 예산이 소진되어 영구 종료로
-수렴합니다 — 무한 좀비 루프의 방지책입니다.
+`close()` 실패 후 상태가 Closed가 아니면 open을 시도하지 않아, "깨진 상태에서 무작정 재가동"하는 최악의 경우를 피합니다. 재시작이 연속 실패하면 슈퍼바이저의 재시작 예산이 소진되어 영구 종료로 수렴합니다 — 무한 좀비 루프의 방지책입니다.
 
-참고: OneForAll 브로드캐스트로 인한 재시작(`tryConsumeLifecycle`의
-`ActorRestartRequest` 처리)은 Closed 상태의 액터를 건너뛰고 Opened 액터만
-재시작합니다 — 종료 중인 시스템을 다시 켜는 사고를 막는 가드입니다.
+> 참고: OneForAll 브로드캐스트로 인한 재시작(`tryConsumeLifecycle`의 `ActorRestartRequest` 처리)은 Closed 상태의 액터를 건너뛰고 Opened 액터만 재시작합니다 — 종료 중인 시스템을 다시 켜는 사고를 막는 가드입니다.
