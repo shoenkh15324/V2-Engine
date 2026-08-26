@@ -94,10 +94,10 @@ void appendBackpressure(std::ostringstream& oss, const BenchmarkResult& result){
     oss << "  Sent:        " << result.backpressure.sent << "\n";
     oss << "  Dropped:     " << result.backpressure.dropped << "\n";
     oss << "  Backlog:     " << result.backpressure.backlogAtDrainStart << "\n";
-    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.floodDurationNs / 1000000.0);
-    oss << "  Flood Time:  " << buf << " ms\n";
-    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.drainDurationNs / 1000000.0);
-    oss << "  Drain Time:  " << buf << " ms\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.floodDurationNs / 1000.0);
+    oss << "  Flood Time:  " << buf << " us\n";
+    std::snprintf(buf, sizeof(buf), "%.2f", result.backpressure.drainDurationNs / 1000.0);
+    oss << "  Drain Time:  " << buf << " us\n";
 }
 
 void appendScheduler(std::ostringstream& oss, const BenchmarkResult& result){
