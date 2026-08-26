@@ -1,6 +1,7 @@
 #include "work_dispatcher.hpp"
 #include <chrono>
 #include "core/common/time/time.hpp"
+#include "core/common/util/debug.hpp"
 #include "core/actor_system/runtime/actor_runtime/actor_runtime.hpp"
 #include "core/actor_system/actor/actor.hpp"
 #include "core/perf/metrics/metrics.hpp"
@@ -19,27 +20,21 @@ inline void cpuRelax(){ // 포터블 스핀 프리미티브
 
 } // namespace
 
-WorkDispatcher::WorkDispatcher(
-    int workerCount,
-    int queueCapacity,
-    int highWatermark,
-    int busyStealIntervalUs,
-    int idleStealIntervalUs,
-    int parkSpinNs,
-    int tokenGraceNs
-) : workerCount_(workerCount),
-    queueCapacity_(queueCapacity),
-    highWatermark_(highWatermark),
-    busyStealIntervalUs_(busyStealIntervalUs),
-    idleStealIntervalUs_(idleStealIntervalUs),
-    parkSpinNs_(parkSpinNs),
-    tokenGraceNs_(tokenGraceNs)
+WorkDispatcher::WorkDispatcher(const WorkDispatcherConfig& cfg)
+    : workerCount_(cfg.workerCount),
+      queueCapacity_(cfg.queueCapacity),
+      highWatermark_(cfg.highWatermark > 0 ? cfg.highWatermark : cfg.queueCapacity * 7 / 10),
+      busyStealIntervalUs_(cfg.busyStealIntervalUs),
+      idleStealIntervalUs_(cfg.idleStealIntervalUs),
+      parkSpinNs_(cfg.parkSpinNs),
+      tokenGraceNs_(cfg.tokenGraceNs)
 {
-    for(int i = 0; i < workerCount; i++){
+    V2_ASSERT(cfg.workerCount > 0, "WorkDispatcher needs at least one worker");
+    for(int i = 0; i < workerCount_; i++){
         queues_.push_back(std::make_unique<LockFreeMpmcQueue<ActorRuntime*>>(queueCapacity_));
         semas_.push_back(std::make_unique<std::counting_semaphore<>>(0));
     }
-    idleBackoff_.assign(workerCount, 0);
+    idleBackoff_.assign(workerCount_, 0);
     
 }
 
@@ -58,7 +53,7 @@ void WorkDispatcher::stop(){
         semas_[i]->release();
     }
     std::lock_guard lock(mutex_);
-    pendingActorList_.clear();
+    pendedActorList_.clear();
 }
 
 bool WorkDispatcher::dispatch(ActorRuntime* actorRuntime){
@@ -121,7 +116,7 @@ void WorkDispatcher::beginDrain(){
     }
 }
 
-bool WorkDispatcher::finalize(ActorRuntime* actorRuntime){
+bool WorkDispatcher::settleToken(ActorRuntime* actorRuntime){
     if(tokenGraceNs_ > 0) graceSpin(actorRuntime);
     uint64_t actorId = actorRuntime->actorId();
     releaseInFlight(actorId);
@@ -137,7 +132,7 @@ bool WorkDispatcher::enqueueEntry(ActorRuntime* actorRuntime){
     int workerId = pickWorker(actorId);
     if(!queues_[workerId]->push(std::move(actorRuntime))){
         std::lock_guard lock(mutex_);
-        pendingActorList_.push_back(actorRuntime);
+        pendedActorList_.push_back(actorRuntime);
         return false;
     }
     V2_METRICS()->recordDispatch(false, queues_[workerId]->count());
@@ -185,13 +180,13 @@ bool WorkDispatcher::trySteal(int workerId, ActorRuntime*& out){
 
 void WorkDispatcher::drainPendedActor(){
     std::lock_guard lock(mutex_);
-    for(auto it = pendingActorList_.begin(); it != pendingActorList_.end();){
+    for(auto it = pendedActorList_.begin(); it != pendedActorList_.end();){
         ActorRuntime* rt = *it;
         int workerId = pickWorker(rt->actor()->id());
         if(queues_[workerId]->push(std::move(rt))){
             pendingWork_.fetch_add(1, std::memory_order_relaxed);
             semas_[workerId]->release();
-            it = pendingActorList_.erase(it);
+            it = pendedActorList_.erase(it);
         }else{
             ++it;
         }

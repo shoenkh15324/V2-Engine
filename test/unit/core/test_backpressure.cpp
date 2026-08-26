@@ -18,7 +18,7 @@ public:
 } // namespace
 
 TEST(BackpressureTest, DispatchFailureAddsToPending){
-    WorkDispatcher d(1, 2);
+    WorkDispatcher d({.workerCount = 1, .queueCapacity = 2});
     d.start();
 
     auto a1 = std::make_unique<TestActor>("a1", 1);
@@ -29,9 +29,9 @@ TEST(BackpressureTest, DispatchFailureAddsToPending){
     auto m2 = std::make_unique<Mailbox>(64);
     auto m3 = std::make_unique<Mailbox>(64);
 
-    ActorRuntime rt1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
-    ActorRuntime rt2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
-    ActorRuntime rt3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
+    ActorRuntime rt1(std::move(a1), std::move(m1), {.workDispatcher = &d});
+    ActorRuntime rt2(std::move(a2), std::move(m2), {.workDispatcher = &d});
+    ActorRuntime rt3(std::move(a3), std::move(m3), {.workDispatcher = &d});
 
     EXPECT_TRUE(d.dispatch(&rt1));
     EXPECT_TRUE(d.dispatch(&rt2));
@@ -49,7 +49,7 @@ TEST(BackpressureTest, DispatchFailureAddsToPending){
 }
 
 TEST(BackpressureTest, PendingClearedOnStop){
-    WorkDispatcher d(1, 2);
+    WorkDispatcher d({.workerCount = 1, .queueCapacity = 2});
     d.start();
 
     auto a1 = std::make_unique<TestActor>("a1", 1);
@@ -60,9 +60,9 @@ TEST(BackpressureTest, PendingClearedOnStop){
     auto m2 = std::make_unique<Mailbox>(64);
     auto m3 = std::make_unique<Mailbox>(64);
 
-    ActorRuntime rt1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
-    ActorRuntime rt2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
-    ActorRuntime rt3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
+    ActorRuntime rt1(std::move(a1), std::move(m1), {.workDispatcher = &d});
+    ActorRuntime rt2(std::move(a2), std::move(m2), {.workDispatcher = &d});
+    ActorRuntime rt3(std::move(a3), std::move(m3), {.workDispatcher = &d});
 
     d.dispatch(&rt1);
     d.dispatch(&rt2);
@@ -76,14 +76,14 @@ TEST(BackpressureTest, PendingClearedOnStop){
     d.start();
     auto a4 = std::make_unique<TestActor>("a4", 4);
     auto m4 = std::make_unique<Mailbox>(64);
-    ActorRuntime rt4(std::move(a4), std::move(m4), &d, nullptr, nullptr);
+    ActorRuntime rt4(std::move(a4), std::move(m4), {.workDispatcher = &d});
     EXPECT_TRUE(d.dispatch(&rt4));
 
     d.stop();
 }
 
 TEST(BackpressureTest, DrainPendingRetriesUntilQueueSlotAvailable){
-    WorkDispatcher d(1, 2);
+    WorkDispatcher d({.workerCount = 1, .queueCapacity = 2});
     d.start();
 
     auto a1 = std::make_unique<TestActor>("a1", 1);
@@ -94,9 +94,9 @@ TEST(BackpressureTest, DrainPendingRetriesUntilQueueSlotAvailable){
     auto m2 = std::make_unique<Mailbox>(64);
     auto m3 = std::make_unique<Mailbox>(64);
 
-    ActorRuntime rt1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
-    ActorRuntime rt2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
-    ActorRuntime rt3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
+    ActorRuntime rt1(std::move(a1), std::move(m1), {.workDispatcher = &d});
+    ActorRuntime rt2(std::move(a2), std::move(m2), {.workDispatcher = &d});
+    ActorRuntime rt3(std::move(a3), std::move(m3), {.workDispatcher = &d});
 
     d.dispatch(&rt1);
     d.dispatch(&rt2);
@@ -114,7 +114,7 @@ TEST(BackpressureTest, DrainPendingRetriesUntilQueueSlotAvailable){
 }
 
 TEST(BackpressureTest, DrainPendingWithMultipleWorkers){
-    WorkDispatcher d(2, 2);
+    WorkDispatcher d({.workerCount = 2, .queueCapacity = 2});
     d.start();
 
     auto a1 = std::make_unique<TestActor>("a1", 1);
@@ -129,11 +129,11 @@ TEST(BackpressureTest, DrainPendingWithMultipleWorkers){
     auto m4 = std::make_unique<Mailbox>(64);
     auto m5 = std::make_unique<Mailbox>(64);
 
-    ActorRuntime rt1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
-    ActorRuntime rt2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
-    ActorRuntime rt3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
-    ActorRuntime rt4(std::move(a4), std::move(m4), &d, nullptr, nullptr);
-    ActorRuntime rt5(std::move(a5), std::move(m5), &d, nullptr, nullptr);
+    ActorRuntime rt1(std::move(a1), std::move(m1), {.workDispatcher = &d});
+    ActorRuntime rt2(std::move(a2), std::move(m2), {.workDispatcher = &d});
+    ActorRuntime rt3(std::move(a3), std::move(m3), {.workDispatcher = &d});
+    ActorRuntime rt4(std::move(a4), std::move(m4), {.workDispatcher = &d});
+    ActorRuntime rt5(std::move(a5), std::move(m5), {.workDispatcher = &d});
 
     d.dispatch(&rt1);
     d.dispatch(&rt2);

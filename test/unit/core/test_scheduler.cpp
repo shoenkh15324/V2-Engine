@@ -30,7 +30,7 @@ TEST(Scheduler, Create){
 TEST(Scheduler, AddTimer){
     Scheduler sched;
     auto actor = std::make_unique<TestActor>("t", 1);
-    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, &sched, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), {.scheduler = &sched});
     int id = sched.addTimer(&rt, Message::make(Tick{}), 100, false);
     EXPECT_GT(id, 0);
 }
@@ -38,7 +38,7 @@ TEST(Scheduler, AddTimer){
 TEST(Scheduler, Cancel){
     Scheduler sched;
     auto actor = std::make_unique<TestActor>("t", 1);
-    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, &sched, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), {.scheduler = &sched});
     int id = sched.addTimer(&rt, Message::make(Tick{}), 100, false);
     EXPECT_GT(id, 0);
     sched.cancel(id);
@@ -60,7 +60,7 @@ TEST(Scheduler, ConcurrentAddCancelDuringFire){
     sched.start();
 
     auto actor = std::make_unique<TestActor>("stress", 1);
-    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(4096), nullptr, &sched, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(4096), {.scheduler = &sched});
 
     constexpr int kThreads = 4;
     constexpr int kIters = 5000;

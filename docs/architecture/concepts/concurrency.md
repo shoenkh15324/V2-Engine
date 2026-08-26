@@ -50,7 +50,7 @@
 
 ## 개요
 
-> 📌 실행 토큰 생명주기·inFlight 슬롯·finalize 정산·스핀 티어의 상세 설계와 도입 배경은 [작업 분배](work_dispatch.md) 문서를 참고하세요. 이 문서는 동시성 프리미티브 관점을 다룹니다.
+> 📌 실행 토큰 생명주기·inFlight 슬롯·settleToken 정산·스핀 티어의 상세 설계와 도입 배경은 [작업 분배](work_dispatch.md) 문서를 참고하세요. 이 문서는 동시성 프리미티브 관점을 다룹니다.
 
 V² Engine은 세 가지 기둥 위에 구축된 액터 기반 동시성 모델을 사용합니다: **락프리 데이터 구조**, **작업 스틸링 워커 풀**, **액터 어피니티(actor affinity)**. 스레드 안전성은 공유 상태 락이 아닌 락프리 큐를 통한 메시지 전달을 통해 달성됩니다. 락은 메시지 핫 패스 외부의 인프라 구성 요소로 제한됩니다.
 
@@ -276,7 +276,7 @@ void Worker::runLoop() {
 
         auto busyStartTime = Time::now();
         int processed = actorRuntime->run(maxBatch_);                 // 메시지 배치 처리
-        auto busyEndTime = Time::now();                               // (run() 내부 finalize()가 토큰 정산/회계까지 전담)
+        auto busyEndTime = Time::now();                               // (run() 내부 settleToken()가 토큰 정산/회계까지 전담)
 
         uint64_t gapIdleNs = Time::toNs(idleEndTime - idleStartTime);
         uint64_t gapBusyNs = Time::toNs(busyEndTime - busyStartTime);
@@ -314,7 +314,7 @@ void Worker::runLoop() {
 
 | 뮤텍스 | 위치 | 목적 | 핫 패스? |
 |--------|------|------|----------|
-| `WorkDispatcher::mutex_` | `work_dispatcher.hpp:55` | `pendingActorList_` 폴백 큐 보호 | 아니오 — 락프리 push 실패 시에만 |
+| `WorkDispatcher::mutex_` | `work_dispatcher.hpp:55` | `pendedActorList_` 폴백 큐 보호 | 아니오 — 락프리 push 실패 시에만 |
 | `ActorRuntime::timerMutex_` | `actor_runtime.hpp:67` | `timerIds_` 집합 보호 | 아니오 — 타이머 추가/취소는 빈번하지 않음 |
 | `Scheduler::mutex_` | `scheduler.hpp:33` | 타이머 등록 맵 보호 | 아니오 — 타이머 연산 |
 | `Supervisor::mutex_` | `supervisor.hpp:62` | 액터별 전략 오버라이드 보호 | 아니오 — 정책 조회 |
@@ -369,7 +369,7 @@ int WorkDispatcher::pickLeastLoaded(uint64_t actorId) {
 }
 ```
 
-선택된 큐가 가득 차면 `ActorRuntime*`은 `pendingActorList_`(뮤텍스 보호)로 폴백되고, 워커 유휴 시간에 `drainPendedActor()`를 통해 재시도됩니다.
+선택된 큐가 가득 차면 `ActorRuntime*`은 `pendedActorList_`(뮤텍스 보호)로 폴백되고, 워커 유휴 시간에 `drainPendedActor()`를 통해 재시도됩니다.
 
 ---
 
@@ -429,7 +429,7 @@ idleBackoff_[workerId] = 1;  // no work → idle
    └── release all semaphores → wake all workers
 
 2. Workers finish current batch
-   └── finalize() → retirePendingWork()가 pendingWork_ 감산 (acq_rel)
+   └── settleToken() → retirePendingWork()가 pendingWork_ 감산 (acq_rel)
 
 3. When pendingWork_ reaches 0
    └── Last worker releases all semaphores → all workers break out of loop
@@ -474,7 +474,7 @@ if(inFlightSlot(actorId).held.exchange(1, std::memory_order_acq_rel)){
 // 승자만 토큰 발행: 큐 push + pendingWork++ + 세마포어 release
 ```
 
-**소비자 종료국면 (`finalize()`):** 반납 → 메일박스 재확인 → 재획득/회수
+**소비자 종료국면 (`settleToken()`):** 반납 → 메일박스 재확인 → 재획득/회수
 
 ```cpp
 releaseInFlight(actorId);                                  // exchange(0, acq_rel)
@@ -662,6 +662,6 @@ std::vector<uint8_t> idleBackoff_;  // indexed by worker ID
 |----------|------|
 | **세마포어 블로킹** | 유휴 시 워커가 `std::counting_semaphore`에서 sleep; 프로듀서가 `release()`로 wake |
 | **메일박스 가득 참** | 경고와 함께 메시지 드롭. 의도적 설계 — 전달 보장보다 가용성 우선 |
-| **디스패처 큐 가득 참** | `pendingActorList_`(뮤텍스 보호)로 폴백; 유휴 시간에 재시도 |
+| **디스패처 큐 가득 참** | `pendedActorList_`(뮤텍스 보호)로 폴백; 유휴 시간에 재시도 |
 | **적응형 작업 스틸링** | 활성(200μs) → 유휴(2000μs) 스틸 간격으로 전환하여 CPU 스핀 감소 |
 | **메일박스 용량** | 액터별 생성 시 설정 가능; 용량 부족 시 쓰루풋 저하 |

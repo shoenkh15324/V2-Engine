@@ -11,7 +11,7 @@ V² Engine이 어떻게 액터에게 실행 기회를 분배하는지, 그리고
 - [3. 컴포넌트 지도](#3-컴포넌트-지도)
 - [4. 토큰의 일생](#4-토큰의-일생)
 - [5. 왜 액터당 토큰은 1개인가](#5-왜-액터당-토큰은-1개인가)
-- [6. finalize 정산 프로토콜 — 유실 없는 반납](#6-finalize-정산-프로토콜--유실-없는-반납)
+- [6. settleToken 정산 프로토콜 — 유실 없는 반납](#6-settletoken-정산-프로토콜--유실-없는-반납)
 - [7. 계층형 대기 — 스핀-던-파크](#7-계층형-대기--스핀-던-파크)
 - [8. 회계 규칙 — pendingWork_](#8-회계-규칙--pendingwork_)
 - [9. 케이스 스터디: 스케일링 붕괴 진단기](#9-케이스-스터디-스케일링-붕괴-진단기)
@@ -23,7 +23,7 @@ V² Engine이 어떻게 액터에게 실행 기회를 분배하는지, 그리고
 ## 1. 요약 (세 문장)
 
 1. **메시지**는 마음껏 쌓아도 되지만, **실행 토큰**(처리해달라는 신호)은 액터당 **딱 1개**만 존재한다.
-2. 워커는 배치 처리가 끝나면 `finalize()`로 토큰을 **정산**한다 — 밀린 게 있으면 재사용, 없으면 회수.
+2. 워커는 배치 처리가 끝나면 `settleToken()`로 토큰을 **정산**한다 — 밀린 게 있으면 재사용, 없으면 회수.
 3. 짧은 주기의 sleep/wake(OS futex)가 성능을 깎아먹으므로, **스핀 → 파킹** 계층형 대기로 최소화한다.
 
 ---
@@ -67,7 +67,7 @@ Worker::runLoop()                  acquire() → run(maxBatch=32) 반복
     ▼
 ActorRuntime::run()
     └─ processBatch()              메일박스에서 최대 32개 처리
-    └─ finalize()                  배치 종료 후 토큰 정산 (§6)
+    └─ settleToken()                  배치 종료 후 토큰 정산 (§6)
 ```
 
 | 클래스 | 아는 것 | 모르는 것 |
@@ -89,8 +89,8 @@ stateDiagram-v2
 
     실행중 --> 실행중 : processBatch<br/>메일박스에서 최대 32개 소비
 
-    실행중 --> 큐대기중 : finalize ①백로그 있음 + 슬롯 재획득<br/>redispatch = 같은 토큰이 큐로 복귀(이양)
-    실행중 --> 소멸 : finalize ②백로그 없음 또는 남에게 슬롯 선점<br/>retirePendingWork = 토큰 회수
+    실행중 --> 큐대기중 : settleToken ①백로그 있음 + 슬롯 재획득<br/>redispatch = 같은 토큰이 큐로 복귀(이양)
+    실행중 --> 소멸 : settleToken ②백로그 없음 또는 남에게 슬롯 선점<br/>retirePendingWork = 토큰 회수
 
     소멸 --> [*]
     note right of 소멸
@@ -124,18 +124,18 @@ sequenceDiagram
 
 생산자 입장에서는 **3번 한 방**이 전부입니다. 스티커 붙이기에 성공하면 표 발행, 실패하면 손 뗌.
 
-### 4.3 소비와 정산 — `finalize()`
+### 4.3 소비와 정산 — `settleToken()`
 
 워커가 배치를 끝내면 토큰의 운명을 결정해야 합니다.
 
 ```mermaid
 sequenceDiagram
     participant W as Worker (run() 마침)
-    participant D as WorkDispatcher.finalize()
+    participant D as WorkDispatcher.settleToken()
     participant S as inFlight 슬롯
     participant MB as Mailbox
 
-    W->>D: finalize(this)
+    W->>D: settleToken(this)
     D->>S: ① 반납 — held.exchange(0)
     Note over D,MB: ② 재확인 — "메일박스에<br/>처리 안 한 게 남았나?"
     alt 백로그 있음 && 슬롯 재획득(0→1) 성공
@@ -160,7 +160,7 @@ sequenceDiagram
 
 ---
 
-## 6. finalize 정산 프로토콜 — 유실 없는 반납
+## 6. settleToken 정산 프로토콜 — 유실 없는 반납
 
 가장 섬세한 부분입니다. **"반납(①)을 재확인(②)보다 먼저"** 하는 이유가 핵심입니다.
 
@@ -213,7 +213,7 @@ futex 자체는 잘못이 아닙니다 — 진짜 오랫동안 놀 때는 잠들
 | Site | 위치 | 하는 일 | 파라미터 |
 |---|---|---|---|
 | **A** | `acquire()` — 세마포어 대기 직전 | 새로 발행된 토큰을 syscall 없이 즉시 포획 | `parkSpinNs` (기본 3μs) |
-| **B** | `finalize()` 초입 — 슬롯 반납 **전** | 빈 메일박스에 다음 메시지 도착을 짧게 대기 → 기존 토큰이 그대로 재사용 | `tokenGraceNs` (기본 5μs) |
+| **B** | `settleToken()` 초입 — 슬롯 반납 **전** | 빈 메일박스에 다음 메시지 도착을 짧게 대기 → 기존 토큰이 그대로 재사용 | `tokenGraceNs` (기본 5μs) |
 
 Site B가 특히 깔끔한 이유: **releaseInFlight 이전에** 기다리므로 lost-wakeup 프로토콜과 충돌할 여지가 원천적으로 없습니다. 백로그가 이미 있으면 즉시 탈출하므로 바쁜 레짐에서 비용 0.
 
@@ -233,10 +233,10 @@ json 설정 키: `park_spin_ns`, `token_grace_ns` (`config/v2_main.json`).
 ```
 큐 진입 시     +1   (dispatch 성공, 파킹 부활 drainPendedActor)
 토큰 이양 시   ±0   (redispatch — 같은 토큰, 새 표 아님)
-토큰 소멸 시   −1   (finalize의 retirePendingWork)
+토큰 소멸 시   −1   (settleToken의 retirePendingWork)
 ```
 
-**불변식**: "+1 = 토큰의 워커 큐 진입", "−1 = finalize의 은퇴". 이 짝이 어긋나면 드레인이 영원히 끝나지 않거나 조기 종료됩니다. 회귀 테스트: `FinalizeRetiresExactlyOnce`.
+**불변식**: "+1 = 토큰의 워커 큐 진입", "−1 = settleToken의 은퇴". 이 짝이 어긋나면 드레인이 영원히 끝나지 않거나 조기 종료됩니다. 회귀 테스트: `SettleTokenRetiresExactlyOnce`.
 
 ---
 
@@ -306,7 +306,7 @@ V2_DIAG=1 ./build/Bench/v2_bench_cli throughput --workers 4 --actors 16 --iterat
 |---|---|
 | 실행 토큰(token) | 액터 메일박스 처리 권한. 액터당 최대 1개 |
 | inFlight 슬롯 | 토큰 보유 표시 플래그(캐시라인 정렬). dedup의 핵심 |
-| finalize | 배치 종료 후 토큰 정산(반납→재확인→재획득/회수). `IWorkDispatcher::finalize` |
+| settleToken | 배치 종료 후 토큰 정산(반납→재확인→재획득/회수). `IWorkDispatcher::settleToken` |
 | redispatch | 토큰 이양 — 같은 토큰을 큐에 재등록 (회계 ±0) |
 | retire | 토큰 소멸 — pendingWork −1 |
 | dedup | 이미 토큰이 살아있어 새 토큰 발행을 거절하는 것 |

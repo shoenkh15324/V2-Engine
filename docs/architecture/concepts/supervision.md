@@ -119,7 +119,7 @@ public:
         // OneForOne 경로. 예산 안에서만 원자적으로 재시작. 성공 여부 반환.
     virtual void shutdown() = 0;
         // None 정책·예산 초과 시. close 후 더 이상 디스패치하지 않음.
-    virtual bool popMessage(Message& msg) = 0;
+    virtual bool popDeadLetter(Message& msg) = 0;
         // 메일박스를 하나씩 비워 dead letter로 이관할 때 사용.
     virtual int restartCount() const = 0;
     virtual uint64_t actorId() const = 0;
@@ -167,7 +167,7 @@ sequenceDiagram
     S->>P: ① 정책 스냅샷 (락 1번으로 strategy+limit 함께 읽음)
     S->>DLQ: ② 실패 메시지 push
     loop 남은 메일박스가 빌 때까지
-        S->>RT: popMessage()
+        S->>RT: popDeadLetter()
         S->>DLQ: 나머지 메시지도 push
     end
     alt OneForOne
@@ -197,7 +197,7 @@ if(it != perActorStrategy_.end()) strategy = it->second;   // 액터별 오버�
 정책과 무관하게 **항상** 수행됩니다:
 
 1. 실패 당시 처리 중이던 메시지를 `DeadLetter`로 포장해 push
-2. `popMessage()`로 메일박스를 완전히 비우며 남은 메시지도 전부 push
+2. `popDeadLetter()`로 메일박스를 완전히 비우며 남은 메시지도 전부 push
 3. 타임스탬프(`Time::nowNs()`)와 사유를 함께 기록
 
 왜 남은 메시지까지 옮길까? 재시작하면 액터의 메일박스는 초기화됩니다. 밀린 메시지를 그냥 두면 **조용히 사라지는 유실**이 됩니다. 전부 데드 레터로 옮겨야 "무엇이 처리 못 됐는지"를 나중에 감사할 수 있습니다.

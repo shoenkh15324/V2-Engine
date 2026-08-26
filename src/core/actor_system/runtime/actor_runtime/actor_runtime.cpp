@@ -9,14 +9,14 @@
 #include "core/common/time/time.hpp"
 #include "core/common/util/return.hpp"
 
-ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop, ISupervisor* supervisor)
+ActorRuntime::ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox> mailbox, const ActorRuntimeDeps& deps)
 : actor_(std::move(actor)), mailbox_(std::move(mailbox)){
     actor_->setRuntime(this);
-    workDispatcher_ = workDispatcher;
-    scheduler_ = scheduler;
-    actorRegistry_ = actorRegistry;
-    eventLoop_ = eventLoop;
-    supervisor_ = supervisor;
+    workDispatcher_ = deps.workDispatcher;
+    scheduler_ = deps.scheduler;
+    actorRegistry_ = deps.actorRegistry;
+    eventLoop_ = deps.eventLoop;
+    supervisor_ = deps.supervisor;
 }
 
 ActorRuntime::~ActorRuntime(){
@@ -49,7 +49,7 @@ int ActorRuntime::run(int maxBatch, bool* hasMoreWork){
     uint64_t gapNs = Time::toNs(Time::now() - startTime);
     V2_METRICS()->recordHandle(actor_->id(), r.processed, gapNs);
 
-    bool resumed = workDispatcher_ ? workDispatcher_->finalize(this) : false;
+    bool resumed = workDispatcher_ ? workDispatcher_->settleToken(this) : false;
     if(hasMoreWork) *hasMoreWork = resumed;
     return r.processed;
 }
@@ -90,7 +90,7 @@ bool ActorRuntime::tryRestart(const std::string& reason, int maxRestarts){
     return true;
 }
 
-bool ActorRuntime::popMessage(Message& msg){
+bool ActorRuntime::popDeadLetter(Message& msg){
     return mailbox_->pop(msg);
 }
 

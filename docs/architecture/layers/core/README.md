@@ -86,7 +86,7 @@ src/core/
 |------|------|-------------|
 | 액터 모델 | [actor_model.md](../../concepts/actor_model.md) | Actor 생명주기, ActorSystem, 세대 기반 ActorHandle, 타입 안전 dispatch |
 | 메시지 시스템 | [messaging.md](../../concepts/messaging.md) | 96바이트 Message 레이아웃, SBO, 40개 메시지 카탈로그, 통신 패턴 |
-| 스케줄링 | [work_dispatch.md](../../concepts/work_dispatch.md) | 실행 토큰, inFlight 슬롯, finalize 정산, 스핀-던-파크, 성능 케이스 스터디 |
+| 스케줄링 | [work_dispatch.md](../../concepts/work_dispatch.md) | 실행 토큰, inFlight 슬롯, settleToken 정산, 스핀-던-파크, 성능 케이스 스터디 |
 | 동시성 | [concurrency.md](../../concepts/concurrency.md) | MPSC/MPMC 큐, 작업 스틸링, 메모리 오더링 전략 |
 | 메모리 관리 | [memory.md](../../concepts/memory.md) | 3계층 풀 할당자, SizeClass, Slab |
 | 슈퍼바이저 | [supervision.md](../../concepts/supervision.md) | 재시작 전략, DeadLetterQueue |

@@ -28,7 +28,7 @@ struct ActorSystemConfig {
     int tokenGraceNs = 5000;
     size_t defaultMailboxSize = 512;
     int dispatcherQueueCapacity = 1024;
-    int dispatcherHighWatermark = 0; // 0이면 kDefaultHighWatermark 자동 계산
+    int dispatcherHighWatermark = 0; // 0이면 queueCapacity*7/10 자동 계산
     int supervisorMaxRestarts = 5;
     int supervisorDefaultStrategy = 0;
     int deadLetterQueueCapacity = 128;

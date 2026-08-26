@@ -38,11 +38,11 @@ public:
 // Construction
 
 TEST(WorkDispatcher, Create){
-    WorkDispatcher d(1);
+    WorkDispatcher d({.workerCount = 1});
 }
 
 TEST(WorkDispatcher, CreateDestroy){
-    WorkDispatcher d(1);
+    WorkDispatcher d({.workerCount = 1});
     d.start();
     d.stop();
 }
@@ -50,12 +50,12 @@ TEST(WorkDispatcher, CreateDestroy){
 // Ready Queue
 
 TEST(WorkDispatcher, DispatchAcquire){
-    WorkDispatcher d(1);
+    WorkDispatcher d({.workerCount = 1});
     d.start();
 
     auto actor = std::make_unique<TestActor>("test", 1);
     auto mailbox = std::make_unique<Mailbox>(16);
-    ActorRuntime ctx(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime ctx(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     d.dispatch(&ctx);
     ActorRuntime* acquired = d.acquire(0);
@@ -65,20 +65,20 @@ TEST(WorkDispatcher, DispatchAcquire){
 }
 
 TEST(WorkDispatcher, DispatchFifo){
-    WorkDispatcher d(1);
+    WorkDispatcher d({.workerCount = 1});
     d.start();
 
     auto a1 = std::make_unique<TestActor>("a", 1);
     auto m1 = std::make_unique<Mailbox>(16);
-    ActorRuntime ctx1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
+    ActorRuntime ctx1(std::move(a1), std::move(m1), {.workDispatcher = &d});
 
     auto a2 = std::make_unique<TestActor>("b", 2);
     auto m2 = std::make_unique<Mailbox>(16);
-    ActorRuntime ctx2(std::move(a2), std::move(m2), &d, nullptr, nullptr);
+    ActorRuntime ctx2(std::move(a2), std::move(m2), {.workDispatcher = &d});
 
     auto a3 = std::make_unique<TestActor>("c", 3);
     auto m3 = std::make_unique<Mailbox>(16);
-    ActorRuntime ctx3(std::move(a3), std::move(m3), &d, nullptr, nullptr);
+    ActorRuntime ctx3(std::move(a3), std::move(m3), {.workDispatcher = &d});
 
     d.dispatch(&ctx1);
     d.dispatch(&ctx2);
@@ -92,12 +92,12 @@ TEST(WorkDispatcher, DispatchFifo){
 }
 
 TEST(WorkDispatcher, AcquireOnEmpty){
-    WorkDispatcher d(1);
+    WorkDispatcher d({.workerCount = 1});
     d.start();
 
     auto actor = std::make_unique<TestActor>("test", 1);
     auto mailbox = std::make_unique<Mailbox>(16);
-    ActorRuntime ctx(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime ctx(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     std::thread t([&](){
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -112,7 +112,7 @@ TEST(WorkDispatcher, AcquireOnEmpty){
 }
 
 TEST(WorkDispatcher, AcquireAfterStop){
-    WorkDispatcher d(1);
+    WorkDispatcher d({.workerCount = 1});
     d.start();
     d.stop();
 
@@ -121,7 +121,7 @@ TEST(WorkDispatcher, AcquireAfterStop){
 }
 
 TEST(WorkDispatcher, StopReleasesWorkers){
-    WorkDispatcher d(3);
+    WorkDispatcher d({.workerCount = 3});
     d.start();
     d.stop();
 
@@ -131,16 +131,16 @@ TEST(WorkDispatcher, StopReleasesWorkers){
 }
 
 TEST(WorkDispatcher, LoadAwareDispatchSpreadsOverflow){
-    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1);
+    WorkDispatcher d({.workerCount = 2, .highWatermark = 1});
     d.start();
 
     auto a0 = std::make_unique<TestActor>("hot0", 0);
     auto m0 = std::make_unique<Mailbox>(16);
-    ActorRuntime rt0(std::move(a0), std::move(m0), &d, nullptr, nullptr);
+    ActorRuntime rt0(std::move(a0), std::move(m0), {.workDispatcher = &d});
 
     auto a1 = std::make_unique<TestActor>("hot1", 2);
     auto m1 = std::make_unique<Mailbox>(16);
-    ActorRuntime rt1(std::move(a1), std::move(m1), &d, nullptr, nullptr);
+    ActorRuntime rt1(std::move(a1), std::move(m1), {.workDispatcher = &d});
 
     ASSERT_TRUE(d.dispatch(&rt0));
     ASSERT_TRUE(d.dispatch(&rt1));
@@ -151,14 +151,15 @@ TEST(WorkDispatcher, LoadAwareDispatchSpreadsOverflow){
 }
 
 TEST(WorkDispatcher, LoadAwareKeepsHomeBelowWatermark){
-    WorkDispatcher d(3, WorkDispatcher::kDefaultQueueCapacity, 5);
+    WorkDispatcher d({.workerCount = 3, .highWatermark = 5});
     d.start();
 
     std::vector<std::unique_ptr<ActorRuntime>> runtimes;
     for(uint64_t i = 0; i < 5; i++){
         auto actor = std::make_unique<TestActor>("home" + std::to_string(i), i * 3);
         auto mailbox = std::make_unique<Mailbox>(16);
-        runtimes.push_back(std::make_unique<ActorRuntime>(std::move(actor), std::move(mailbox), &d, nullptr, nullptr));
+        ActorRuntimeDeps deps{.workDispatcher = &d};
+        runtimes.push_back(std::unique_ptr<ActorRuntime>(new ActorRuntime(std::move(actor), std::move(mailbox), deps)));
         ASSERT_TRUE(d.dispatch(runtimes.back().get()));
     }
     for(int i = 0; i < 5; i++){
@@ -172,13 +173,13 @@ TEST(WorkDispatcher, SingleEntryGuardDedups){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(2);
+    WorkDispatcher d({.workerCount = 2});
     d.start();
 
     auto actor = std::make_unique<CountingActor>("hot", 0);
     auto* counter = actor.get();
     auto mailbox = std::make_unique<Mailbox>(100000);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     const size_t M = 10000;
     for(size_t i = 0; i < M; i++){
@@ -204,13 +205,13 @@ TEST(WorkDispatcher, SingleEntryGuardConcurrentNoLoss){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(4);
+    WorkDispatcher d({.workerCount = 4});
     d.start();
 
     auto actor = std::make_unique<CountingActor>("hot", 0);
     auto* counter = actor.get();
     auto mailbox = std::make_unique<Mailbox>(1000000);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     Worker w0(&d, 0, 32), w1(&d, 1, 32), w2(&d, 2, 32), w3(&d, 3, 32);
     w0.start();
@@ -252,13 +253,13 @@ TEST(WorkDispatcher, SingleEntryGuardConcurrentNoLoss){
 }
 
 TEST(WorkDispatcher, LostWakeupStress){
-    WorkDispatcher d(2);
+    WorkDispatcher d({.workerCount = 2});
     d.start();
 
     auto actor = std::make_unique<CountingActor>("hot", 0);
     auto* counter = actor.get();
     auto mailbox = std::make_unique<Mailbox>(100000);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     const size_t N = 50000;
     std::thread producer([&](){
@@ -290,14 +291,14 @@ TEST(WorkDispatcher, LostWakeupStress){
     d.stop();
 }
 
-TEST(WorkDispatcher, FinalizeRetiresExactlyOnce){
-    WorkDispatcher d(1);
+TEST(WorkDispatcher, SettleTokenRetiresExactlyOnce){
+    WorkDispatcher d({.workerCount = 1});
     d.start();
 
     auto actor = std::make_unique<CountingActor>("solo", 7);
     auto* counter = actor.get();
     auto mailbox = std::make_unique<Mailbox>(64);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     for(size_t i = 0; i < 10; i++){
         rt.enqueue(Message::make(Tick{}));

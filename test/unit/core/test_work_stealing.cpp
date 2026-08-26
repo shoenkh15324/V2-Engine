@@ -36,12 +36,12 @@ public:
 } // namespace
 
 TEST(WorkStealing, MovesTokenToIdleWorker){
-    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1);
+    WorkDispatcher d({.workerCount = 2, .highWatermark = 1});
     d.start();
 
     auto actor = std::make_unique<TestActor>("hot", 0);
     auto mailbox = std::make_unique<Mailbox>(16);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
     ASSERT_TRUE(d.dispatch(&rt));
 
     ActorRuntime* stolen = d.acquire(1);
@@ -50,12 +50,12 @@ TEST(WorkStealing, MovesTokenToIdleWorker){
 }
 
 TEST(WorkStealing, UsesBusyIntervalFirst){
-    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1, 1, 500);
+    WorkDispatcher d({.workerCount = 2, .highWatermark = 1, .busyStealIntervalUs = 1, .idleStealIntervalUs = 500});
     d.start();
 
     auto actor = std::make_unique<TestActor>("hot", 0);
     auto mailbox = std::make_unique<Mailbox>(16);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
     ASSERT_TRUE(d.dispatch(&rt));
 
     auto begin = std::chrono::steady_clock::now();
@@ -71,7 +71,7 @@ TEST(WorkStealing, BacksOffWhenIdle){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(2, WorkDispatcher::kDefaultQueueCapacity, 1, 1, 100000);
+    WorkDispatcher d({.workerCount = 2, .highWatermark = 1, .busyStealIntervalUs = 1, .idleStealIntervalUs = 100000});
     d.start();
 
     std::thread t([&](){
@@ -91,13 +91,13 @@ TEST(WorkStealing, KeepsSingleEntryGuardConcurrent){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(4, WorkDispatcher::kDefaultQueueCapacity, 1000000, 1, 10);
+    WorkDispatcher d({.workerCount = 4, .highWatermark = 1000000, .busyStealIntervalUs = 1, .idleStealIntervalUs = 10});
     d.start();
 
     auto actor = std::make_unique<CountingActor>("hot", 0);
     auto* counter = actor.get();
     auto mailbox = std::make_unique<Mailbox>(1000000);
-    ActorRuntime rt(std::move(actor), std::move(mailbox), &d, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::move(mailbox), {.workDispatcher = &d});
 
     Worker w0(&d, 0, 32), w1(&d, 1, 32), w2(&d, 2, 32), w3(&d, 3, 32);
     w0.start();
@@ -142,14 +142,15 @@ TEST(WorkStealing, CountsMetrics){
     V2_METRICS()->setEnabled(true);
     V2_METRICS()->reset();
 
-    WorkDispatcher d(2);
+    WorkDispatcher d({.workerCount = 2});
     d.start();
 
     std::vector<std::unique_ptr<ActorRuntime>> runtimes;
     for(size_t i = 0; i < 3; i++){
         auto actor = std::make_unique<TestActor>("a" + std::to_string(i), i * 2);
         auto mailbox = std::make_unique<Mailbox>(16);
-        runtimes.push_back(std::make_unique<ActorRuntime>(std::move(actor), std::move(mailbox), &d, nullptr, nullptr));
+        ActorRuntimeDeps deps{.workDispatcher = &d};
+        runtimes.push_back(std::unique_ptr<ActorRuntime>(new ActorRuntime(std::move(actor), std::move(mailbox), deps)));
         ASSERT_TRUE(d.dispatch(runtimes.back().get()));
     }
 

@@ -18,7 +18,8 @@ public:
     virtual void shutdown() = 0;
 
     // 메일박스에서 메시지를 하나 꺼낸다. 비어 있으면 false. (dead letter drain용)
-    virtual bool popMessage(Message& msg) = 0;
+// 데드 레터 감사용 — 실패 액터의 메일박스를 하나 꺼낸다. 비어 있으면 false.
+    virtual bool popDeadLetter(Message& msg) = 0;
 
     // 누적 재시작 횟수 (OneForOne 실패 루프 방지용 한계 판정에 사용).
     // OneForAll 브로드캐스트 재시작은 증가시키지 않는다.

@@ -12,7 +12,7 @@ Phase 4: 아키텍처 고도화 🔄 진행 중
   4-1~4-4: ✅ 완료
   4-5: 🔄 잔여 진단 3건
   4-6: ✅ 문서화
-  4-7: 🔄 정확성 하드닝 (리뷰 항목 추가, 1건 완료)
+  4-7: 🔄 정확성 하드닝 (5건 완료)
   4-8: ⬜ 서비스/설정 정리
 Phase 5: 벤치마크 & 배포 ⬜ 대기
 ```
@@ -196,27 +196,11 @@ Lookup 전용으로 축소, enableActor/disableActor는 IActorRuntime으로 이�
 
 > **목표**: 극단 시나리오(홍수·소비자 부재·느린 클라이언트)에서도 메시지/스케줄링/수명주기가 결정적
 
-#### 4-7.0 코어 코드 리뷰 발견 항목 (2026-08)
-
-> WorkDispatcher·ActorRuntime 중심의 책임 경계/네이밍/유지보수성 리뷰에서 추출.
-> 워크 스틸링·슈퍼바이저·로드 밸런싱 추가로 두 클래스에 기능이 집중되며 생긴 항목들.
-
-| 우선순위 | 작업 | 상세 | 상태 |
-|---------|------|------|------|
-| P1 | inFlight 슬롯 1024 하드캡 방어 | `actorId % kMaxActors` 모듈러라 1024 초과 시 서로 다른 액터가 슬롯 공유 → dedup 교차(액터 굶음). assert+로그+상한 문서화 또는 동적 확장 필요 | ⬜ |
-| P1 | `ActorState::Inherited` 제거 | 선언만 존재하는 dead enum | ⬜ |
-| P2 | `ActorRuntime` 생성자 Deps struct화 | 협력자 포인터 5개 + `WorkDispatcher` 생성자 int 7개 positional 전달 — 교환 실수 유발 | ⬜ |
-| P2 | `ISupervised::popMessage` 용도 명확화 | 데드 레터 감사용임이 인터페이스에서 안 보임 (`popDeadLetter` 등 개명 검토) | ⬜ |
-| P3 | 네이밍 정리 (dispatcher) | `finalize`→`settleToken`, `drainPendedActor`→`drainPendingActors`(멤버 `pendingActorList_`와 철자 통일), `redispatch`는 dedup 스킵 의미 명시 | ⬜ |
-| P3 | `Scheduler` 역할 혼동 해소 | 실제론 타이머 메시지 배달기 — 실행 스케줄링과 무관. 리네임은 service/app 파급 커서 별도 결정 | ⬜ |
-| P4 | 오더링 근거 코드 주석화 | concurrency.md 오더링 참조 표의 근거를 해당 원자 연산 위치 주석으로 이식 | ⬜ |
-| P4 | `Actor(name, id=-1)` 매직 디폴트 제거 | uint64 max 센티널 | ⬜ |
-
 #### 4-7.1 백프레셔 계약
 
 | 작업 | 상세 | 상태 |
 |------|------|------|
-| dispatch/redispatch 실패 시 좌초 해소 | `enqueue()`/`run()`에서 dispatch 실패 시 재스케줄 경로 보장 | ✅ (`pendingActorList_` 폴백 + `drainPendedActor` idle 재시도) |
+| dispatch/redispatch 실패 시 좌초 해소 | `enqueue()`/`run()`에서 dispatch 실패 시 재스케줄 경로 보장 | ✅ (`pendedActorList_` 폴백 + `drainPendedActor` idle 재시도) |
 | 메일박스 드롭 시 발신자 통지 | NACK/dead-letter 라우팅 옵션 | ⬜ |
 
 #### 4-7.2 Supervision 후속

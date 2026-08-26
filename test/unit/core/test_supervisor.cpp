@@ -50,7 +50,7 @@ public:
         shutdownCalls.fetch_add(1, std::memory_order_relaxed);
     }
 
-    bool popMessage(Message& msg) override {
+    bool popDeadLetter(Message& msg) override {
         if(pending.empty()) return false;
         msg = std::move(pending.front());
         pending.erase(pending.begin());
@@ -209,7 +209,7 @@ TEST(Supervisor, ActorRestartRequestRestartsOpenedActor){
     auto actor = std::make_unique<LifecycleActor>("a", 1);
     auto* a = actor.get();
     a->open();
-    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), {});
 
     ActorRestartRequest req;
     req.reason = "one-for-all";
@@ -223,7 +223,7 @@ TEST(Supervisor, ActorRestartRequestRestartsOpenedActor){
 TEST(Supervisor, ActorRestartRequestSkipsClosedActor){
     auto actor = std::make_unique<LifecycleActor>("a", 1);
     auto* a = actor.get();
-    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), {});
 
     ActorRestartRequest req;
     req.reason = "one-for-all";
@@ -269,7 +269,7 @@ TEST(Supervisor, ShutdownRuntimeStopsProcessing){
     auto actor = std::make_unique<LifecycleActor>("a", 1);
     auto* a = actor.get();
     a->open();
-    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime rt(std::move(actor), std::make_unique<Mailbox>(64), {});
 
     rt.shutdown();
     rt.enqueue(Message::make(Tick{}));

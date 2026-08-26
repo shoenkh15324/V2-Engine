@@ -15,9 +15,17 @@ class IWorkDispatcher;
 class IEventLoop;
 class ISupervisor;
 
+struct ActorRuntimeDeps {
+    IWorkDispatcher* workDispatcher = nullptr;
+    IScheduler* scheduler = nullptr;
+    IActorRegistry* actorRegistry = nullptr;
+    IEventLoop* eventLoop = nullptr;
+    ISupervisor* supervisor = nullptr;
+};
+
 class ActorRuntime : public IActorRuntime, public ISupervised {
 public:
-    ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox> mailbox, IWorkDispatcher* workDispatcher, IScheduler* scheduler, IActorRegistry* actorRegistry, IEventLoop* eventLoop = nullptr, ISupervisor* supervisor = nullptr);
+    ActorRuntime(std::unique_ptr<Actor> actor, std::unique_ptr<IMailbox> mailbox, const ActorRuntimeDeps& deps);
     ~ActorRuntime();
 
     ActorRuntime(const ActorRuntime&) = delete;
@@ -42,7 +50,7 @@ public:
     // ISupervised
     bool tryRestart(const std::string& reason, int maxRestarts) override;
     void shutdown() override;
-    bool popMessage(Message& msg) override;
+    bool popDeadLetter(Message& msg) override;
     int restartCount() const override;
     uint64_t actorId() const override;
     const std::string& actorName() const override;

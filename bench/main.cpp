@@ -36,7 +36,7 @@ void printUsage(const char* prog){
         << "  --mailbox N                  Mailbox size\n"
         << "  --producers N                Producer thread count (load generators)\n"
         << "  --park-spin-ns N             Dispatcher spin budget before parking (ns)\n"
-        << "  --token-grace-ns N           Token grace window at finalize (ns)\n";
+        << "  --token-grace-ns N           Token grace window at settleToken (ns)\n";
 }
 
 void appendHeader(std::ostringstream& oss, const BenchmarkResult& result){

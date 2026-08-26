@@ -30,7 +30,7 @@ public:
 TEST(ActorRuntime, Create){
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), {});
 
     EXPECT_EQ(ctx.actor(), a);
     EXPECT_EQ(ctx.mailboxCount(), 0);
@@ -41,7 +41,7 @@ TEST(ActorRuntime, CreateWithRegistry){
     ActorRegistry reg;
     auto actor = std::make_unique<TestActor>("a", 1);
     auto* a = actor.get();
-    ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), nullptr, nullptr, &reg);
+    ActorRuntime ctx(std::move(actor), std::make_unique<Mailbox>(64), {.actorRegistry = &reg});
     reg.add(a);
     EXPECT_EQ(reg.findActorByName("a"), a);
     EXPECT_EQ(reg.findActorById(1), a);
@@ -50,13 +50,13 @@ TEST(ActorRuntime, CreateWithRegistry){
 // Enqueue
 
 TEST(ActorRuntime, Enqueue){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {});
     ctx.enqueue(Message::make(Tick{}));
     EXPECT_EQ(ctx.mailboxCount(), 1);
 }
 
 TEST(ActorRuntime, EnqueueMultiple){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {});
     ctx.enqueue(Message::make(Tick{}));
     ctx.enqueue(Message::make(Tick{}));
     ctx.enqueue(Message::make(Tick{}));
@@ -66,14 +66,14 @@ TEST(ActorRuntime, EnqueueMultiple){
 // Run
 
 TEST(ActorRuntime, RunEmpty){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {});
     auto* a = static_cast<TestActor*>(ctx.actor());
     ctx.run(-1);
     EXPECT_EQ(a->handleCount, 0);
 }
 
 TEST(ActorRuntime, RunSingle){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {});
     auto* a = static_cast<TestActor*>(ctx.actor());
     ctx.enqueue(Message::make(Tick{}));
     ctx.run(-1);
@@ -82,7 +82,7 @@ TEST(ActorRuntime, RunSingle){
 }
 
 TEST(ActorRuntime, RunMultiple){
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, nullptr);
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {});
     auto* a = static_cast<TestActor*>(ctx.actor());
     ctx.enqueue(Message::make(Tick{}));
     ctx.enqueue(Message::make(Tick{}));
@@ -92,8 +92,8 @@ TEST(ActorRuntime, RunMultiple){
 }
 
 TEST(ActorRuntime, RunMaxBatch){
-    WorkDispatcher d(1);
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), &d, nullptr, nullptr);
+    WorkDispatcher d({.workerCount = 1});
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {.workDispatcher = &d});
     auto* a = static_cast<TestActor*>(ctx.actor());
 
     for(int i = 0; i < 5; i++){
@@ -105,8 +105,8 @@ TEST(ActorRuntime, RunMaxBatch){
 }
 
 TEST(ActorRuntime, RunAll){
-    WorkDispatcher d(1);
-    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), &d, nullptr, nullptr);
+    WorkDispatcher d({.workerCount = 1});
+    ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {.workDispatcher = &d});
     auto* a = static_cast<TestActor*>(ctx.actor());
 
     for(int i = 0; i < 5; i++){
@@ -122,7 +122,7 @@ TEST(ActorRuntime, RunAll){
 TEST(ActorRuntime, DestructorRemovesFromRegistry){
     ActorRegistry reg;
     {
-        ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), nullptr, nullptr, &reg);
+        ActorRuntime ctx(std::make_unique<TestActor>("a", 1), std::make_unique<Mailbox>(64), {.actorRegistry = &reg});
         reg.add(ctx.actor());
         EXPECT_TRUE(reg.findHandleByName("a").valid());
     }

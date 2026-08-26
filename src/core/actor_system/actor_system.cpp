@@ -1,5 +1,6 @@
 #include "actor_system.hpp"
 #include <cassert>
+#include <stdexcept>
 #include "core/common/util/return.hpp"
 #include "core/actor_system/runtime/dispatcher/worker.hpp"
 #include "core/actor_system/actor/actor_handle.hpp"
@@ -98,15 +99,20 @@ void ActorSystem::requestStop(){
 }
 
 void ActorSystem::attachActor(std::unique_ptr<Actor> actor, size_t mailboxSize, uint64_t id){
+    if(id >= WorkDispatcher::kMaxActors){
+        throw std::runtime_error("actor id " + std::to_string(id) + " exceeds dispatcher slot limit (" + std::to_string(WorkDispatcher::kMaxActors) + ")");
+    }
     auto mailbox = std::make_unique<Mailbox>(mailboxSize);
     auto rt = std::make_unique<ActorRuntime>(
         std::move(actor),
         std::move(mailbox),
-        dispatcher_.get(),
-        scheduler_.get(),
-        registry_.get(),
-        eventLoop_.get(),
-        supervisor_.get()
+        ActorRuntimeDeps{
+            .workDispatcher = dispatcher_.get(),
+            .scheduler = scheduler_.get(),
+            .actorRegistry = registry_.get(),
+            .eventLoop = eventLoop_.get(),
+            .supervisor = supervisor_.get()
+        }
     );
     registry_->add(rt->actor());
     actorRuntimes_.push_back(std::move(rt));
@@ -119,16 +125,15 @@ std::unique_ptr<ActorSystem> createDefaultActorSystem(const ActorSystemConfig& c
     auto strategy = static_cast<RestartStrategy>(config.supervisorDefaultStrategy);
     auto supervisor = std::make_unique<Supervisor>(*deadLetterQueue, config.supervisorMaxRestarts, strategy);
     auto registry = std::make_unique<ActorRegistry>();
-    int highWatermark = (config.dispatcherHighWatermark > 0) ? config.dispatcherHighWatermark : (config.dispatcherQueueCapacity * 7 / 10);
-    auto dispatcher = std::make_unique<WorkDispatcher>(
-        config.numWorkers,
-        config.dispatcherQueueCapacity,
-        highWatermark,
-        config.busyStealIntervalUs,
-        config.idleStealIntervalUs,
-        config.parkSpinNs,
-        config.tokenGraceNs
-    );
+    auto dispatcher = std::make_unique<WorkDispatcher>(WorkDispatcherConfig{
+        .workerCount         = config.numWorkers,
+        .queueCapacity       = config.dispatcherQueueCapacity,
+        .highWatermark       = config.dispatcherHighWatermark, // 0이면 ctor에서 capacity*7/10 자동 계산
+        .busyStealIntervalUs = config.busyStealIntervalUs,
+        .idleStealIntervalUs = config.idleStealIntervalUs,
+        .parkSpinNs          = config.parkSpinNs,
+        .tokenGraceNs        = config.tokenGraceNs
+    });
     auto scheduler = std::make_unique<Scheduler>(std::move(timer));
 
     ActorSystemDeps deps;
