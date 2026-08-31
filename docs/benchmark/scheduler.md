@@ -41,11 +41,15 @@
 
 | 항목 | 사양 |
 |------|------|
-| CPU | AMD Ryzen 7 9800X3D (8코어) |
-| RAM | 8 GB (WSL) |
-| OS | Linux (WSL Ubuntu-22.04) |
-| 컴파일러 | GCC, C++20, CMake + Ninja |
-| 빌드 모드 | Release (LTO 활성화) |
+| CPU | AMD Ryzen 7 9800X3D (8 Physical, 16 Logical, Zen 5) |
+| 캐시 | L3 96MB (3D V-Cache), L2 1MB/core |
+| RAM | 8 GB (DDR5) |
+| OS | Ubuntu 22.04.5 LTS (WSL2, 커널 6.18.33) |
+| 컴파일러 | g++-14 (Ubuntu 14.3.0) |
+| C++ 표준 | C++20 |
+| 빌드 시스템 | CMake 3.22.1 + Ninja |
+| 빌드 모드 | Release (`-O3 -DNDEBUG`) + LTO |
+| 메모리 할당자 | TCMalloc 기반 Slab 풀 (커스텀) |
 | 도구 | `./build/v2_bench_cli scheduler` |
 | 측정 방식 | 타이머 기반 (epoll, busy-wait 아님) |
 
